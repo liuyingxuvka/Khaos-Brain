@@ -1,0 +1,35 @@
+id: model-xxx
+title: Short human-readable title
+type: model # model | preference | heuristic | fact
+scope: public # public | private
+domain_path:
+  - work
+  - reporting
+  - ppt
+cross_index:
+  - design/presentation/aesthetics
+  - communication/slides/visual-quality
+tags:
+  - presentation
+  - slides
+trigger_keywords:
+  - ppt
+  - slide
+  - report
+if:
+  notes: Define the conditions under which this model card should apply.
+action:
+  description: What action, input, or situation is being evaluated.
+predict:
+  expected_result: The expected or likely result under the stated conditions.
+  alternatives:
+    - when: If the audience is deeply technical
+      result: A more structured and engineering-oriented presentation is likely preferred.
+use:
+  guidance: How Codex should use this prediction in its own output or behavior.
+confidence: 0.8
+source:
+  - origin: where this came from
+    date: YYYY-MM-DD
+status: trusted # candidate | trusted | deprecated
+updated_at: YYYY-MM-DD

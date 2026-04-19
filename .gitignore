@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+
+kb/public/*.yaml
+kb/public/**/*.yaml
+
+kb/private/*
+!kb/private/.gitignore
+
+kb/history/*
+!kb/history/.gitkeep
+
+kb/candidates/*.yaml
+kb/history/consolidation/
