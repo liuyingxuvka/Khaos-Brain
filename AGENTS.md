@@ -18,6 +18,13 @@
 
 This repository stores a local predictive knowledge library that Codex can consult before solving tasks.
 
+## GitHub publish default
+
+- When the user asks to update or sync GitHub for this repository, default to a release-style publish flow rather than a branch-only push.
+- Inspect `VERSION`, visible README versioning, git tags, and GitHub Release state together before publishing.
+- If repository content changed since the last tagged commit, choose the next version, update visible version files, create a new annotated tag, and push the branch plus tag unless the user explicitly asks for branch-only sync.
+- Do not move an existing tag unless the user explicitly asks for it.
+
 ## How to use the library
 
 - Run `python scripts/install_codex_kb.py` once per machine to install the global Codex preflight skill and launcher.
