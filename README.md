@@ -1,4 +1,4 @@
-# Codex Memory Starter
+# Codex Memory Plug-in
 
 Current template version: `v0.1.1`
 
