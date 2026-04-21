@@ -2,7 +2,7 @@
 
 Current template version: `v0.1.5`
 
-中文 / Chinese first. English summary is below.
+中文 / Chinese first. A full one-to-one English version is below.
 
 一个**不是把“记忆”写成零散规则，而是把经验写成可检索、可审查、可版本化预测模型**的本地系统。
 
@@ -161,31 +161,161 @@ python .agents/skills/local-kb-retrieve/scripts/kb_search.py \
 └─ tests/
 ```
 
-## English Summary
+## English Version
 
-Codex-Memory-Plugin is a local, file-based predictive memory system for Codex.
+A local system that treats experience not as scattered “memory rules,” but as **retrievable, reviewable, versioned predictive models**.
 
-Its core idea is not “store one more rule,” but “store an explicit model”:
+The biggest difference between this project and many other “memory features” is not whether it can remember one item. The difference is **what kind of thing it remembers**:
 
-- under what condition
-- taking what action
-- makes what result more likely
-- and what alternative path would likely lead to a different result
+- It does not only remember a rule such as “you should do X.”
+- It remembers something closer to a model:
+  if you act this way under certain conditions, what becomes more likely;
+  if you choose another path instead, what becomes more likely then.
+- That means one memory can contain not just a single conclusion, but also branches, alternatives, and contrastive paths.
 
-That is why this project is different from flat rule memory:
+In other words, the core of this project is not “storing rules.” It is **modeling**.
 
-- it treats memory as **predictive modeling**
-- it supports **alternative branches**, not only one canonical answer
-- it can model the **user**
-- it can also model **Codex / runtime behavior itself**
-- it stays **inspectable, versioned, and Git-reviewable**
+### Start here
 
-In practice, this means one repository can accumulate:
+If you are a normal user:
 
-- task models
-- user-specific preference models
-- runtime/self-behavior models
-- contrastive evidence about weaker paths versus revised stronger paths
+- What you are looking at is a **local, file-based memory framework that can model both the user and the system itself**
+- First read “Why this is different from ordinary memory”
+- Then jump directly to “Quick start”
 
-If you want to understand the architecture, start with `PROJECT_SPEC.md`.
-If you want to use it, start with `scripts/install_codex_kb.py`.
+If you are a developer:
+
+- Read `PROJECT_SPEC.md` first
+- Then look at `.agents/skills/local-kb-retrieve/`
+- Then look at `local_kb/` and `tests/`
+
+### Why this is different from ordinary memory
+
+- **It stores predictions, not only advice.**
+  A card is not just “do this next time.” It is “in this scenario, this action is more likely to lead to this result.”
+- **It allows alternatives.**
+  That means it does not keep only one “correct answer.” It can also preserve what is more likely to go wrong if another path is taken.
+- **It models the user.**
+  Not as abstract personality labels, but as concrete task-conditioned patterns such as what structure this user is more likely to prefer, what kinds of omissions they dislike, and how they judge whether an outcome is clear.
+- **It also models itself.**
+  That means modeling Codex / runtime behavior itself: under which prompts, workflows, or tool conditions it is more likely to make certain mistakes, and how the outcome changes after the path is corrected.
+- **It is file-based, inspectable, and versionable.**
+  You can see in Git how each structured lesson is recorded, revised, compared, and published.
+
+### What this system is actually modeling
+
+There are at least three kinds of models here:
+
+1. **Task models**
+   For example: when facing a certain kind of repository release, debugging, or reporting task, which approach is more likely to succeed.
+2. **User models**
+   For example: for a certain user, a GitHub README is more likely to be preferred when the version, user entry, and Chinese-first structure appear early, rather than developer setup appearing first.
+3. **Self / runtime models**
+   For example: when KB postflight is only an implicit requirement, Codex is more likely to forget the write-back; when it is made an explicit done condition, the write-back becomes more reliable.
+
+This is also one of the most attractive parts of the project:
+it does not only say “I remembered one preference.” It places **how the user reacts**, **how the system itself makes mistakes**, and **why the revised path is better** inside the same modeling framework.
+
+### A minimal example
+
+The example below is not a “rule checklist.” It is an actual model with a branch:
+
+```yaml
+id: pref-release-presentation
+type: preference
+scope: private
+domain_path:
+  - repository
+  - github-publishing
+  - readme-presentation
+if:
+  notes: When preparing a public GitHub page for this user.
+action:
+  description: Hide version visibility and place developer setup before the user entry.
+predict:
+  expected_result: Review friction is more likely and the page is less likely to feel clear.
+  alternatives:
+    - when: If version is visible and the user entry appears early
+      result: The page is easier for this user to scan and approve.
+use:
+  guidance: Keep version visible, surface the user entry early, and preserve the chosen bilingual structure.
+```
+
+The important point is not the YAML syntax itself. The structure is expressing:
+
+- what the condition is
+- what the action is
+- what result becomes more likely
+- and what happens if a different path is chosen
+
+That is a **model**, not just one rule.
+
+### Why it can capture corrections, not just conclusions
+
+Many systems end up preserving only one successful conclusion.
+
+This repository now puts more emphasis on **contrastive evidence**:
+
+- an earlier weaker path was taken, and the result was worse
+- later the path was changed, and the result became better
+- both sides are preserved
+
+That means future cards do not only say “this is the recommended path.” They can also say clearly:
+
+- what bad result is more likely if the old path is repeated
+- what improvement is more likely if the corrected path is used
+
+This moves memory closer to an **operational model** rather than a static suggestion.
+
+### Quick start
+
+Install first:
+
+```bash
+python scripts/install_codex_kb.py --json
+python scripts/install_codex_kb.py --check --json
+```
+
+Run one retrieval:
+
+```bash
+python .agents/skills/local-kb-retrieve/scripts/kb_search.py \
+  --path-hint "repository/github-publishing/readme-presentation" \
+  --query "prepare a public GitHub page for this user" \
+  --top-k 5
+```
+
+### What this public repository includes, and what it does not
+
+This public repository is meant to publish:
+
+- workflows
+- schemas
+- skills
+- retrieval, recording, and maintenance tools
+- safe public example structures
+
+By default, it **should not** casually publish these real runtime contents together with it:
+
+- your live private cards
+- your real `kb/history`
+- your real `kb/candidates`
+- any user-specific, sensitive, or not-yet-confirmed-public lessons
+
+### Repository layout
+
+```text
+.
+├─ AGENTS.md
+├─ PROJECT_SPEC.md
+├─ README.md
+├─ VERSION
+├─ docs/
+├─ .agents/
+├─ kb/
+├─ local_kb/
+├─ schemas/
+├─ scripts/
+├─ templates/
+└─ tests/
+```
