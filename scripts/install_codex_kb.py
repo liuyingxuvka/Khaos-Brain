@@ -39,7 +39,15 @@ def main() -> int:
             print(f"codex_home: {payload['codex_home']}")
             print(f"skill_path: {payload['skill_path']}")
             print(f"launcher_path: {payload['launcher_path']}")
+            print(f"global_agents_path: {payload['global_agents_path']}")
             print(f"install_state_path: {payload['install_state_path']}")
+            print("checklist:")
+            for item in payload.get("checklist", []):
+                marker = "[OK]" if item.get("ok") else "[MISSING]"
+                print(f"- {marker} {item.get('label')}")
+                details = str(item.get("details", "") or "").strip()
+                if details:
+                    print(f"  details: {details}")
             if payload["warnings"]:
                 print("warnings:")
                 for item in payload["warnings"]:

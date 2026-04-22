@@ -133,6 +133,22 @@ def install_global_agents_defaults(repo_root: Path, codex_home: Path | None = No
     return str(path)
 
 
+def _checklist_item(
+    item_id: str,
+    label: str,
+    ok: bool,
+    details: str,
+    required: bool = True,
+) -> dict[str, Any]:
+    return {
+        "id": item_id,
+        "label": label,
+        "ok": ok,
+        "required": required,
+        "details": details,
+    }
+
+
 def _automation_spec_payload(spec: dict[str, str], repo_root: Path) -> dict[str, Any]:
     return {
         "version": 1,
@@ -310,7 +326,7 @@ def build_installation_check(
             "Re-run the installer so the installed global preflight skill can trigger automatically."
         )
     if openai_text and "record a KB follow-up observation" not in openai_text:
-        warnings.append(
+        issues.append(
             "Global skill default_prompt does not contain the expected KB postflight reminder. "
             "Re-run the installer to refresh the installed prompt."
         )
@@ -338,7 +354,7 @@ def build_installation_check(
             "Re-run the installer to restore the required KB preflight reminder."
         )
     if global_agents_text and "explicit KB postflight check" not in global_agents_text:
-        warnings.append(
+        issues.append(
             "Global AGENTS defaults do not contain the expected explicit KB postflight check wording. "
             "Re-run the installer to refresh the session-wide defaults."
         )
@@ -423,6 +439,94 @@ def build_installation_check(
             "Re-run the installer to refresh automation setup."
         )
 
+    automation_issue_map = {item["id"]: item["issues"] for item in automation_checks}
+    global_skill_present = skill_path.exists() and launcher_path.exists() and openai_path.exists()
+    global_skill_implicit = bool(openai_text and "allow_implicit_invocation: true" in openai_text)
+    global_skill_postflight = bool(
+        openai_text
+        and "record a KB follow-up observation" in openai_text
+        and "required default preflight" in openai_text
+    )
+    global_agents_present = global_agents.exists()
+    global_agents_managed = bool(
+        global_agents_text
+        and GLOBAL_AGENTS_BEGIN in global_agents_text
+        and GLOBAL_AGENTS_END in global_agents_text
+    )
+    global_agents_preflight = bool(global_agents_text and "$predictive-kb-preflight" in global_agents_text)
+    global_agents_postflight = bool(global_agents_text and "explicit KB postflight check" in global_agents_text)
+    kb_sleep_ok = not automation_issue_map.get("kb-sleep")
+    kb_dream_ok = not automation_issue_map.get("kb-dream")
+    strong_defaults_ok = (
+        global_skill_implicit
+        and global_skill_postflight
+        and global_agents_managed
+        and global_agents_preflight
+        and global_agents_postflight
+    )
+    checklist = [
+        _checklist_item(
+            "global_skill_files",
+            "Global predictive KB skill and launcher are installed",
+            global_skill_present,
+            f"skill_path={skill_path}; launcher_path={launcher_path}; openai_path={openai_path}",
+        ),
+        _checklist_item(
+            "global_skill_implicit",
+            "Global predictive KB skill enables implicit invocation",
+            global_skill_implicit,
+            f"openai_path={openai_path}",
+        ),
+        _checklist_item(
+            "global_skill_postflight",
+            "Global predictive KB prompt requires KB preflight and postflight reminders",
+            global_skill_postflight,
+            f"openai_path={openai_path}",
+        ),
+        _checklist_item(
+            "global_agents_file",
+            "Global AGENTS defaults file exists",
+            global_agents_present,
+            f"global_agents_path={global_agents}",
+        ),
+        _checklist_item(
+            "global_agents_block",
+            "Global AGENTS contains the managed predictive KB defaults block",
+            global_agents_managed,
+            f"global_agents_path={global_agents}",
+        ),
+        _checklist_item(
+            "global_agents_preflight",
+            "Global AGENTS defaults mention $predictive-kb-preflight",
+            global_agents_preflight,
+            f"global_agents_path={global_agents}",
+        ),
+        _checklist_item(
+            "global_agents_postflight",
+            "Global AGENTS defaults require an explicit KB postflight check",
+            global_agents_postflight,
+            f"global_agents_path={global_agents}",
+        ),
+        _checklist_item(
+            "kb_sleep_automation",
+            "KB Sleep automation is installed and matches the repository spec",
+            kb_sleep_ok,
+            f"path={automation_toml_path('kb-sleep', home)}",
+        ),
+        _checklist_item(
+            "kb_dream_automation",
+            "KB Dream automation is installed and matches the repository spec",
+            kb_dream_ok,
+            f"path={automation_toml_path('kb-dream', home)}",
+        ),
+        _checklist_item(
+            "strong_session_defaults",
+            "The strongest available session-wide KB defaults layer is installed",
+            strong_defaults_ok,
+            f"global_agents_path={global_agents}; openai_path={openai_path}",
+        ),
+    ]
+
     return {
         "ok": not issues,
         "repo_root": requested_repo_root,
@@ -436,6 +540,7 @@ def build_installation_check(
         "install_state_path": str(install_state_path(home)),
         "env_var_name": KB_ROOT_ENV_VAR,
         "env_var_value": env_value,
+        "checklist": checklist,
         "automation_checks": automation_checks,
         "issues": issues,
         "warnings": warnings,

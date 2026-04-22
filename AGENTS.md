@@ -9,6 +9,7 @@
 - The installed global preflight skill must enable implicit invocation and must remind Codex to record KB postflight observations after meaningful work. Treat either missing behavior as an installation defect and fix it.
 - The installer must also refresh the repository-managed `KB Sleep` and `KB Dream` cron automations under `$CODEX_HOME/automations` so another machine inherits the same maintenance cadence after bootstrap.
 - The installer must also write or refresh a repository-managed global defaults block under `$CODEX_HOME/AGENTS.md` so other machines inherit the strongest available session-wide KB preflight and postflight rules, not only the implicit skill layer.
+- The install check must expose a structured machine-install checklist that explicitly verifies the global skill files, implicit invocation, postflight reminder wording, managed global AGENTS block, both repo-managed automations, and the final `strong_session_defaults` readiness signal.
 
 ## Start here
 

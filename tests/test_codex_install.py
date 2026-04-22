@@ -54,6 +54,11 @@ class CodexInstallTests(unittest.TestCase):
             check = build_installation_check(repo_root=repo_root, codex_home=codex_home)
             self.assertTrue(check["ok"], check["issues"])
             self.assertEqual([item["id"] for item in check["automation_checks"]], ["kb-sleep", "kb-dream"])
+            checklist = {item["id"]: item for item in check["checklist"]}
+            self.assertIn("strong_session_defaults", checklist)
+            self.assertTrue(checklist["strong_session_defaults"]["ok"])
+            self.assertTrue(checklist["global_agents_block"]["ok"])
+            self.assertTrue(checklist["global_skill_postflight"]["ok"])
 
     def test_install_preserves_existing_global_agents_content(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
@@ -70,6 +75,21 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn("- Keep this line.", global_agents_text)
             self.assertIn("BEGIN MANAGED PREDICTIVE KB DEFAULTS", global_agents_text)
             self.assertEqual(global_agents_text.count("BEGIN MANAGED PREDICTIVE KB DEFAULTS"), 1)
+
+    def test_check_fails_when_managed_global_agents_block_is_missing(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            codex_home = Path(tmp_dir) / ".codex"
+            install_codex_integration(repo_root=repo_root, codex_home=codex_home)
+
+            agents_path = global_agents_path(codex_home)
+            agents_path.write_text("## User Custom Defaults\n\n- Keep this line only.\n", encoding="utf-8")
+
+            check = build_installation_check(repo_root=repo_root, codex_home=codex_home)
+            self.assertFalse(check["ok"])
+            checklist = {item["id"]: item for item in check["checklist"]}
+            self.assertFalse(checklist["global_agents_block"]["ok"])
+            self.assertFalse(checklist["strong_session_defaults"]["ok"])
 
 
 if __name__ == "__main__":

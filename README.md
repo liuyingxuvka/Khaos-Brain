@@ -1,7 +1,7 @@
 # Codex-Memory-Plugin
 
-- Repository head (`main`) / 仓库主线（`main`）: `v0.1.8`
-- Latest released version / 最新已发布版本: `v0.1.8`
+- Repository head (`main`) / 仓库主线（`main`）: `v0.1.9`
+- Latest released version / 最新已发布版本: `v0.1.9`
 - 中文正文在前；后半部分是完整英文镜像。
 - Chinese comes first; the second half is a full English mirror.
 
@@ -106,6 +106,20 @@ python scripts/install_codex_kb.py --check --json
 - 安装全局 preflight / launcher，让 Codex 知道在仓库任务前先检索这套 KB
 - 在 `$CODEX_HOME/AGENTS.md` 下写入或刷新 repo-managed 的全局默认约束 block，把 KB preflight / postflight 变成另一台机器也能继承的强默认规则层
 - 在 `$CODEX_HOME/automations/` 下刷新 repo-managed 的 `KB Sleep` 和 `KB Dream`
+
+安装完成后，`python scripts/install_codex_kb.py --check --json` 现在会直接返回一个结构化 checklist。跨机器时，至少应看到这些项目全部通过：
+
+- 全局 predictive KB skill / launcher 已安装
+- 全局 skill 开启 implicit invocation
+- 全局 skill prompt 明确要求 preflight 与 postflight
+- `$CODEX_HOME/AGENTS.md` 中存在 repo-managed 的 KB 默认约束 block
+- 这个 global AGENTS block 明确提到 `$predictive-kb-preflight`
+- 这个 global AGENTS block 明确要求 non-trivial 任务做 explicit KB postflight check
+- `KB Sleep` automation 存在且配置正确
+- `KB Dream` automation 存在且配置正确
+- `strong_session_defaults` 为通过
+
+如果其中任一项失败，就不该把这台机器视为“已经完整装好”。
 
 ### 公开仓库里放什么，不放什么
 
@@ -251,6 +265,20 @@ The installer does three main things:
 - installs the global preflight / launcher so Codex knows to consult this KB before repository work
 - writes or refreshes a repo-managed defaults block under `$CODEX_HOME/AGENTS.md` so another machine inherits the strongest available session-wide KB preflight and postflight rules
 - refreshes the repo-managed `KB Sleep` and `KB Dream` automations under `$CODEX_HOME/automations/`
+
+After installation, `python scripts/install_codex_kb.py --check --json` now returns a structured checklist. On another machine, you should treat install as complete only when these checks all pass:
+
+- the global predictive KB skill / launcher exists
+- the global skill enables implicit invocation
+- the global skill prompt explicitly requires preflight and postflight reminders
+- `$CODEX_HOME/AGENTS.md` contains the repo-managed predictive KB defaults block
+- that global AGENTS block mentions `$predictive-kb-preflight`
+- that global AGENTS block requires an explicit KB postflight check for non-trivial work
+- `KB Sleep` exists and matches the repository automation spec
+- `KB Dream` exists and matches the repository automation spec
+- `strong_session_defaults` is true
+
+If any required checklist item fails, the machine should be treated as only partially installed.
 
 ### What This Public Repository Includes And Excludes
 
