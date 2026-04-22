@@ -22,6 +22,9 @@ GLOBAL_SKILL_NAME = "predictive-kb-preflight"
 GLOBAL_SKILL_ROOT = Path("skills") / GLOBAL_SKILL_NAME
 TEMPLATE_ROOT = Path("templates") / GLOBAL_SKILL_NAME
 AUTOMATIONS_ROOT = Path("automations")
+GLOBAL_AGENTS_FILENAME = "AGENTS.md"
+GLOBAL_AGENTS_BEGIN = "<!-- BEGIN MANAGED PREDICTIVE KB DEFAULTS -->"
+GLOBAL_AGENTS_END = "<!-- END MANAGED PREDICTIVE KB DEFAULTS -->"
 
 SLEEP_AUTOMATION_PROMPT = (
     "Run the repository's local KB sleep-maintenance pass for this workspace. Use PROJECT_SPEC.md, "
@@ -83,6 +86,11 @@ def automation_toml_path(automation_id: str, codex_home: Path | None = None) -> 
     return automation_dir(codex_home) / automation_id / "automation.toml"
 
 
+def global_agents_path(codex_home: Path | None = None) -> Path:
+    home = codex_home or default_codex_home()
+    return home / GLOBAL_AGENTS_FILENAME
+
+
 def _render_template(text: str, replacements: dict[str, str]) -> str:
     rendered = text
     for key, value in replacements.items():
@@ -93,6 +101,36 @@ def _render_template(text: str, replacements: dict[str, str]) -> str:
 def _read_template(repo_root: Path, relative_path: str | Path) -> str:
     path = repo_root / TEMPLATE_ROOT / relative_path
     return path.read_text(encoding="utf-8")
+
+
+def _render_managed_global_agents_block(repo_root: Path) -> str:
+    body = _read_template(repo_root, "AGENTS.md.template").strip()
+    return f"{GLOBAL_AGENTS_BEGIN}\n{body}\n{GLOBAL_AGENTS_END}\n"
+
+
+def _upsert_managed_global_agents(existing_text: str, managed_block: str) -> str:
+    if GLOBAL_AGENTS_BEGIN in existing_text and GLOBAL_AGENTS_END in existing_text:
+        start = existing_text.index(GLOBAL_AGENTS_BEGIN)
+        end = existing_text.index(GLOBAL_AGENTS_END) + len(GLOBAL_AGENTS_END)
+        prefix = existing_text[:start].rstrip()
+        suffix = existing_text[end:].lstrip()
+        parts = [part for part in [prefix, managed_block.strip(), suffix] if part]
+        return "\n\n".join(parts).rstrip() + "\n"
+    if not existing_text.strip():
+        return managed_block
+    return existing_text.rstrip() + "\n\n" + managed_block
+
+
+def install_global_agents_defaults(repo_root: Path, codex_home: Path | None = None) -> str:
+    path = global_agents_path(codex_home)
+    try:
+        existing_text = path.read_text(encoding="utf-8") if path.exists() else ""
+    except OSError:
+        existing_text = ""
+    rendered = _upsert_managed_global_agents(existing_text, _render_managed_global_agents_block(repo_root))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(rendered, encoding="utf-8")
+    return str(path)
 
 
 def _automation_spec_payload(spec: dict[str, str], repo_root: Path) -> dict[str, Any]:
@@ -179,6 +217,7 @@ def install_codex_integration(repo_root: Path, codex_home: Path | None = None) -
     launcher_path = skill_dir / "kb_launch.py"
     skill_path = skill_dir / "SKILL.md"
     openai_path = skill_dir / "agents" / "openai.yaml"
+    global_agents = install_global_agents_defaults(repo_root=repo_root, codex_home=home)
 
     replacements = {
         "KB_ROOT": str(repo_root),
@@ -202,6 +241,7 @@ def install_codex_integration(repo_root: Path, codex_home: Path | None = None) -
         "skill_path": str(skill_path),
         "launcher_path": str(launcher_path),
         "openai_path": str(openai_path),
+        "global_agents_path": global_agents,
         "env_var_name": KB_ROOT_ENV_VAR,
         "automation_ids": [item["id"] for item in automations],
         "automations": automations,
@@ -221,6 +261,7 @@ def build_installation_check(
     skill_path = skill_dir / "SKILL.md"
     launcher_path = skill_dir / "kb_launch.py"
     openai_path = skill_dir / "agents" / "openai.yaml"
+    global_agents = global_agents_path(home)
     manifest = load_install_state(home)
     manifest_root_raw = str(manifest.get("repo_root", "") or "").strip()
     env_value = os.environ.get(KB_ROOT_ENV_VAR, "").strip()
@@ -272,6 +313,34 @@ def build_installation_check(
         warnings.append(
             "Global skill default_prompt does not contain the expected KB postflight reminder. "
             "Re-run the installer to refresh the installed prompt."
+        )
+    if not global_agents.exists():
+        issues.append(
+            f"Global AGENTS defaults file is missing: {global_agents}. "
+            "Re-run the installer so every session inherits the predictive KB defaults."
+        )
+        global_agents_text = ""
+    else:
+        try:
+            global_agents_text = global_agents.read_text(encoding="utf-8")
+        except OSError as exc:
+            issues.append(f"Global AGENTS defaults file could not be read: {exc}")
+            global_agents_text = ""
+
+    if global_agents_text and GLOBAL_AGENTS_BEGIN not in global_agents_text:
+        issues.append(
+            "Global AGENTS file is present but missing the managed predictive KB defaults block. "
+            "Re-run the installer to restore the session-wide KB instructions."
+        )
+    if global_agents_text and "$predictive-kb-preflight" not in global_agents_text:
+        issues.append(
+            "Global AGENTS defaults do not mention $predictive-kb-preflight. "
+            "Re-run the installer to restore the required KB preflight reminder."
+        )
+    if global_agents_text and "explicit KB postflight check" not in global_agents_text:
+        warnings.append(
+            "Global AGENTS defaults do not contain the expected explicit KB postflight check wording. "
+            "Re-run the installer to refresh the session-wide defaults."
         )
 
     automation_checks: list[dict[str, Any]] = []
@@ -363,6 +432,7 @@ def build_installation_check(
         "skill_path": str(skill_path),
         "launcher_path": str(launcher_path),
         "openai_path": str(openai_path),
+        "global_agents_path": str(global_agents),
         "install_state_path": str(install_state_path(home)),
         "env_var_name": KB_ROOT_ENV_VAR,
         "env_var_value": env_value,

@@ -1,7 +1,7 @@
 # Codex-Memory-Plugin
 
-- Repository head (`main`) / 仓库主线（`main`）: `v0.1.7`
-- Latest released version / 最新已发布版本: `v0.1.6`
+- Repository head (`main`) / 仓库主线（`main`）: `v0.1.8`
+- Latest released version / 最新已发布版本: `v0.1.8`
 - 中文正文在前；后半部分是完整英文镜像。
 - Chinese comes first; the second half is a full English mirror.
 
@@ -101,9 +101,10 @@ python scripts/install_codex_kb.py --json
 python scripts/install_codex_kb.py --check --json
 ```
 
-安装器会做两类事情：
+安装器会做三类事情：
 
 - 安装全局 preflight / launcher，让 Codex 知道在仓库任务前先检索这套 KB
+- 在 `$CODEX_HOME/AGENTS.md` 下写入或刷新 repo-managed 的全局默认约束 block，把 KB preflight / postflight 变成另一台机器也能继承的强默认规则层
 - 在 `$CODEX_HOME/automations/` 下刷新 repo-managed 的 `KB Sleep` 和 `KB Dream`
 
 ### 公开仓库里放什么，不放什么
@@ -245,9 +246,10 @@ python scripts/install_codex_kb.py --json
 python scripts/install_codex_kb.py --check --json
 ```
 
-The installer does two main things:
+The installer does three main things:
 
 - installs the global preflight / launcher so Codex knows to consult this KB before repository work
+- writes or refreshes a repo-managed defaults block under `$CODEX_HOME/AGENTS.md` so another machine inherits the strongest available session-wide KB preflight and postflight rules
 - refreshes the repo-managed `KB Sleep` and `KB Dream` automations under `$CODEX_HOME/automations/`
 
 ### What This Public Repository Includes And Excludes
