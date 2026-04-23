@@ -285,6 +285,95 @@ class ConsolidateActionStubTests(unittest.TestCase):
                 candidate_stub["candidate_scaffold_preview"]["use"]["guidance"],
             )
 
+    def test_action_stub_surfaces_same_project_timeline_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            history_path = repo_root / "kb" / "history" / "events.jsonl"
+            history_path.parent.mkdir(parents=True, exist_ok=True)
+
+            events = [
+                {
+                    "event_id": "obs-timeline-1",
+                    "event_type": "observation",
+                    "created_at": "2026-04-20T09:00:00+00:00",
+                    "source": {
+                        "kind": "task",
+                        "agent": "worker-1",
+                        "thread_ref": "thread-1",
+                        "project_ref": "repo-a",
+                        "workspace_root": "C:/repos/repo-a",
+                    },
+                    "target": {
+                        "kind": "task-observation",
+                        "route_hint": ["engineering", "debugging", "build-failure"],
+                        "task_summary": "First attempt patched the wrong script",
+                    },
+                    "rationale": "next=new-candidate",
+                    "context": {
+                        "suggested_action": "new-candidate",
+                        "predictive_observation": {
+                            "scenario": "When a build failure is still being localized.",
+                            "action_taken": "Patch the first script that looks suspicious.",
+                            "observed_result": "The build still fails because the real root cause is elsewhere.",
+                            "operational_use": "Avoid treating the first visible script as the root cause.",
+                            "reuse_judgment": "Reusable because local-first debugging keeps tempting the same shortcut.",
+                        },
+                    },
+                },
+                {
+                    "event_id": "obs-timeline-2",
+                    "event_type": "observation",
+                    "created_at": "2026-04-20T09:08:00+00:00",
+                    "source": {
+                        "kind": "task",
+                        "agent": "worker-1",
+                        "thread_ref": "thread-1",
+                        "project_ref": "repo-a",
+                        "workspace_root": "C:/repos/repo-a",
+                    },
+                    "target": {
+                        "kind": "task-observation",
+                        "route_hint": ["engineering", "debugging", "build-failure"],
+                        "task_summary": "Second attempt followed the failing dependency chain",
+                    },
+                    "rationale": "next=new-candidate",
+                    "context": {
+                        "suggested_action": "new-candidate",
+                        "predictive_observation": {
+                            "scenario": "When the same build failure is inspected through the actual dependency chain.",
+                            "action_taken": "Trace the failing dependency chain before patching.",
+                            "observed_result": "The real broken dependency is identified and the fix lands in the right file.",
+                            "operational_use": "Prefer dependency-chain tracing before editing suspicious leaf files.",
+                            "reuse_judgment": "Reusable because the same correction pattern repeats across debugging tasks.",
+                        },
+                    },
+                },
+            ]
+            with history_path.open("w", encoding="utf-8") as handle:
+                for event in events:
+                    handle.write(json.dumps(event) + "\n")
+
+            result = consolidate_history(
+                repo_root=repo_root,
+                run_id="timeline-stub-run",
+                emit_files=True,
+            )
+
+            candidate_action = next(
+                action
+                for action in result["actions"]
+                if action["action_type"] == "consider-new-candidate"
+            )
+            timeline_summary = candidate_action["timeline_summary"]
+            self.assertEqual(timeline_summary["episode_count"], 1)
+            self.assertEqual(timeline_summary["episodes"][0]["project_ref"], "repo-a")
+            self.assertEqual(
+                [step["event_id"] for step in timeline_summary["episodes"][0]["steps"]],
+                ["obs-timeline-1", "obs-timeline-2"],
+            )
+            self.assertIn("project repo-a", timeline_summary["sequence_examples"][0])
+            self.assertIn("Observed chronology:", candidate_action["candidate_scaffold_preview"]["if"]["notes"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -130,6 +130,43 @@ class KbProposalInspectionTests(unittest.TestCase):
                 "consider-split-review",
             )
 
+    def test_loads_timeline_summary_when_present(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            run_id = "timeline-check"
+            actions_dir = repo_root / "kb" / "history" / "consolidation" / run_id / "actions"
+            write_json(
+                actions_dir / "timeline.json",
+                {
+                    "schema_version": 1,
+                    "kind": "local-kb-proposal-stub",
+                    "run_id": run_id,
+                    "generated_at": "2026-04-23T09:00:00+00:00",
+                    "action_key": "candidate-engineering-debugging-build-failure",
+                    "action_type": "consider-new-candidate",
+                    "target": {"kind": "route", "ref": "engineering/debugging/build-failure"},
+                    "priority_score": 4.0,
+                    "event_count": 2,
+                    "event_ids": ["obs-1", "obs-2"],
+                    "routes": ["engineering/debugging/build-failure"],
+                    "task_summaries": ["Repeated debugging correction sequence"],
+                    "signals": {"suggested_actions": {"new-candidate": 2}},
+                    "suggested_artifact_kind": "candidate-entry-proposal",
+                    "apply_eligibility": {"eligible": True, "reason": "repeated route group"},
+                    "recommended_next_step": "Draft a candidate card from the repeated episode.",
+                    "ai_decision_required": True,
+                    "timeline_summary": {
+                        "episode_count": 1,
+                        "sequence_examples": ["In project repo-a, the work moved from 'guess' to 'trace'."],
+                    },
+                },
+            )
+
+            stubs = load_proposal_stubs(repo_root, run_id=run_id)
+
+            self.assertEqual(stubs[0]["timeline_summary"]["episode_count"], 1)
+            self.assertIn("project repo-a", stubs[0]["timeline_summary"]["sequence_examples"][0])
+
     def test_cli_json_supports_run_id_lookup(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)

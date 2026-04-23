@@ -43,6 +43,12 @@ CROSS_INDEX_MIN_USAGE_RATIO = 0.34
 
 CROSS_INDEX_MIN_REMOVAL_USAGE_COUNT = 4
 
+TIMELINE_MAX_EPISODES = 3
+
+TIMELINE_MAX_STEPS_PER_EPISODE = 4
+
+TIMELINE_MAX_SEQUENCE_EXAMPLES = 3
+
 ACTION_BASE_SCORES = {
     "review-candidate": 3,
     "review-code-change": 3,
@@ -624,6 +630,182 @@ def summarize_provenance(events: list[dict[str, Any]]) -> dict[str, list[str]]:
         "thread_refs": unique([str(event.get("thread_ref", "") or "") for event in events]),
         "project_refs": unique([str(event.get("project_ref", "") or "") for event in events]),
         "workspace_roots": unique([str(event.get("workspace_root", "") or "") for event in events]),
+    }
+
+
+def _timeline_scope_identity(event: dict[str, Any]) -> tuple[str, str, str]:
+    project_ref = str(event.get("project_ref", "") or "").strip()
+    workspace_root = str(event.get("workspace_root", "") or "").strip()
+    thread_ref = str(event.get("thread_ref", "") or "").strip()
+    return project_ref, workspace_root, thread_ref
+
+
+def _timeline_scope_key(event: dict[str, Any]) -> str:
+    project_ref, workspace_root, thread_ref = _timeline_scope_identity(event)
+    if project_ref or workspace_root:
+        return f"project::{project_ref}::{workspace_root}"
+    if thread_ref:
+        return f"thread::{thread_ref}"
+    source_agent = str(event.get("source_agent", "") or "").strip()
+    if source_agent:
+        return f"agent::{source_agent}"
+    return "unscoped"
+
+
+def _timeline_scope_label(project_ref: str, workspace_root: str, thread_refs: list[str]) -> str:
+    if project_ref:
+        return f"project {project_ref}"
+    if workspace_root:
+        return f"workspace {workspace_root}"
+    if thread_refs:
+        return f"thread {thread_refs[0]}"
+    return "unscoped observation stream"
+
+
+def _timeline_step(event: dict[str, Any]) -> dict[str, Any]:
+    predictive = event.get("predictive_observation", {})
+    if not isinstance(predictive, dict):
+        predictive = {}
+    contrastive = normalize_contrastive_evidence(predictive.get("contrastive_evidence", {}))
+    step = {
+        "created_at": str(event.get("created_at", "") or "").strip(),
+        "event_id": str(event.get("event_id", "") or "").strip(),
+        "task_summary": str(event.get("task_summary", "") or "").strip(),
+        "route": route_label(event.get("route_hint", [])),
+        "scenario": str(predictive.get("scenario", "") or "").strip(),
+        "action_taken": str(predictive.get("action_taken", "") or "").strip(),
+        "observed_result": str(predictive.get("observed_result", "") or "").strip(),
+        "operational_use": str(predictive.get("operational_use", "") or "").strip(),
+        "reuse_judgment": str(predictive.get("reuse_judgment", "") or "").strip(),
+        "suggested_action": str(event.get("suggested_action", "none") or "none").strip(),
+        "hit_quality": str(event.get("hit_quality", "none") or "none").strip(),
+    }
+    if any(contrastive.values()):
+        step["contrastive_evidence"] = contrastive
+    return step
+
+
+def _build_timeline_sequence_example(episode: dict[str, Any]) -> str:
+    label = str(episode.get("scope_label", "") or "this episode").strip()
+    steps = list(episode.get("steps_full", []))
+    for step in steps:
+        contrastive = step.get("contrastive_evidence", {})
+        if not isinstance(contrastive, dict):
+            continue
+        previous_action = str(contrastive.get("previous_action", "") or "").strip()
+        previous_result = str(contrastive.get("previous_result", "") or "").strip()
+        revised_action = str(contrastive.get("revised_action", "") or "").strip()
+        revised_result = str(contrastive.get("revised_result", "") or "").strip()
+        if previous_action and previous_result and revised_action and revised_result:
+            return (
+                f"In {label}, the earlier path '{previous_action}' led to '{previous_result}', "
+                f"then the revised path '{revised_action}' led to '{revised_result}'."
+            )
+
+    predictive_steps = [
+        step
+        for step in steps
+        if str(step.get("action_taken", "") or "").strip() or str(step.get("observed_result", "") or "").strip()
+    ]
+    if len(predictive_steps) < 2:
+        return ""
+
+    first_step = predictive_steps[0]
+    last_step = predictive_steps[-1]
+    first_action = str(first_step.get("action_taken", "") or first_step.get("task_summary", "") or "").strip()
+    first_result = str(first_step.get("observed_result", "") or "").strip()
+    last_action = str(last_step.get("action_taken", "") or last_step.get("task_summary", "") or "").strip()
+    last_result = str(last_step.get("observed_result", "") or "").strip()
+    if not first_action or not last_action:
+        return ""
+    if first_action == last_action and first_result == last_result:
+        return ""
+    return (
+        f"In {label}, the work moved from '{first_action}'"
+        f"{f' -> {first_result}' if first_result else ''} to '{last_action}'"
+        f"{f' -> {last_result}' if last_result else ''}."
+    )
+
+
+def summarize_observation_timeline(events: list[dict[str, Any]]) -> dict[str, Any]:
+    ordered_events = sorted(
+        events,
+        key=lambda item: (
+            item.get("created_at") or "",
+            item.get("source_line") or 0,
+            item.get("event_id") or "",
+        ),
+    )
+    grouped: dict[str, dict[str, Any]] = {}
+    for event in ordered_events:
+        scope_key = _timeline_scope_key(event)
+        project_ref, workspace_root, thread_ref = _timeline_scope_identity(event)
+        group = grouped.setdefault(
+            scope_key,
+            {
+                "scope_key": scope_key,
+                "project_ref": project_ref,
+                "workspace_root": workspace_root,
+                "_thread_refs": [],
+                "first_event_at": "",
+                "latest_event_at": "",
+                "steps_full": [],
+            },
+        )
+        if thread_ref and thread_ref not in group["_thread_refs"]:
+            group["_thread_refs"].append(thread_ref)
+        created_at = str(event.get("created_at", "") or "").strip()
+        if created_at and (not group["first_event_at"] or created_at < group["first_event_at"]):
+            group["first_event_at"] = created_at
+        if created_at and (not group["latest_event_at"] or created_at > group["latest_event_at"]):
+            group["latest_event_at"] = created_at
+        group["steps_full"].append(_timeline_step(event))
+
+    episodes: list[dict[str, Any]] = []
+    for group in grouped.values():
+        steps_full = list(group.get("steps_full", []))
+        thread_refs = list(group.get("_thread_refs", []))
+        episode = {
+            "scope_key": str(group.get("scope_key", "") or "").strip(),
+            "scope_label": _timeline_scope_label(
+                str(group.get("project_ref", "") or "").strip(),
+                str(group.get("workspace_root", "") or "").strip(),
+                thread_refs,
+            ),
+            "project_ref": str(group.get("project_ref", "") or "").strip(),
+            "workspace_root": str(group.get("workspace_root", "") or "").strip(),
+            "thread_refs": thread_refs,
+            "event_count": len(steps_full),
+            "first_event_at": str(group.get("first_event_at", "") or "").strip(),
+            "latest_event_at": str(group.get("latest_event_at", "") or "").strip(),
+            "steps": steps_full[:TIMELINE_MAX_STEPS_PER_EPISODE],
+            "step_count": len(steps_full),
+            "truncated": len(steps_full) > TIMELINE_MAX_STEPS_PER_EPISODE,
+            "steps_full": steps_full,
+        }
+        episodes.append(episode)
+
+    sequence_examples: list[str] = []
+    for episode in episodes:
+        example = _build_timeline_sequence_example(episode)
+        if example:
+            sequence_examples.append(example)
+        if len(sequence_examples) >= TIMELINE_MAX_SEQUENCE_EXAMPLES:
+            break
+
+    visible_episodes = episodes[:TIMELINE_MAX_EPISODES]
+    for episode in visible_episodes:
+        episode.pop("steps_full", None)
+
+    first_event_at = episodes[0]["first_event_at"] if episodes else ""
+    latest_event_at = episodes[-1]["latest_event_at"] if episodes else ""
+    return {
+        "episode_count": len(episodes),
+        "sequence_example_count": len(sequence_examples),
+        "sequence_examples": sequence_examples,
+        "first_event_at": first_event_at,
+        "latest_event_at": latest_event_at,
+        "episodes": visible_episodes,
     }
 
 

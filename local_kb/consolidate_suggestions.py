@@ -29,6 +29,7 @@ from local_kb.consolidate_events import (
     route_or_task_target,
     score_action,
     sort_counter,
+    summarize_observation_timeline,
     summarize_predictive_evidence,
     summarize_provenance,
     supporting_events_for_action,
@@ -181,6 +182,7 @@ def _build_contrastive_alternatives(
 def suggest_new_candidate_scaffold(
     action: dict[str, Any],
     supporting_events: list[dict[str, Any]],
+    timeline_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     if action.get("action_type") != "consider-new-candidate":
         return None
@@ -191,6 +193,10 @@ def suggest_new_candidate_scaffold(
     route_segments = parse_route_segments(route_ref)
     route_title = " / ".join(route_segments) if route_segments else route_ref
     task_summaries = collect_task_summaries(supporting_events)
+    timeline_summary = timeline_summary if isinstance(timeline_summary, dict) else summarize_observation_timeline(supporting_events)
+    sequence_examples = _ordered_unique_text(
+        [str(item).strip() for item in timeline_summary.get("sequence_examples", [])]
+    )
 
     predictive_rows = [_normalize_predictive_observation(event) for event in supporting_events]
     scenarios = _ordered_unique_text([row["scenario"] for row in predictive_rows])
@@ -211,6 +217,8 @@ def suggest_new_candidate_scaffold(
         if_notes_parts.append(f"Example task summaries: {_summarize_text_examples(task_summaries)}.")
     if scenarios:
         if_notes_parts.append(f"Repeated scenarios: {_summarize_text_examples(scenarios, limit=2)}.")
+    if sequence_examples:
+        if_notes_parts.append(f"Observed chronology: {sequence_examples[0]}")
     if contrastive_event_count:
         if_notes_parts.append(
             f"{contrastive_event_count} supporting observations explicitly captured both a weaker earlier path and a stronger revised path."
@@ -243,6 +251,10 @@ def suggest_new_candidate_scaffold(
     if contrastive_event_count or any(has_contrastive_evidence(event) for event in supporting_events):
         guidance_parts.append(
             "Preserve weaker-path evidence in predict.alternatives instead of collapsing the lesson into a single success summary."
+        )
+    if sequence_examples:
+        guidance_parts.append(
+            "Use same-project or same-thread chronology when rewriting this scaffold so the final card preserves what was tried earlier, what changed later, and why the better path won."
         )
 
     return {
@@ -1065,10 +1077,13 @@ def annotate_actions_with_apply_eligibility(
             supporting_events=supporting_events,
         )
         annotated_action["provenance"] = summarize_provenance(supporting_events)
+        timeline_summary = summarize_observation_timeline(supporting_events)
+        annotated_action["timeline_summary"] = timeline_summary
         annotated_action["predictive_evidence_summary"] = summarize_predictive_evidence(supporting_events)
         candidate_scaffold = suggest_new_candidate_scaffold(
             action=annotated_action,
             supporting_events=supporting_events,
+            timeline_summary=timeline_summary,
         )
         if candidate_scaffold:
             annotated_action["candidate_scaffold_preview"] = candidate_scaffold

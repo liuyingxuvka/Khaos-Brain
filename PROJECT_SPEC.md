@@ -676,6 +676,8 @@ The source context should preserve provenance when available, such as:
 - which project or repository produced the evidence
 - which workspace root or local path context it came from
 
+During sleep maintenance, this provenance should not be treated as passive metadata only. Timestamps plus `project_ref`, `thread_ref`, and `workspace_root` should let AI reconstruct **chronological episodes** inside the same project or workflow, so maintenance can see that one path was tried earlier and a better path emerged later.
+
 When an observation is intended to support a future card, it should preserve predictive-model clues rather than stopping at a generic retrospective. In practice, the evidence should make it possible to reconstruct:
 
 - the scenario or condition

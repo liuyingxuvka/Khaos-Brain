@@ -127,6 +127,8 @@ def build_action_stub_payload(
     }
     if action.get("provenance"):
         payload["provenance"] = dict(action["provenance"])
+    if action.get("timeline_summary"):
+        payload["timeline_summary"] = dict(action["timeline_summary"])
     if action.get("predictive_evidence_summary"):
         payload["predictive_evidence_summary"] = dict(action["predictive_evidence_summary"])
     if action.get("candidate_scaffold_preview"):

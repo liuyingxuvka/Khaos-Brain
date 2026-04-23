@@ -94,6 +94,8 @@ Preferred operating pattern:
      --json
    ```
 
+   Preserve `thread-ref`, `project-ref`, and `workspace-root` whenever you know them. Sleep maintenance uses that provenance together with timestamps to reconstruct same-project chronology instead of treating every observation as an isolated note.
+
 9. If the explicit postflight check found no meaningful signal, make that explicit and end the KB flow there rather than silently forgetting to check.
 10. When the task included a worse path and a corrected path, prefer recording both sides explicitly. Those contrastive observations are often the easiest ones for later maintenance to turn into cards with useful alternative branches.
 

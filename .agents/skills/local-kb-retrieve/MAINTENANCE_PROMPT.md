@@ -41,6 +41,7 @@ Checklist:
    - predictive-model evidence with a clear scenario, action, observed result, and operational use
    Only the second category should be promoted directly toward cards. Generic summaries should be rewritten, split, or left as weak evidence.
 6. Preserve and inspect provenance for each observation when available: timestamp, agent name, thread reference, project reference, and workspace root. This metadata matters when deciding whether a lesson is one-off, project-local, or worth re-review by a similar agent flow later.
+   Do not read those observations as isolated bullets only. When the same project, workspace, or thread appears repeatedly, inspect the chronology and use it to reconstruct the episode: what was tried earlier, what changed later, and which revision actually improved the result.
 7. If the grouped actions are coherent, run the lowest-risk apply mode:
 `python .agents/skills/local-kb-retrieve/scripts/kb_consolidate.py --json --apply-mode new-candidates`
    Only do this when the eligible routes are semantically specific enough; in the current implementation, broad routes and routes with fewer than 3 segments should stay proposal-only.

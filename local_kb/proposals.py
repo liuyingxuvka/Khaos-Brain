@@ -98,6 +98,7 @@ def normalize_proposal_stub(repo_root: Path, path: Path, payload: dict[str, Any]
         "recommended_next_step": str(payload.get("recommended_next_step", "") or "").strip(),
         "ai_decision_required": bool(payload.get("ai_decision_required", False)),
         "provenance": _normalize_dict(payload.get("provenance")),
+        "timeline_summary": _normalize_dict(payload.get("timeline_summary")),
         "predictive_evidence_summary": _normalize_dict(payload.get("predictive_evidence_summary")),
         "suggested_confidence_change": _normalize_dict(payload.get("suggested_confidence_change")),
         "disposition_suggestion": _normalize_dict(payload.get("disposition_suggestion")),
