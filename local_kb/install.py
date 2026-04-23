@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import time
 import tomllib
 from pathlib import Path
@@ -25,6 +26,7 @@ AUTOMATIONS_ROOT = Path("automations")
 GLOBAL_AGENTS_FILENAME = "AGENTS.md"
 GLOBAL_AGENTS_BEGIN = "<!-- BEGIN MANAGED PREDICTIVE KB DEFAULTS -->"
 GLOBAL_AGENTS_END = "<!-- END MANAGED PREDICTIVE KB DEFAULTS -->"
+CODEX_SHELL_BIN_RELATIVE = Path("OpenAI") / "Codex" / "bin"
 
 SLEEP_AUTOMATION_PROMPT = (
     "Run the repository's local KB sleep-maintenance pass for this workspace. Use PROJECT_SPEC.md, "
@@ -54,8 +56,8 @@ REPO_AUTOMATION_SPECS = (
         "prompt": SLEEP_AUTOMATION_PROMPT,
         "status": "ACTIVE",
         "rrule": "FREQ=WEEKLY;BYDAY=SU,MO,TU,WE,TH,FR,SA;BYHOUR=12;BYMINUTE=0",
-        "model": "gpt-5.2",
-        "reasoning_effort": "medium",
+        "model": "gpt-5.4",
+        "reasoning_effort": "xhigh",
         "execution_environment": "local",
     },
     {
@@ -65,16 +67,37 @@ REPO_AUTOMATION_SPECS = (
         "prompt": DREAM_AUTOMATION_PROMPT,
         "status": "ACTIVE",
         "rrule": "FREQ=WEEKLY;BYDAY=SU,MO,TU,WE,TH,FR,SA;BYHOUR=13;BYMINUTE=0",
-        "model": "gpt-5.2",
-        "reasoning_effort": "medium",
+        "model": "gpt-5.4",
+        "reasoning_effort": "xhigh",
         "execution_environment": "local",
     },
 )
 
 
+def default_local_appdata() -> Path:
+    raw = str(os.environ.get("LOCALAPPDATA", "") or "").strip()
+    if raw:
+        return Path(raw).expanduser().resolve()
+    return (Path.home() / "AppData" / "Local").resolve()
+
+
 def global_skill_dir(codex_home: Path | None = None) -> Path:
     home = codex_home or default_codex_home()
     return home / GLOBAL_SKILL_ROOT
+
+
+def codex_shell_bin_dir(path_env: str | None = None, local_appdata: Path | None = None) -> Path:
+    active_path = str(path_env if path_env is not None else os.environ.get("PATH", "") or "")
+    for raw_entry in active_path.split(os.pathsep):
+        entry_text = raw_entry.strip().strip('"')
+        if not entry_text:
+            continue
+        entry = Path(entry_text).expanduser()
+        parts = [part.lower() for part in entry.parts]
+        if len(parts) >= 3 and parts[-3:] == ["openai", "codex", "bin"]:
+            return entry.resolve()
+    base = local_appdata or default_local_appdata()
+    return (base / CODEX_SHELL_BIN_RELATIVE).resolve()
 
 
 def automation_dir(codex_home: Path | None = None) -> Path:
@@ -146,6 +169,209 @@ def _checklist_item(
         "ok": ok,
         "required": required,
         "details": details,
+    }
+
+
+def _candidate_paths(*raw_paths: str | Path | None) -> list[Path]:
+    seen: set[str] = set()
+    candidates: list[Path] = []
+    for raw_path in raw_paths:
+        if raw_path is None:
+            continue
+        text = str(raw_path).strip().strip('"')
+        if not text:
+            continue
+        path = Path(text).expanduser()
+        key = str(path).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        candidates.append(path)
+    return candidates
+
+
+def _path_entries(path_env: str | None = None) -> list[Path]:
+    active_path = str(path_env if path_env is not None else os.environ.get("PATH", "") or "")
+    return _candidate_paths(*active_path.split(os.pathsep))
+
+
+def resolve_git_executable(
+    *,
+    shell_bin_dir: Path | None = None,
+    explicit_path: str | Path | None = None,
+    path_env: str | None = None,
+) -> Path | None:
+    if explicit_path is not None:
+        path = Path(explicit_path).expanduser()
+        return path.resolve() if path.exists() else None
+
+    shell_bin = (shell_bin_dir or codex_shell_bin_dir(path_env=path_env)).resolve()
+    local_appdata = default_local_appdata()
+    program_files = Path(str(os.environ.get("ProgramFiles", "") or "")).expanduser()
+    program_files_x86 = Path(str(os.environ.get("ProgramFiles(x86)", "") or "")).expanduser()
+
+    candidates = _candidate_paths(
+        program_files / "Git" / "cmd" / "git.exe" if str(program_files) else None,
+        program_files / "Git" / "bin" / "git.exe" if str(program_files) else None,
+        program_files_x86 / "Git" / "cmd" / "git.exe" if str(program_files_x86) else None,
+        program_files_x86 / "Git" / "bin" / "git.exe" if str(program_files_x86) else None,
+        local_appdata / "Programs" / "Git" / "cmd" / "git.exe",
+        local_appdata / "Programs" / "Git" / "bin" / "git.exe",
+    )
+    candidates.extend(_candidate_paths(*(entry / "git.exe" for entry in _path_entries(path_env))))
+
+    github_desktop_root = local_appdata / "GitHubDesktop"
+    if github_desktop_root.exists():
+        try:
+            candidates.extend(
+                _candidate_paths(
+                    *github_desktop_root.glob("app-*\\resources\\app\\git\\cmd\\git.exe")
+                )
+            )
+        except OSError:
+            pass
+
+    for candidate in candidates:
+        if not candidate.exists():
+            continue
+        if candidate.resolve().parent == shell_bin:
+            continue
+        return candidate.resolve()
+    return None
+
+
+def resolve_rg_source(
+    *,
+    shell_bin_dir: Path | None = None,
+    explicit_path: str | Path | None = None,
+    path_env: str | None = None,
+) -> Path | None:
+    if explicit_path is not None:
+        path = Path(explicit_path).expanduser()
+        return path.resolve() if path.exists() else None
+
+    shell_bin = (shell_bin_dir or codex_shell_bin_dir(path_env=path_env)).resolve()
+    existing_dest = shell_bin / "rg.exe"
+    if existing_dest.exists():
+        return existing_dest.resolve()
+
+    local_appdata = default_local_appdata()
+    program_files = Path(str(os.environ.get("ProgramFiles", "") or "")).expanduser()
+
+    candidates = _candidate_paths(*(entry / "rg.exe" for entry in _path_entries(path_env)))
+    candidates.extend(
+        _candidate_paths(
+            local_appdata / "Programs" / "Microsoft VS Code" / "resources" / "app" / "node_modules.asar.unpacked" / "@vscode" / "ripgrep" / "bin" / "rg.exe",
+            local_appdata / "Programs" / "cursor" / "resources" / "app" / "node_modules.asar.unpacked" / "@vscode" / "ripgrep" / "bin" / "rg.exe",
+            program_files / "Microsoft VS Code" / "resources" / "app" / "node_modules.asar.unpacked" / "@vscode" / "ripgrep" / "bin" / "rg.exe" if str(program_files) else None,
+            program_files / "VSCodium" / "resources" / "app" / "node_modules.asar.unpacked" / "@vscode" / "ripgrep" / "bin" / "rg.exe" if str(program_files) else None,
+        )
+    )
+
+    windows_apps = program_files / "WindowsApps" if str(program_files) else None
+    if windows_apps and windows_apps.exists():
+        try:
+            candidates.extend(
+                _candidate_paths(
+                    *windows_apps.glob("OpenAI.Codex_*\\app\\resources\\rg.exe")
+                )
+            )
+        except OSError:
+            pass
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+    return None
+
+
+def _prepend_process_path(path: Path) -> bool:
+    resolved = str(path.resolve())
+    current_path = str(os.environ.get("PATH", "") or "")
+    entries = [entry.strip().strip('"') for entry in current_path.split(os.pathsep) if entry.strip()]
+    if resolved in entries:
+        return False
+    os.environ["PATH"] = resolved if not current_path else f"{resolved}{os.pathsep}{current_path}"
+    return True
+
+
+def _persist_user_path(path: Path) -> bool:
+    try:
+        import winreg  # type: ignore
+    except ImportError:
+        return False
+
+    resolved = str(path.resolve())
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_READ) as key:
+            current_value, _ = winreg.QueryValueEx(key, "Path")
+    except FileNotFoundError:
+        current_value = ""
+    current_text = str(current_value or "")
+    entries = [entry.strip().strip('"') for entry in current_text.split(os.pathsep) if entry.strip()]
+    if resolved in entries:
+        return False
+    updated_text = resolved if not entries else os.pathsep.join([resolved, *entries])
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
+        winreg.SetValueEx(key, "Path", 0, winreg.REG_EXPAND_SZ, updated_text)
+    return True
+
+
+def install_codex_shell_tools(
+    *,
+    shell_bin_dir: Path | None = None,
+    git_executable: str | Path | None = None,
+    rg_source: str | Path | None = None,
+    path_env: str | None = None,
+    persist_user_path: bool = True,
+) -> dict[str, Any]:
+    bin_dir = (shell_bin_dir or codex_shell_bin_dir(path_env=path_env)).resolve()
+    bin_dir.mkdir(parents=True, exist_ok=True)
+
+    resolved_git = resolve_git_executable(
+        shell_bin_dir=bin_dir,
+        explicit_path=git_executable,
+        path_env=path_env,
+    )
+    resolved_rg = resolve_rg_source(
+        shell_bin_dir=bin_dir,
+        explicit_path=rg_source,
+        path_env=path_env,
+    )
+
+    issues: list[str] = []
+    git_shim_path = bin_dir / "git.cmd"
+    rg_path = bin_dir / "rg.exe"
+
+    if resolved_git is None:
+        issues.append("Unable to locate a Git executable for the Codex shell shim.")
+    else:
+        shim_command = (
+            f'call "{resolved_git}" %*'
+            if resolved_git.suffix.lower() in {".cmd", ".bat"}
+            else f'"{resolved_git}" %*'
+        )
+        git_shim_path.write_text(f"@echo off\r\n{shim_command}\r\n", encoding="ascii")
+
+    if resolved_rg is None:
+        issues.append("Unable to locate an rg.exe source for the Codex shell shim.")
+    elif resolved_rg.resolve() != rg_path.resolve():
+        shutil.copy2(resolved_rg, rg_path)
+
+    process_path_updated = _prepend_process_path(bin_dir)
+    user_path_updated = _persist_user_path(bin_dir) if persist_user_path else False
+
+    return {
+        "shell_bin_dir": str(bin_dir),
+        "git_executable": str(resolved_git) if resolved_git else "",
+        "git_shim_path": str(git_shim_path),
+        "git_shim_installed": git_shim_path.exists(),
+        "rg_source": str(resolved_rg) if resolved_rg else "",
+        "rg_path": str(rg_path),
+        "rg_installed": rg_path.exists(),
+        "process_path_updated": process_path_updated,
+        "user_path_updated": user_path_updated,
+        "issues": issues,
     }
 
 
@@ -224,7 +450,15 @@ def install_repo_automations(repo_root: Path, codex_home: Path | None = None) ->
     return installed
 
 
-def install_codex_integration(repo_root: Path, codex_home: Path | None = None) -> dict[str, Any]:
+def install_codex_integration(
+    repo_root: Path,
+    codex_home: Path | None = None,
+    *,
+    shell_bin_dir: Path | None = None,
+    git_executable: str | Path | None = None,
+    rg_source: str | Path | None = None,
+    persist_user_shell_path: bool = True,
+) -> dict[str, Any]:
     home = codex_home or default_codex_home()
     skill_dir = global_skill_dir(home)
     skill_dir.mkdir(parents=True, exist_ok=True)
@@ -247,6 +481,12 @@ def install_codex_integration(repo_root: Path, codex_home: Path | None = None) -
     )
     launcher_path.write_text(_read_template(repo_root, "kb_launch.py"), encoding="utf-8")
     openai_path.write_text(_read_template(repo_root, Path("agents") / "openai.yaml"), encoding="utf-8")
+    shell_tools = install_codex_shell_tools(
+        shell_bin_dir=shell_bin_dir,
+        git_executable=git_executable,
+        rg_source=rg_source,
+        persist_user_path=persist_user_shell_path,
+    )
     automations = install_repo_automations(repo_root=repo_root, codex_home=home)
 
     manifest = {
@@ -259,6 +499,7 @@ def install_codex_integration(repo_root: Path, codex_home: Path | None = None) -
         "openai_path": str(openai_path),
         "global_agents_path": global_agents,
         "env_var_name": KB_ROOT_ENV_VAR,
+        "shell_tools": shell_tools,
         "automation_ids": [item["id"] for item in automations],
         "automations": automations,
         "installed_at": utc_now_iso(),
@@ -282,6 +523,7 @@ def build_installation_check(
     manifest_root_raw = str(manifest.get("repo_root", "") or "").strip()
     env_value = os.environ.get(KB_ROOT_ENV_VAR, "").strip()
     managed_automations = manifest.get("automations", [])
+    shell_tools_manifest = manifest.get("shell_tools", {}) if isinstance(manifest.get("shell_tools"), dict) else {}
 
     issues: list[str] = []
     warnings: list[str] = []
@@ -357,6 +599,26 @@ def build_installation_check(
         issues.append(
             "Global AGENTS defaults do not contain the expected explicit KB postflight check wording. "
             "Re-run the installer to refresh the session-wide defaults."
+        )
+
+    shell_bin = Path(
+        str(shell_tools_manifest.get("shell_bin_dir", "") or codex_shell_bin_dir())
+    ).expanduser()
+    git_shim_path = Path(
+        str(shell_tools_manifest.get("git_shim_path", "") or (shell_bin / "git.cmd"))
+    ).expanduser()
+    rg_path = Path(
+        str(shell_tools_manifest.get("rg_path", "") or (shell_bin / "rg.exe"))
+    ).expanduser()
+    if not git_shim_path.exists():
+        issues.append(
+            f"Codex shell Git shim is missing: {git_shim_path}. "
+            "Re-run the installer to restore stable Git command resolution."
+        )
+    if not rg_path.exists():
+        issues.append(
+            f"Codex shell rg binary is missing: {rg_path}. "
+            "Re-run the installer to restore stable ripgrep command resolution."
         )
 
     automation_checks: list[dict[str, Any]] = []
@@ -457,6 +719,7 @@ def build_installation_check(
     global_agents_postflight = bool(global_agents_text and "explicit KB postflight check" in global_agents_text)
     kb_sleep_ok = not automation_issue_map.get("kb-sleep")
     kb_dream_ok = not automation_issue_map.get("kb-dream")
+    codex_shell_tools_ok = git_shim_path.exists() and rg_path.exists()
     strong_defaults_ok = (
         global_skill_implicit
         and global_skill_postflight
@@ -520,6 +783,12 @@ def build_installation_check(
             f"path={automation_toml_path('kb-dream', home)}",
         ),
         _checklist_item(
+            "codex_shell_tools",
+            "Codex shell git/rg tools are installed in a stable user-level bin",
+            codex_shell_tools_ok,
+            f"shell_bin={shell_bin}; git_shim={git_shim_path}; rg_path={rg_path}",
+        ),
+        _checklist_item(
             "strong_session_defaults",
             "The strongest available session-wide KB defaults layer is installed",
             strong_defaults_ok,
@@ -540,6 +809,11 @@ def build_installation_check(
         "install_state_path": str(install_state_path(home)),
         "env_var_name": KB_ROOT_ENV_VAR,
         "env_var_value": env_value,
+        "shell_tools": {
+            "shell_bin_dir": str(shell_bin),
+            "git_shim_path": str(git_shim_path),
+            "rg_path": str(rg_path),
+        },
         "checklist": checklist,
         "automation_checks": automation_checks,
         "issues": issues,
