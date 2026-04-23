@@ -1,8 +1,8 @@
-# Project Specification: Local Predictive Knowledge Library for Codex
+# Project Specification: Khaos Brain
 
 ## Status
 
-This document is the authoritative implementation brief for Codex in this repository.
+This document is the authoritative implementation brief for Khaos Brain in this repository.
 
 Implement **v0.1 only**. Optimize for clarity, maintainability, and explicit review. Do not jump ahead to vector databases, autonomous memory growth, embeddings, MCP services, or subagent orchestration unless a later task explicitly asks for them.
 

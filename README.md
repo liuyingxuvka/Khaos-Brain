@@ -1,7 +1,8 @@
-# Codex-Memory-Plugin
+# Khaos Brain
 
-- Repository head (`main`) / 仓库主线（`main`）: `v0.1.10`
-- Latest released version / 最新已发布版本: `v0.1.10`
+- Repository head (`main`) / 仓库主线（`main`）: `v0.1.11`
+- Latest released version / 最新已发布版本: `v0.1.11`
+- Project name / 项目名称: `Khaos Brain`
 - 中文正文在前；后半部分是完整英文镜像。
 - Chinese comes first; the second half is a full English mirror.
 
@@ -9,39 +10,89 @@
 
 ### 这是什么
 
-这是一个给 Codex 配套使用的本地预测型知识库系统，不是一个脱离 Codex 单独存在的“记忆应用”。
+`Khaos Brain` 不是一个把提示词、规则和零散笔记塞进文件夹里的仓库。
 
-它的作用，是把经验写成可检索、可审查、可版本化的结构化模型，让 Codex 在做事前先回忆、做事后再沉淀。
+它更像是一套接在 Codex 身上的“外接大脑”：
 
-它建模的不只是任务经验，也包括：
+- 任务会留下经历
+- 经历会被编码成记忆
+- 记忆会在真正需要时被回忆出来
+- 真实证据会在 `Sleep` 中被整理
+- 邻近但还没被完全验证的可能，会在 `Dream` 中被小范围探索
 
-- 用户偏好
-- 协作方式
-- Codex 自己的运行时行为
+所以它想做的，不只是“记住一条规则”，而是尽量模仿人类大脑处理经验的节律：
 
-### 最简单的用法
+- 醒着时做事
+- 做完后留下痕迹
+- 睡眠时整理
+- 做梦时联想
+- 下次遇到类似情境时更快想起什么更可能有效
 
-对大多数人来说，用法其实只有一句话：
+### 为什么它像一个“脑”，而不是一个规则盒子
 
-把这个仓库网址交给 Codex，然后告诉它：
+真实任务从来不是干净整齐的。
 
-> “我想在本地使用 / 安装这套系统。”
+它们会带着上下文、失误、修正、偏好、例外和重复模式一起出现。`Khaos Brain` 这个名字，就是想强调这件事：
 
-或者更具体一点：
+- 进入系统的经验，起点往往是混乱的
+- 系统要做的不是把混乱假装成单条规则
+- 而是把这些经验整理成可检索、可审查、可版本化的模型关系
 
-> “请把这个仓库作为我的本地 Codex 记忆系统安装起来，并接入日常使用。”
+也就是说，它更关心的是：
 
-通常不需要先自己读完 README，再手工敲所有命令。
+- 在什么场景下
+- 做了什么动作
+- 更可能发生什么结果
+- 如果换一条路径，又更可能发生什么
 
-下面那些安装和检查命令，更适合：
+这也是它和很多普通“记忆功能”最大的区别。
 
-- 想手动验证安装的人
-- 想调试仓库的人
-- 想继续开发这套系统的人
+### 它和普通记忆功能哪里不一样
+
+- 它保存的不只是“以后这样做”，而是更像“如果这样做，更可能发生什么”。
+- 它不只保留一个结论，也可以保留 alternatives 和对比路径。
+- 它不只记任务经验，也记用户偏好、协作方式和 Codex 自己的运行时行为。
+- 它不是黑盒数据库，而是文件型、可审查、可 Git 版本化的结构化记忆系统。
+
+所以它不是在造一个“会背规则的小本子”，而是在造一个对经验有整理能力的脑式系统。
+
+### 它到底在建模什么
+
+这套系统至少在建三类模型：
+
+1. 任务模型
+   某类发布、调试、写作、协作任务里，什么路径更可能成功。
+2. 用户模型
+   某个用户更偏好什么结构、什么说明顺序、什么交付边界。
+3. 运行时模型
+   Codex 在什么提示、流程、工具条件下更容易漏什么，改完后什么更稳。
+
+因此它保存的不只是“结论”，也包括：
+
+- 条件
+- 动作
+- 结果
+- 修正前后的差异
+- 下一次应该如何操作
+
+### Sleep 和 Dream
+
+这个仓库现在把维护拆成两条不同的“脑活动”节律：
+
+- `KB Sleep`
+  整理真实发生过的任务证据，把 observation、history 和候选经验慢慢压成更稳的结构，默认每天 `12:00` 运行。
+- `KB Dream`
+  对邻近但还没被充分验证的机会做一次有边界的小实验，帮助系统发现潜在新模式，默认每天 `13:00` 运行。
+
+它们不会并发混跑，而且都由安装器写入 Codex 的 automations。
+
+所以当你把仓库换到另一台机器时，只要重新让 Codex 安装一次，这套“醒着做事, 睡着整理, 做梦扩边”的维护机制就会一起恢复。
 
 ### 它和 Codex 的关系
 
-这不是一个“换成任何 AI 都能直接照抄运行”的通用模板。它明确依赖 Codex 已经提供的能力，例如：
+这不是一个“换成任何 AI 都能直接照抄运行”的通用模板。
+
+它明确依赖 Codex 已经提供的能力，例如：
 
 - skills / preflight invocation
 - 仓库级指令，例如 `AGENTS.md`
@@ -56,32 +107,6 @@
 - Codex 可以按定时规则自动跑 sleep / dream maintenance
 - 用户不需要天天手工检查这个库有没有整理、有没有继续长经验
 
-### Sleep 和 Dream
-
-这个仓库现在把维护拆成两条分开的节律：
-
-- `KB Sleep`
-  用来整理真实发生过的任务证据，默认每天 `12:00` 运行
-- `KB Dream`
-  用来对邻近但还没被充分验证的机会做一次有边界的小实验，默认每天 `13:00` 运行
-
-它们不会并发混跑，而且都由安装器写入 Codex 的 automations。
-
-所以把仓库换到另一台机器后，只要重新让 Codex 安装一次，同样的维护机制就会一起恢复。
-
-### 它到底在建模什么
-
-这套系统至少在建三类模型：
-
-1. 任务模型
-   某类发布、调试、写作、协作任务里，什么路径更可能成功。
-2. 用户模型
-   某个用户更偏好什么结构、什么说明顺序、什么交付边界。
-3. 运行时模型
-   Codex 在什么提示、流程、工具条件下更容易漏什么，改完后什么更稳。
-
-所以它不是只保存一句“下次这样做”，而是保存更像“如果这样做，更可能发生什么”的经验关系。
-
 ### 如果你只是想使用它
 
 默认路径应该是：
@@ -90,7 +115,7 @@
 2. 明确说你想“在本地安装并使用这套系统”。
 3. 让 Codex 完成安装、检查、接入和后续维护。
 
-只有在你想手动排查、改代码或做二次开发时，才需要关心下面这些仓库内部细节。
+对大多数人来说，这比先自己读完整个 README、再手动敲所有命令更自然，也更接近这个项目本来的使用方式。
 
 ### 手动安装与检查（可选）
 
@@ -104,10 +129,10 @@ python scripts/install_codex_kb.py --check --json
 安装器会做三类事情：
 
 - 安装全局 preflight / launcher，让 Codex 知道在仓库任务前先检索这套 KB
-- 在 `$CODEX_HOME/AGENTS.md` 下写入或刷新 repo-managed 的全局默认约束 block，把 KB preflight / postflight 变成另一台机器也能继承的强默认规则层
+- 在 `$CODEX_HOME/AGENTS.md` 下写入或刷新 repo-managed 的全局默认约束 block，让 KB preflight / postflight 变成另一台机器也能继承的强默认规则层
 - 在 `$CODEX_HOME/automations/` 下刷新 repo-managed 的 `KB Sleep` 和 `KB Dream`
 
-安装完成后，`python scripts/install_codex_kb.py --check --json` 现在会直接返回一个结构化 checklist。跨机器时，至少应看到这些项目全部通过：
+安装完成后，`python scripts/install_codex_kb.py --check --json` 会直接返回一个结构化 checklist。跨机器时，至少应看到这些项目全部通过：
 
 - 全局 predictive KB skill / launcher 已安装
 - 全局 skill 开启 implicit invocation
@@ -146,7 +171,7 @@ python scripts/install_codex_kb.py --check --json
 - `local_kb/`
 - `tests/`
 
-### Repository layout
+### Repository Layout
 
 ```text
 .
@@ -168,39 +193,89 @@ python scripts/install_codex_kb.py --check --json
 
 ### What This Is
 
-This is a local predictive knowledge system built to work with Codex. It is not a standalone memory app that lives independently from Codex.
+`Khaos Brain` is not a repository that stuffs prompts, rules, and scattered notes into folders.
 
-Its job is to turn experience into retrievable, reviewable, versioned structured models so Codex can recall before acting and consolidate after acting.
+It is closer to an external brain wired onto Codex:
 
-It models more than task experience. It also models:
+- tasks leave behind experiences
+- experiences are encoded into memory
+- memory is recalled when it is actually needed
+- real evidence is consolidated during `Sleep`
+- nearby but not-yet-fully-validated possibilities are explored in a bounded way during `Dream`
 
-- user preferences
-- collaboration patterns
-- Codex's own runtime behavior
+So its goal is not merely to “remember one rule.” It is trying to imitate the rhythm with which a human brain handles experience:
 
-### The Simplest Way To Use It
+- act while awake
+- leave traces after acting
+- consolidate during sleep
+- make associations during dreams
+- recall more quickly what is more likely to work the next time a similar situation appears
 
-For most people, the usage is really just one sentence:
+### Why It Feels Like A Brain Instead Of A Rule Box
 
-Give this repository URL to Codex and tell it:
+Real tasks are never perfectly neat.
 
-> "I want to use / install this system locally."
+They arrive together with context, mistakes, revisions, preferences, exceptions, and recurring patterns. The name `Khaos Brain` is meant to emphasize exactly that:
 
-Or a little more explicitly:
+- the experience entering the system usually begins in chaos
+- the system's job is not to pretend that chaos was always one clean rule
+- its job is to reorganize that experience into retrievable, reviewable, versioned model relationships
 
-> "Please install this repository as my local Codex memory system and wire it into daily use."
+In other words, it cares about:
 
-In most cases you do not need to read the whole README first and manually type every command yourself.
+- under what scenario
+- taking what action
+- makes what result more likely
+- and what becomes more likely if a different path is chosen
 
-The install and check commands below are mainly for:
+That is also the biggest difference between this project and many ordinary “memory features.”
 
-- people who want to verify the install manually
-- people who want to debug the repository
-- people who want to continue developing the system
+### How It Differs From Ordinary Memory Features
+
+- It does not save only “do this next time.” It saves something closer to “if we do this, this result becomes more likely.”
+- It does not keep only one conclusion. It can also preserve alternatives and contrastive paths.
+- It models more than task experience. It also models user preferences, collaboration patterns, and Codex's own runtime behavior.
+- It is not a black-box database. It is a file-based, inspectable, Git-versioned structured memory system.
+
+So this is not a tiny notebook that can recite rules. It is a brain-like system for organizing experience.
+
+### What It Is Actually Modeling
+
+The system is building at least three kinds of models:
+
+1. Task models
+   In a certain kind of release, debugging, writing, or collaboration task, which path is more likely to succeed.
+2. User models
+   What structure, explanation order, and delivery boundary a specific user is more likely to prefer.
+3. Runtime models
+   Under which prompts, workflows, or tool conditions Codex is more likely to miss something, and which revised path becomes more stable.
+
+So it preserves more than a conclusion. It also preserves:
+
+- conditions
+- actions
+- results
+- the difference between the weaker path and the revised path
+- how the next run should operate
+
+### Sleep And Dream
+
+The repository now separates maintenance into two different kinds of “brain activity”:
+
+- `KB Sleep`
+  consolidates evidence from real tasks, gradually compressing observations, history, and candidate lessons into more stable structures, and runs by default every day at `12:00`
+- `KB Dream`
+  runs one bounded experiment on nearby but under-validated opportunities, helping the system discover possible new patterns, and runs by default every day at `13:00`
+
+These lanes do not run concurrently, and both are provisioned into Codex automations by the installer.
+
+So when the repository moves to another machine, asking Codex to install it again restores the same “work while awake, consolidate while asleep, expand while dreaming” maintenance rhythm there too.
 
 ### How It Relates To Codex
 
-This is not a generic template that runs the same way with any AI. It explicitly depends on capabilities that Codex already provides, such as:
+This is not a generic template that runs the same way with any AI.
+
+It explicitly depends on capabilities that Codex already provides, such as:
 
 - skills / preflight invocation
 - repository-level instructions such as `AGENTS.md`
@@ -215,32 +290,6 @@ And because it depends on Codex, the system does not require a human to babysit 
 - Codex can run sleep / dream maintenance on a schedule
 - the user does not have to keep checking whether the library was consolidated or extended
 
-### Sleep And Dream
-
-The repository now separates maintenance into two different rhythms:
-
-- `KB Sleep`
-  consolidates evidence from real tasks and runs by default every day at `12:00`
-- `KB Dream`
-  runs one bounded experiment on a nearby but under-validated opportunity and runs by default every day at `13:00`
-
-These lanes do not run concurrently, and both are provisioned by the installer into Codex automations.
-
-So when the repository moves to another machine, asking Codex to install it again restores the same maintenance mechanism there too.
-
-### What It Is Actually Modeling
-
-The system is building at least three kinds of models:
-
-1. Task models
-   In a certain kind of release, debugging, writing, or collaboration task, which path is more likely to succeed.
-2. User models
-   What structure, explanation order, and delivery boundary a specific user is more likely to prefer.
-3. Runtime models
-   Under which prompts, workflows, or tool conditions Codex is more likely to miss something, and which revised path becomes more stable.
-
-So it is not just saving one sentence like "do this next time." It is saving something closer to "if we act this way, this is more likely to happen."
-
 ### If You Just Want To Use It
 
 The default path should be:
@@ -249,7 +298,7 @@ The default path should be:
 2. State clearly that you want to install and use the system locally.
 3. Let Codex handle installation, checks, integration, and ongoing maintenance.
 
-You only need the repository-internal details below if you want to debug manually, change code, or extend the system.
+For most people, this is more natural than reading the entire README first and manually typing every command, and it is also closer to the way the project is meant to be used.
 
 ### Manual Install And Check (Optional)
 
@@ -263,10 +312,10 @@ python scripts/install_codex_kb.py --check --json
 The installer does three main things:
 
 - installs the global preflight / launcher so Codex knows to consult this KB before repository work
-- writes or refreshes a repo-managed defaults block under `$CODEX_HOME/AGENTS.md` so another machine inherits the strongest available session-wide KB preflight and postflight rules
+- writes or refreshes a repo-managed defaults block under `$CODEX_HOME/AGENTS.md` so KB preflight / postflight become strong inherited defaults on another machine too
 - refreshes the repo-managed `KB Sleep` and `KB Dream` automations under `$CODEX_HOME/automations/`
 
-After installation, `python scripts/install_codex_kb.py --check --json` now returns a structured checklist. On another machine, you should treat install as complete only when these checks all pass:
+After installation, `python scripts/install_codex_kb.py --check --json` returns a structured checklist directly. On another machine, you should treat the install as complete only when these checks all pass:
 
 - the global predictive KB skill / launcher exists
 - the global skill enables implicit invocation
