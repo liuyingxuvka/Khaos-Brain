@@ -1,7 +1,7 @@
 # Khaos Brain
 
-- Repository head (`main`) / 仓库主线（`main`）: `v0.2.0`
-- Latest released version / 最新已发布版本: `v0.2.0`
+- Repository head (`main`) / 仓库主线（`main`）: `v0.2.1`
+- Latest released version / 最新已发布版本: `v0.2.1`
 - Project name / 项目名称: `Khaos Brain`
 - 中文正文在前；后半部分是完整英文镜像。
 - Chinese comes first; the second half is a full English mirror.
@@ -141,7 +141,7 @@ The two screenshots below show the current desktop app in English UI, intended a
 
 ### 如果你只是想打开桌面版
 
-从 `v0.2.0` 开始，GitHub Release 会附带 Windows 预览版入口 `KhaosBrain.exe`：
+当前 GitHub Release 会附带 Windows 预览版入口 `KhaosBrain.exe`：
 
 - 到 [GitHub Releases](https://github.com/liuyingxuvka/Khaos-Brain/releases/latest) 下载 `KhaosBrain.exe`
 - 把它放在这个仓库目录里，或通过命令行参数 `--repo-root` 指向这个仓库
@@ -190,6 +190,8 @@ python scripts/kb_desktop.py --repo-root . --language en
 这个入口不启动浏览器，不需要本地 web 服务，也不依赖 Electron 或 Node。它使用 Python 标准库的桌面窗口读取同一套文件型 KB：左侧按路线索引导航，右侧以卡片封面的方式查看预测模型。`--language zh-CN` 可以显式切到中文显示层，`--language en` 则适合做英文预览和发布截图。
 
 如果需要 Windows exe、桌面快捷方式或 Codex 打开 UI 的 skill，见 `docs/windows_desktop_app.md`。
+
+如果你在评估下一阶段的组织共享模式，见 `docs/organization_mode_plan.md`。它记录了 GitHub-backed organization KB、身份、权限、Skill registry、贡献管线和 UI 分层的计划，但还不是默认启用功能。
 
 无界面检查可以运行：
 
@@ -358,7 +360,7 @@ For most people, this is more natural than reading the entire README first and m
 
 ### If You Just Want The Desktop App
 
-Starting with `v0.2.0`, GitHub Releases include the Windows preview entry `KhaosBrain.exe`:
+The current GitHub Release includes the Windows preview entry `KhaosBrain.exe`:
 
 - download `KhaosBrain.exe` from [GitHub Releases](https://github.com/liuyingxuvka/Khaos-Brain/releases/latest)
 - place it in this repository directory, or pass `--repo-root` on the command line to point it at this repository
@@ -409,6 +411,8 @@ This entry point does not start a browser, a local web server, Electron, or Node
 The desktop viewer supports a local display-language setting. English card fields remain the canonical source; optional `i18n.zh-CN` fields are filled by sleep maintenance and used for Chinese display with English fallback.
 
 For the Windows exe, desktop shortcut, or Codex UI-opening skill, see `docs/windows_desktop_app.md`.
+
+For the planned organization-sharing direction, see `docs/organization_mode_plan.md`. It records the proposed GitHub-backed organization KB, identity, permissions, Skill registry, contribution pipeline, and UI layering, but it is not enabled by default yet.
 
 For a headless check:
 

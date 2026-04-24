@@ -405,6 +405,13 @@ The skill should do the following:
 12. When a reusable lesson is specifically about how a user tends to respond, prefer a private predictive card that captures the task condition and likely user preference or reaction, rather than a vague impression about the user's personality.
 13. When a reusable lesson is specifically about using another Codex skill or plugin, capture it as valid KB evidence when the skill choice, ordering, combination, fallback, or failure mode materially changes the result. Preserve both a skill-facing route such as `codex/workflow/skills` or `codex/skill-use/<skill-name>` and the task-facing route that made the skill relevant.
 
+Skill-use evidence should be captured as part of the personal KB, not only as a
+future organization-sharing concern. This should not mean writing an observation
+for every routine invocation. It does mean Codex should record a structured
+observation when a Skill is new, repeatedly useful, task-critical, missing,
+misleading, used as a fallback, combined with another Skill, or when the task
+reveals that a Skill should be invoked earlier or avoided in a known scenario.
+
 For non-trivial work, KB postflight should be treated as part of done rather than optional housekeeping. Before a task is considered complete, Codex should explicitly check whether the task exposed:
 
 - a reusable lesson
@@ -797,6 +804,13 @@ Observations about **skill or plugin use** should follow the same predictive rul
 - how future Codex work should adapt its skill invocation, ordering, or fallback behavior
 
 These observations should avoid generic praise for a skill. The useful evidence is the trigger condition, action, and observed result, especially when one skill should be invoked earlier, paired with another skill, or avoided for a particular class of task.
+
+Skill-use observations are especially important when a Skill may later be shared
+or registered for an organization. A local Skill that is frequently used but has
+no supporting cards is a gap: maintenance should request or create a
+Skill-use observation before proposing that Skill as reusable organization
+capability. The observation should explain the card-facing evidence for the
+Skill, not merely state that the Skill exists.
 
 Observations about a **specific user** should also stay predictive and bounded. They are strongest when they answer:
 

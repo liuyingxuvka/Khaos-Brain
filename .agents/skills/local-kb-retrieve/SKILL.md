@@ -62,6 +62,7 @@ Independent maintenance thread:
 16. Lessons about current model or runtime behavior are valid when they stay bounded and auditable. Preserve the most precise runtime identity that is actually known, and if exact model identity is not surfaced reliably, scope the lesson more conservatively to the active Codex runtime, current environment, or known model family.
 17. When such a lesson is likely to become a card later, keep more than one retrieval path in view: a runtime-facing route such as `codex/runtime-behavior/...` plus any prompting, tool-use, workflow, or planning routes that materially shaped the behavior.
 18. Lessons about a specific user are also valid when they stay bounded, evidence-based, and behaviorally framed. Record them as task-conditioned private predictions about likely preference, correction, or judgment rather than as personality labels or broad character impressions.
+19. Lessons about Codex Skill or plugin use are valid personal-KB evidence when the Skill is new, repeatedly useful, task-critical, missing, misleading, used as fallback, combined with another Skill, or when the task shows that a Skill should be invoked earlier or avoided under known conditions. Do not record generic praise or every routine invocation; record scenario, Skill action/choice, observed result, and future operational use. Preserve a skill-facing route such as `codex/workflow/skills` or `codex/skill-use/<skill-name>` plus the task-facing route that made the Skill relevant.
 
 Sleep maintenance checklist:
 

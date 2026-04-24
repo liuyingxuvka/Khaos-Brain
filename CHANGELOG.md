@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.1 - 2026-04-24
+
+- Refined the desktop card browser UI with lighter card shadows, subtler gradient surfaces, tighter spacing, and denser card layout.
+- Updated the README desktop preview screenshots to show the refreshed overview and detail views.
+- Added the organization mode planning document for the future GitHub-backed shared KB direction.
+- Clarified Skill and plugin-use evidence capture rules in the project spec and local KB retrieval skill.
+- Added Chinese route labels for the new release, desktop UI, branding, icon, and Skill-sharing planning routes.
+
 ## v0.2.0 - 2026-04-24
 
 - Renamed and presented the project as `Khaos Brain` with refreshed public README positioning, icon artwork, and English UI screenshots.

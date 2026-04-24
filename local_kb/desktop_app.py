@@ -804,6 +804,7 @@ class KbDesktopApp(tk.Tk):
         margin = max(self._u(4), blur + self._u(1))
 
         cache_key = (
+            "card-surface-v2",
             width,
             height,
             radius,
@@ -832,7 +833,7 @@ class KbDesktopApp(tk.Tk):
 
         shadow_layer = Image.new("RGBA", surface.size, (0, 0, 0, 0))
         shadow_draw = ImageDraw.Draw(shadow_layer)
-        shadow_alpha = 100 if hovered else 78
+        shadow_alpha = 58 if hovered else 34
         shadow_box = [
             card_x + shadow_x * scale,
             card_y + shadow_y * scale,
@@ -842,14 +843,14 @@ class KbDesktopApp(tk.Tk):
         shadow_draw.rounded_rectangle(
             shadow_box,
             radius=radius_s,
-            fill=(*_hex_to_rgb("#b9bbc8" if hovered else "#cfd1dc"), shadow_alpha),
+            fill=(*_hex_to_rgb("#9aa1b2" if hovered else "#b8bdca"), shadow_alpha),
         )
         blurred_shadow = shadow_layer.filter(ImageFilter.GaussianBlur(blur * scale))
         surface = Image.alpha_composite(surface, blurred_shadow)
 
-        top = _blend_hex(palette.get("soft", palette["fill"]), "#ffffff", 0.06)
+        top = _blend_hex(palette.get("soft", palette["fill"]), "#ffffff", 0.12)
         mid = palette["fill"]
-        bottom = _blend_hex(palette["fill"], "#000000", 0.14)
+        bottom = _blend_hex(palette["fill"], "#000000", 0.10)
         gradient_column = Image.new("RGBA", (1, card_h), (0, 0, 0, 0))
         gradient_draw = ImageDraw.Draw(gradient_column)
         for yy in range(card_h):
@@ -859,10 +860,46 @@ class KbDesktopApp(tk.Tk):
         resampling = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
         gradient = gradient_column.resize((card_w, card_h), resampling)
 
+        texture = Image.new("RGBA", (card_w, card_h), (0, 0, 0, 0))
+        texture_draw = ImageDraw.Draw(texture)
+        arc_alpha = 22 if hovered else 16
+        arc_width = max(2, int(2.2 * scale))
+        arc_color = (255, 255, 255, arc_alpha)
+        texture_draw.arc(
+            [int(card_w * 0.22), -int(card_h * 0.28), int(card_w * 1.24), int(card_h * 1.24)],
+            start=205,
+            end=318,
+            fill=arc_color,
+            width=arc_width,
+        )
+        texture_draw.arc(
+            [int(card_w * 0.40), -int(card_h * 0.10), int(card_w * 1.36), int(card_h * 1.06)],
+            start=206,
+            end=312,
+            fill=(255, 255, 255, max(8, arc_alpha - 6)),
+            width=max(1, arc_width - 1),
+        )
+        highlight = Image.new("RGBA", (1, card_h), (0, 0, 0, 0))
+        highlight_draw = ImageDraw.Draw(highlight)
+        for yy in range(card_h):
+            alpha = max(0, int((1 - yy / max(1, card_h * 0.48)) * (22 if hovered else 16)))
+            highlight_draw.point((0, yy), fill=(255, 255, 255, alpha))
+        texture = Image.alpha_composite(highlight.resize((card_w, card_h), resampling), texture)
+        gradient = Image.alpha_composite(gradient, texture)
+
         mask = Image.new("L", (card_w, card_h), 0)
         mask_draw = ImageDraw.Draw(mask)
         mask_draw.rounded_rectangle([0, 0, card_w - 1, card_h - 1], radius=radius_s, fill=255)
         surface.paste(gradient, (card_x, card_y), mask)
+        rim = Image.new("RGBA", surface.size, (0, 0, 0, 0))
+        rim_draw = ImageDraw.Draw(rim)
+        rim_draw.rounded_rectangle(
+            [card_x, card_y, card_x + card_w - 1, card_y + card_h - 1],
+            radius=radius_s,
+            outline=(255, 255, 255, 42),
+            width=max(1, scale),
+        )
+        surface = Image.alpha_composite(surface, rim)
 
         surface = surface.resize((image_w, image_h), resampling)
         photo = ImageTk.PhotoImage(surface)
@@ -885,7 +922,7 @@ class KbDesktopApp(tk.Tk):
         image_h = max(1, height)
         radius_s = max(1, radius * scale)
         cache_key = (
-            "gradient",
+            "gradient-v2",
             image_w,
             image_h,
             radius,
@@ -898,9 +935,9 @@ class KbDesktopApp(tk.Tk):
             setattr(canvas, "_surface_photo", cached_photo)
             return
 
-        top = _blend_hex(palette.get("soft", palette["fill"]), "#ffffff", 0.06)
+        top = _blend_hex(palette.get("soft", palette["fill"]), "#ffffff", 0.12)
         mid = palette["fill"]
-        bottom = _blend_hex(palette["fill"], "#000000", 0.14)
+        bottom = _blend_hex(palette["fill"], "#000000", 0.10)
         surface_w = image_w * scale
         surface_h = image_h * scale
         gradient_column = Image.new("RGBA", (1, surface_h), (0, 0, 0, 0))
@@ -912,12 +949,44 @@ class KbDesktopApp(tk.Tk):
         resampling = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
         gradient = gradient_column.resize((surface_w, surface_h), resampling)
 
+        texture = Image.new("RGBA", (surface_w, surface_h), (0, 0, 0, 0))
+        texture_draw = ImageDraw.Draw(texture)
+        arc_width = max(2, int(2.2 * scale))
+        texture_draw.arc(
+            [int(surface_w * 0.30), -int(surface_h * 0.36), int(surface_w * 1.14), int(surface_h * 1.24)],
+            start=204,
+            end=320,
+            fill=(255, 255, 255, 16),
+            width=arc_width,
+        )
+        texture_draw.arc(
+            [int(surface_w * 0.46), -int(surface_h * 0.16), int(surface_w * 1.26), int(surface_h * 1.08)],
+            start=206,
+            end=314,
+            fill=(255, 255, 255, 10),
+            width=max(1, arc_width - 1),
+        )
+        highlight = Image.new("RGBA", (1, surface_h), (0, 0, 0, 0))
+        highlight_draw = ImageDraw.Draw(highlight)
+        for yy in range(surface_h):
+            alpha = max(0, int((1 - yy / max(1, surface_h * 0.52)) * 16))
+            highlight_draw.point((0, yy), fill=(255, 255, 255, alpha))
+        texture = Image.alpha_composite(highlight.resize((surface_w, surface_h), resampling), texture)
+        gradient = Image.alpha_composite(gradient, texture)
+
         mask = Image.new("L", (surface_w, surface_h), 0)
         mask_draw = ImageDraw.Draw(mask)
         mask_draw.rounded_rectangle([0, 0, surface_w - 1, surface_h - 1], radius=radius_s, fill=255)
 
         surface = Image.new("RGBA", (surface_w, surface_h), (0, 0, 0, 0))
         surface.paste(gradient, (0, 0), mask)
+        rim_draw = ImageDraw.Draw(surface)
+        rim_draw.rounded_rectangle(
+            [0, 0, surface_w - 1, surface_h - 1],
+            radius=radius_s,
+            outline=(255, 255, 255, 42),
+            width=max(1, scale),
+        )
         surface = surface.resize((image_w, image_h), resampling)
         photo = ImageTk.PhotoImage(surface)
         self._card_surface_cache[cache_key] = photo
@@ -1007,20 +1076,20 @@ class KbDesktopApp(tk.Tk):
         self.sidebar.create_text(u(96), u(52), text="Khaos Brain", anchor="nw", fill=TEXT, font=self._font(19, "bold"), tags="chrome")
         self.sidebar.create_text(u(96), u(83), text="Memory Library", anchor="nw", fill=MUTED, font=self._font(12), tags="chrome")
 
-        self._round_rect(self.sidebar, u(28), u(130), width - u(36), u(174), u(12), fill=BG, outline=LINE, tags="chrome")
-        self._draw_sidebar_icon(self.sidebar, u(49), u(152), "search", MUTED, "chrome")
-        self.sidebar.coords(self.search_window, u(72), u(140))
-        self.sidebar.itemconfigure(self.search_window, width=max(u(140), width - u(122)), height=u(32))
+        self._round_rect(self.sidebar, u(28), u(128), width - u(36), u(168), u(12), fill=BG, outline=LINE, tags="chrome")
+        self._draw_sidebar_icon(self.sidebar, u(49), u(148), "search", MUTED, "chrome")
+        self.sidebar.coords(self.search_window, u(72), u(137))
+        self.sidebar.itemconfigure(self.search_window, width=max(u(140), width - u(122)), height=u(30))
 
-        y = u(206)
+        y = u(194)
         self._nav_row(u(28), y, width - u(32), self._text("all_cards"), "cards", "", active=self.route == "" and not self.searching)
-        y += u(48)
+        y += u(44)
         self._nav_row(u(28), y, width - u(32), self._text("trusted"), "trusted", "", active=self.searching == "trusted")
-        y += u(48)
+        y += u(44)
         self._nav_row(u(28), y, width - u(32), self._text("candidates"), "candidates", "", active=self.searching == "candidate")
-        y += u(48)
+        y += u(44)
         self._nav_row(u(28), y, width - u(32), self._text("models"), "type", "model", active=self.searching == "type:model")
-        y += u(48)
+        y += u(44)
         self._nav_row(
             u(28),
             y,
@@ -1030,7 +1099,7 @@ class KbDesktopApp(tk.Tk):
             "preference",
             active=self.searching == "type:preference",
         )
-        y += u(58)
+        y += u(52)
 
         self.sidebar.create_line(u(34), y - u(18), width - u(40), y - u(18), fill=LINE, tags="chrome")
         self.sidebar.create_text(u(28), y, text=self._text("routes"), anchor="nw", fill=TEXT, font=self._font(14), tags="chrome")
@@ -1038,7 +1107,7 @@ class KbDesktopApp(tk.Tk):
 
         for route, label, depth, active, ancestor, count, declared in self._visible_routes():
             self._route_row(u(42), y, width - u(40), route, label, depth, active, ancestor, count, declared)
-            y += u(40)
+            y += u(38)
         self.sidebar.configure(scrollregion=(0, 0, width, max(height, y + u(24))))
         self._render_footer()
 
@@ -1064,22 +1133,22 @@ class KbDesktopApp(tk.Tk):
 
     def _nav_row(self, x1: int, y1: int, x2: int, label: str, action: str, value: str, *, active: bool) -> None:
         u = self._u
-        y2 = y1 + u(42)
+        y2 = y1 + u(38)
         if active:
-            self._round_rect(self.sidebar, x1, y1, x2, y2, u(12), fill=SIDEBAR_ACTIVE, tags="chrome")
+            self._round_rect(self.sidebar, x1, y1, x2, y2, u(11), fill=SIDEBAR_ACTIVE, tags="chrome")
             self.sidebar.create_line(x1 - u(8), y1 + u(8), x1 - u(8), y2 - u(8), fill=ACCENT, width=max(1, u(2)), tags="chrome")
         icon = {"cards": "cards", "trusted": "trusted", "candidates": "candidates"}.get(action, "route")
         if action == "type":
             icon = "model" if value == "model" else "preference"
         icon_color = ACCENT if active else MUTED
-        self._draw_sidebar_icon(self.sidebar, x1 + u(22), y1 + u(21), icon, icon_color, "chrome")
+        self._draw_sidebar_icon(self.sidebar, x1 + u(22), y1 + u(19), icon, icon_color, "chrome")
         self.sidebar.create_text(
             x1 + u(56),
-            y1 + u(21),
+            y1 + u(19),
             text=label,
             anchor="w",
             fill=ACCENT if active else TEXT,
-            font=self._font(15),
+            font=self._font(14),
             tags="chrome",
         )
         self.nav_hitboxes.append((x1, y1, x2, y2, action, value))
@@ -1133,28 +1202,28 @@ class KbDesktopApp(tk.Tk):
         declared: bool,
     ) -> None:
         u = self._u
-        y2 = y1 + u(38)
+        y2 = y1 + u(36)
         indent = depth * u(19)
         if active:
             self._round_rect(self.sidebar, x1 - u(10), y1 - u(4), x2, y2 + u(4), u(10), fill=SIDEBAR_ACTIVE, tags="chrome")
             self.sidebar.create_line(x1 - u(16), y1 + u(5), x1 - u(16), y2 - u(5), fill=ACCENT, width=u(2), tags="chrome")
         icon_fill = ACCENT if active else MUTED
         text_fill = ACCENT if active else TEXT if ancestor else MUTED
-        self._draw_sidebar_icon(self.sidebar, x1 + indent + u(5), y1 + u(19), "route", icon_fill, "chrome")
+        self._draw_sidebar_icon(self.sidebar, x1 + indent + u(5), y1 + u(18), "route", icon_fill, "chrome")
         self.sidebar.create_text(
             x1 + indent + u(34),
-            y1 + u(19),
+            y1 + u(18),
             text=label,
             anchor="w",
             fill=text_fill,
-            font=self._font(14),
+            font=self._font(13),
             tags="chrome",
         )
         if count:
             pill_w = u(22) + len(str(count)) * u(8)
             self._round_rect(self.sidebar, x2 - u(42) - pill_w, y1 + u(8), x2 - u(42), y2 - u(8), u(9), fill="#f0f0f3", tags="chrome")
-            self.sidebar.create_text(x2 - u(42) - pill_w / 2, y1 + u(19), text=str(count), fill=MUTED, font=self._font(11, "bold"), tags="chrome")
-        self.sidebar.create_text(x2 - u(6), y1 + u(19), text="›", anchor="e", fill="#b8b8bd", font=self._font(15), tags="chrome")
+            self.sidebar.create_text(x2 - u(42) - pill_w / 2, y1 + u(18), text=str(count), fill=MUTED, font=self._font(10, "bold"), tags="chrome")
+        self.sidebar.create_text(x2 - u(6), y1 + u(18), text="›", anchor="e", fill="#b8b8bd", font=self._font(14), tags="chrome")
         self.nav_hitboxes.append((x1 - u(10), y1 - u(4), x2, y2 + u(4), "route", route))
 
     def _on_sidebar_click(self, event: tk.Event[Any]) -> None:
@@ -1304,8 +1373,8 @@ class KbDesktopApp(tk.Tk):
         header_width = max(visible_grid_width, header_right - content_left)
 
         count_label = f"{len(self.deck)} {self._text('cards_suffix')}"
-        count_w = max(u(86), u(34) + len(count_label) * u(8))
-        title_top = u(42)
+        count_w = max(u(78), u(28) + len(count_label) * u(7))
+        title_top = u(34)
         has_count_room = header_width >= u(620)
         title_right = header_right - count_w - u(28) if has_count_room else header_right
         title_width = max(u(260), title_right - content_left)
@@ -1316,30 +1385,30 @@ class KbDesktopApp(tk.Tk):
             anchor="nw",
             fill=TEXT,
             width=title_width,
-            font=("Segoe UI", f(26), "bold"),
+            font=("Segoe UI", f(23), "bold"),
         )
         title_bbox = self.main.bbox(title_item) or (content_left, title_top, title_right, title_top + u(44))
 
         if has_count_room:
             count_x2 = header_right
             count_x1 = count_x2 - count_w
-            count_y1 = title_top + u(8)
-            count_y2 = count_y1 + u(28)
+            count_y1 = title_top + u(5)
+            count_y2 = count_y1 + u(26)
         else:
             count_x1 = content_left
             count_x2 = content_left + count_w
-            count_y1 = title_bbox[3] + u(10)
-            count_y2 = count_y1 + u(28)
-        self._round_rect(self.main, count_x1, count_y1, count_x2, count_y2, u(14), fill="#f7f7f9", outline=LINE_SOFT)
+            count_y1 = title_bbox[3] + u(8)
+            count_y2 = count_y1 + u(26)
+        self._round_rect(self.main, count_x1, count_y1, count_x2, count_y2, u(13), fill="#f7f7f9", outline=LINE_SOFT)
         self.main.create_text(
             (count_x1 + count_x2) / 2,
             (count_y1 + count_y2) / 2,
             text=count_label,
             fill=MUTED,
-            font=("Segoe UI", f(11), "bold"),
+            font=("Segoe UI", f(10), "bold"),
         )
 
-        subtitle_y = max(title_bbox[3] + u(6), count_y2 + u(6) if not has_count_room else u(78))
+        subtitle_y = max(title_bbox[3] + u(4), count_y2 + u(6) if not has_count_room else u(68))
         subtitle_item = self.main.create_text(
             content_left + 2,
             subtitle_y,
@@ -1347,10 +1416,10 @@ class KbDesktopApp(tk.Tk):
             anchor="nw",
             fill=MUTED,
             width=max(u(260), header_width),
-            font=("Segoe UI", f(13)),
+            font=("Segoe UI", f(12)),
         )
         subtitle_bbox = self.main.bbox(subtitle_item) or (content_left, subtitle_y, header_right, subtitle_y + u(24))
-        header_bottom = subtitle_bbox[3] + u(30)
+        header_bottom = subtitle_bbox[3] + u(24)
 
         if self.route:
             route_y1 = subtitle_bbox[3] + u(14)
@@ -1415,20 +1484,20 @@ class KbDesktopApp(tk.Tk):
     def _main_grid_layout(self, width: int) -> dict[str, int]:
         u = self._u
         usable_width = max(u(360), width - u(MAIN_MARGIN_X) * 2)
-        if usable_width >= u(1680):
+        if usable_width >= u(1440):
             columns = 5
-        elif usable_width >= u(1120):
+        elif usable_width >= u(1040):
             columns = 4
-        elif usable_width >= u(760):
+        elif usable_width >= u(720):
             columns = 3
         elif usable_width >= u(520):
             columns = 2
         else:
             columns = 1
         columns = min(MAIN_MAX_COLUMNS, columns)
-        gap = u(22) if columns > 1 else 0
-        card_w = min(u(360), max(u(230), (usable_width - gap * (columns - 1)) // columns))
-        card_h = int(card_w * 0.66)
+        gap = u(18) if columns > 1 else 0
+        card_w = min(u(320), max(u(218), (usable_width - gap * (columns - 1)) // columns))
+        card_h = int(card_w * 0.64)
         grid_width = columns * card_w + (columns - 1) * gap
         left = u(MAIN_MARGIN_X)
         return {
@@ -1445,31 +1514,40 @@ class KbDesktopApp(tk.Tk):
         f = self._f
         palette = _palette(card)
 
-        self._draw_card_surface(x, y, width, height, u(18), palette, hovered=hovered)
+        self._draw_card_surface(x, y, width, height, u(15), palette, hovered=hovered)
 
         type_label = _card_type_label(card, self.language)
+        type_w = min(width - u(138), max(u(58), u(16) + len(type_label) * u(6)))
+        self._round_rect(
+            self.main,
+            x + u(16),
+            y + u(16),
+            x + u(16) + type_w,
+            y + u(31),
+            u(8),
+            fill=_blend_hex(palette.get("soft", palette["fill"]), palette["fill"], 0.22),
+        )
         self.main.create_text(
-            x + u(22),
-            y + u(22),
+            x + u(16) + type_w / 2,
+            y + u(23),
             text=type_label,
-            anchor="nw",
             fill=palette["muted"],
-            font=("Segoe UI", f(8), "bold"),
+            font=("Segoe UI", f(6), "bold"),
         )
         confidence = _confidence_label(card)
         if confidence:
             self.main.create_text(
-                x + width - u(22),
-                y + u(22),
+                x + width - u(18),
+                y + u(23),
                 text=f"{self._text('confidence')} {confidence}",
                 anchor="ne",
                 fill=palette["muted"],
-                font=("Segoe UI", f(8), "bold"),
+                font=("Segoe UI", f(7), "bold"),
             )
 
         title = _cover_title(card, self.language)
         title_step = max(u(20), min(u(26), width // 16))
-        title_y = y + u(62)
+        title_y = y + u(58)
         title_lines = _text_lines(title, 24, 2)
         for line_index, line in enumerate(title_lines):
             self.main.create_text(
@@ -1479,7 +1557,7 @@ class KbDesktopApp(tk.Tk):
                 anchor="nw",
                 fill=palette["deep"],
                 width=width - u(44),
-                font=self._font(14, "bold"),
+                font=self._font(13, "bold"),
             )
 
         footer_y = y + height - u(48)
@@ -1503,19 +1581,19 @@ class KbDesktopApp(tk.Tk):
                 )
 
         status = _status_label(card, self.language)
-        self.main.create_line(x + u(22), footer_y, x + width - u(22), footer_y, fill=palette["line"])
-        pill_w = min(width - u(150), max(u(76), u(34) + len(status) * u(8)))
-        self._round_rect(self.main, x + u(22), y + height - u(38), x + u(22) + pill_w, y + height - u(16), u(11), fill=palette["pill"])
+        self.main.create_line(x + u(18), footer_y, x + width - u(18), footer_y, fill=palette["line"])
+        pill_w = min(width - u(142), max(u(70), u(30) + len(status) * u(7)))
+        self._round_rect(self.main, x + u(18), y + height - u(36), x + u(18) + pill_w, y + height - u(16), u(10), fill=palette["pill"])
         self.main.create_text(
-            x + u(22) + pill_w / 2,
-            y + height - u(27),
+            x + u(18) + pill_w / 2,
+            y + height - u(26),
             text=status,
             fill=palette["pill_text"],
-            font=("Segoe UI", f(9), "bold"),
+            font=("Segoe UI", f(8), "bold"),
         )
         self.main.create_text(
-            x + width - u(22),
-            y + height - u(27),
+            x + width - u(18),
+            y + height - u(26),
             text=_short_id(card.get("id"), 18 if width >= u(310) else 12),
             anchor="e",
             fill=palette["muted"],
