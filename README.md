@@ -23,7 +23,7 @@ The current release is Codex-first: the installer, global skills, default rules 
 | --- | --- | --- |
 | ![Khaos Brain desktop overview with local and organization cards](assets/screenshots/desktop-overview-en.png) | ![Khaos Brain organization source view](assets/screenshots/desktop-organization-en.png) | ![Khaos Brain card detail view](assets/screenshots/desktop-detail-en.png) |
 
-## 中文
+## 中文 / Chinese comes first; the second half is English.
 
 ### 它解决什么问题
 
@@ -221,7 +221,7 @@ python scripts/kb_desktop.py --repo-root . --check
 └─ tests/
 ```
 
-## English Mirror
+## English
 
 ### What Khaos Brain Is
 
