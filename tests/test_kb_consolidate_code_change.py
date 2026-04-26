@@ -78,6 +78,43 @@ class ConsolidateCodeChangeTests(unittest.TestCase):
             code_action = next(action for action in result["actions"] if action["action_type"] == "review-code-change")
             self.assertEqual(code_action["target"]["kind"], "task")
 
+    def test_skill_use_candidate_signal_also_requests_code_change_review(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            history_path = repo_root / "kb" / "history" / "events.jsonl"
+            history_path.parent.mkdir(parents=True, exist_ok=True)
+
+            event = {
+                "event_id": "skill-1",
+                "event_type": "observation",
+                "created_at": "2026-04-20T09:10:00+00:00",
+                "source": {"kind": "task", "agent": "worker-9"},
+                "target": {
+                    "kind": "task-observation",
+                    "route_hint": ["codex", "skill-use", "job-application-workflow"],
+                    "task_summary": "Skill usage evidence shows the skill prompt should name a fallback earlier",
+                },
+                "rationale": "next=new-candidate",
+                "context": {
+                    "suggested_action": "new-candidate",
+                    "predictive_observation": {
+                        "scenario": "A task-critical Skill works only after a repeated fallback is discovered.",
+                        "action_taken": "Record the skill-use lesson and surface it as a mechanism proposal.",
+                        "observed_result": "The card lesson and Skill maintenance proposal stay on their existing paths.",
+                        "operational_use": "Review the Skill prompt when repeated skill-use evidence shows a fallback should happen earlier.",
+                        "reuse_judgment": "Reusable for Skill prompt maintenance.",
+                    },
+                },
+            }
+            history_path.write_text(json.dumps(event) + "\n", encoding="utf-8")
+
+            result = consolidate_history(repo_root=repo_root, run_id="skill-use-code-review")
+            action_types = sorted(action["action_type"] for action in result["actions"])
+            self.assertEqual(action_types, ["consider-new-candidate", "review-code-change"])
+            code_action = next(action for action in result["actions"] if action["action_type"] == "review-code-change")
+            self.assertEqual(code_action["target"], {"kind": "route", "ref": "codex/skill-use/job-application-workflow"})
+            self.assertIn("skill-maintenance-signal", code_action["reasons"])
+
 
 if __name__ == "__main__":
     unittest.main()

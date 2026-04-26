@@ -68,6 +68,11 @@ MAINTENANCE_SKILL_SPECS = (
         "automation_id": "kb-org-maintenance",
         "prompt_marker": "scripts/kb_org_maintainer.py",
     },
+    {
+        "name": "khaos-brain-update",
+        "automation_id": "manual-update",
+        "prompt_marker": "scripts/install_codex_kb.py",
+    },
 )
 MAINTENANCE_SKILL_NAMES = tuple(item["name"] for item in MAINTENANCE_SKILL_SPECS)
 
@@ -125,6 +130,11 @@ ARCHITECT_AUTOMATION_PROMPT = (
     "authoritative guides. Before the first stateful command, write a visible Architect execution plan with "
     "checkpoint statuses and include every required checkpoint; do not skip any checkpoint silently. Start with "
     "Architect self-preflight against system/knowledge-library/maintenance, then run "
+    "`python scripts/khaos_brain_update.py --architect-check --json`; if it reports apply_ready=true, use "
+    "$khaos-brain-update to apply the authorized update while the UI is closed, report the update result, and "
+    "stop this old-version Architect pass so the next run uses the updated code. If the update is available but "
+    "not prepared, or prepared while the UI is running, leave the state for the UI and continue normal Architect "
+    "maintenance. Then run "
     "`python .agents/skills/local-kb-retrieve/scripts/kb_architect.py --json`, "
     "inspect the generated plan, preflight, signals, proposals, decisions, "
     "execution-plan, report, and proposal_queue artifacts, use only Evidence, Impact, and Safety for proposal "
@@ -135,6 +145,7 @@ ARCHITECT_AUTOMATION_PROMPT = (
     "maintenance with an immediate validation bundle, generate patch plans for medium-safety mechanism changes, confirm the "
     "runner's KB postflight observation or append one structured Architect observation if a new mechanism lesson "
     "was exposed, and report the run id, checkpoint status for every plan item, preflight entries retrieved, "
+    "software update gate result, "
     "proposal counts by status, ready-for-apply and ready-for-patch items, changes applied, validation bundle run, "
     "postflight observation status, and watching items left for long observation."
 )
@@ -1253,6 +1264,9 @@ def build_installation_check(
                     "checkpoint statuses",
                     "Architect self-preflight",
                     "system/knowledge-library/maintenance",
+                    "scripts/khaos_brain_update.py --architect-check --json",
+                    "$khaos-brain-update",
+                    "software update gate result",
                     "Evidence, Impact, and Safety",
                     "human-review status",
                     "long-observation items as watching",
@@ -1446,7 +1460,7 @@ def build_installation_check(
         ),
         _checklist_item(
             "repo_maintenance_skills",
-            "Repository-managed KB maintenance and organization skills are installed",
+            "Repository-managed KB maintenance, organization, and update skills are installed",
             maintenance_skill_ok,
             "; ".join(f"{item['name']}={item['install_path']}" for item in maintenance_skill_checks),
         ),

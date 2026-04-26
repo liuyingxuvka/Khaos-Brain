@@ -976,6 +976,7 @@ The repository may also support a third scheduled **Architect** lane, but it mus
 The purpose of Architect is mechanism maintenance:
 
 - review Sleep, Dream, Architect, retrieval, installation, validation, rollback, and proposal-governance signals
+- review local Skill prompt/workflow signals when repeated Skill-use evidence shows that a Skill instruction should change
 - maintain a mechanism proposal queue
 - cluster duplicate proposals
 - decide whether mechanism proposals are watching, ready for patch, ready for apply, applied, rejected, or superseded
@@ -988,6 +989,15 @@ Architect must not maintain card content. These remain Sleep responsibilities:
 - card merge, split, deprecation, or deletion
 - card confidence changes
 - user-specific knowledge maintenance
+
+Skill maintenance uses the same evidence path as other mechanism proposals.
+Sleep may consolidate the card-facing lesson and may emit a proposal-only
+`review-code-change` action for routes such as `codex/workflow/skills` or
+`codex/skill-use/<skill-name>`, but it should not rewrite Skill files during the
+Sleep pass. Architect reviews those signals through the existing proposal queue
+with the same `Evidence`, `Impact`, and `Safety` axes. Local Skill prompt or
+workflow changes are medium-safety patch work unless a narrower validation path
+makes them eligible for a later explicit apply lane.
 
 Each Architect pass is itself a KB task. It must begin with route-first retrieval against prior maintenance lessons, usually under `system/knowledge-library/maintenance`, and it must end with an explicit KB postflight observation.
 
@@ -1021,9 +1031,13 @@ The default cadence is after Sleep and Dream, with lane-status checks preventing
 
 Each core maintenance lane should mark itself running before stateful work and completed after it finishes. A lane should skip when either of the other two core lanes is still running. This avoids overlap without forcing arbitrary post-completion cooldown windows.
 
-The installer should provision all three repository-managed maintenance skills (`kb-sleep-maintenance`, `kb-dream-pass`, and `kb-architect-pass`) plus all three repository-managed automations, and the install check should verify all six. The maintenance skills are explicit entry points for scheduled or manual maintenance; they should remain narrow and should not enable broad implicit invocation.
+The installer should provision the repository-managed maintenance, organization, and update skills (`kb-sleep-maintenance`, `kb-dream-pass`, `kb-architect-pass`, `kb-organization-contribute`, `kb-organization-maintenance`, and `khaos-brain-update`) plus the repository-managed automations, and the install check should verify them. These skills are explicit entry points for scheduled maintenance, organization exchange, organization maintenance, or authorized software update; they should remain narrow and should not enable broad implicit invocation.
 
 Each automation prompt should explicitly name its maintenance skill (`$kb-sleep-maintenance`, `$kb-dream-pass`, or `$kb-architect-pass`) while preserving enough fallback markers for install checks to detect prompt drift. Cron automation remains responsible for schedule, workspace, model policy, and reasoning policy; the skill owns the maintenance workflow contract.
+
+`$khaos-brain-update` is not a cron automation. Architect or the UI may discover available versions and record user intent, then explicitly invoke the update Skill. The Skill itself should be recovery-oriented: force-close the desktop UI, preserve local KB and organization state, update only by Git fast-forward, and refresh the installer-managed Codex integration with `scripts/install_codex_kb.py`.
+
+Software update coordination uses `.local/khaos_brain_update_state.json`. The desktop UI reads this file to show the normal version, a red available-update capsule, or a prepared-update capsule that can be clicked again to cancel. Architect runs `python scripts/khaos_brain_update.py --architect-check --json` before ordinary mechanism maintenance; only when the user has prepared the update and no Khaos Brain UI process is running should Architect invoke `$khaos-brain-update`. While the state is `upgrading`, UI launchers should refuse to open the desktop and show an updating message.
 
 The install check should also verify that the global predictive KB defaults
 name both skill/plugin usage lessons and subagent/delegation usage lessons as

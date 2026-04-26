@@ -1,0 +1,7 @@
+interface:
+  display_name: "Khaos Brain Update"
+  short_description: "Apply a clean Khaos Brain software update"
+  default_prompt: "Use $khaos-brain-update to apply one authorized clean software update for this repository."
+
+policy:
+  allow_implicit_invocation: false

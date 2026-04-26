@@ -155,6 +155,11 @@ ACTIONABLE_UTILITY_TERMS = (
     "提升",
 )
 
+SKILL_MAINTENANCE_ROUTE_PREFIXES = (
+    "codex/workflow/skills",
+    "codex/skill-use",
+)
+
 
 def utc_now_compact() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -380,6 +385,14 @@ def route_label(route_hint: list[str]) -> str:
     return "/".join(route_hint)
 
 
+def is_skill_maintenance_route(route_ref: str) -> bool:
+    normalized = str(route_ref or "").strip().lower()
+    return any(
+        normalized == prefix or normalized.startswith(f"{prefix}/")
+        for prefix in SKILL_MAINTENANCE_ROUTE_PREFIXES
+    )
+
+
 def relative_repo_path(repo_root: Path, path: Path) -> str:
     return path.relative_to(repo_root).as_posix()
 
@@ -418,6 +431,38 @@ def append_predictive_observation_review_seed(
                 if not evidence_complete
                 else str(utility_assessment.get("reason") or "predictive-utility:missing")
             ),
+        }
+    )
+
+
+def append_skill_maintenance_review_seed(
+    seeds: list[dict[str, Any]],
+    event: dict[str, Any],
+    *,
+    route_ref: str,
+    target_kind: str | None = None,
+    target_ref: str | None = None,
+) -> None:
+    if not is_skill_maintenance_route(route_ref):
+        return
+    if event.get("suggested_action") == "none" and not has_predictive_utility(event):
+        return
+    if target_kind is None or target_ref is None:
+        target_kind, target_ref = route_or_task_target(event)
+    if any(
+        seed.get("action_type") == "review-code-change"
+        and seed.get("target_kind") == target_kind
+        and seed.get("target_ref") == target_ref
+        for seed in seeds
+    ):
+        return
+    seeds.append(
+        {
+            "action_type": "review-code-change",
+            "target_kind": target_kind,
+            "target_ref": target_ref,
+            "route_ref": route_ref,
+            "reason": "skill-maintenance-signal",
         }
     )
 
@@ -475,9 +520,10 @@ def build_action_seeds(event: dict[str, Any]) -> list[dict[str, Any]]:
                     "target_ref": target_ref,
                     "route_ref": route_ref,
                     "reason": "suggested-action:update-card",
-                    }
-                )
+                }
+            )
         append_predictive_observation_review_seed(seeds, event)
+        append_skill_maintenance_review_seed(seeds, event, route_ref=route_ref)
         return seeds
 
     if suggested_action == "new-candidate":
@@ -492,6 +538,13 @@ def build_action_seeds(event: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
         append_predictive_observation_review_seed(seeds, event, target_kind=target_kind, target_ref=target_ref)
+        append_skill_maintenance_review_seed(
+            seeds,
+            event,
+            route_ref=route_ref,
+            target_kind=target_kind,
+            target_ref=target_ref,
+        )
         return seeds
 
     if suggested_action == "taxonomy-change":
@@ -506,6 +559,13 @@ def build_action_seeds(event: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
         append_predictive_observation_review_seed(seeds, event, target_kind=target_kind, target_ref=target_ref)
+        append_skill_maintenance_review_seed(
+            seeds,
+            event,
+            route_ref=route_ref,
+            target_kind=target_kind,
+            target_ref=target_ref,
+        )
         return seeds
 
     if suggested_action == "code-change":
@@ -520,6 +580,13 @@ def build_action_seeds(event: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
         append_predictive_observation_review_seed(seeds, event, target_kind=target_kind, target_ref=target_ref)
+        append_skill_maintenance_review_seed(
+            seeds,
+            event,
+            route_ref=route_ref,
+            target_kind=target_kind,
+            target_ref=target_ref,
+        )
         return seeds
 
     if event.get("entry_ids") and (hit_quality in HIT_QUALITY_SCORES or event.get("exposed_gap")):
@@ -545,6 +612,7 @@ def build_action_seeds(event: dict[str, Any]) -> list[dict[str, Any]]:
                 "reason": f"hit-quality:{event.get('hit_quality', 'none')}",
             }
         )
+    append_skill_maintenance_review_seed(seeds, event, route_ref=route_ref)
     return seeds
 
 

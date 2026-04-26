@@ -71,16 +71,21 @@ MECHANISM_ROUTE_PREFIXES = (
     "kb/",
     "predictive-kb",
     "repository/usage/local-kb-retrieve",
+    "codex/workflow/skills",
+    "codex/skill-use",
     "codex/workflow/postflight",
 )
 
 MECHANISM_PHRASES = {
+    "codex skill",
     "kb architect",
     "kb dream",
     "kb sleep",
     "khaos brain",
     "local kb",
     "predictive kb",
+    "skill maintenance",
+    "skill-use",
     "knowledge library",
     "knowledge-library",
 }
@@ -107,12 +112,13 @@ LOW_SAFETY_KEYWORDS = {
     "taxonomy",
 }
 
-PATCH_ONLY_CATEGORIES = {"automation", "install-check", "core-tooling"}
+PATCH_ONLY_CATEGORIES = {"automation", "install-check", "core-tooling", "skill-maintenance"}
 AUTO_APPLY_CATEGORIES = {"prompt", "runbook", "proposal-queue", "validation"}
 
 CATEGORY_KEYWORDS = (
     ("automation", {"automation", "automations", "cron", "schedule"}),
     ("install-check", {"install", "installer", "checklist", "manifest"}),
+    ("skill-maintenance", {"codex skill", "skill maintenance", "skill-use", "skill/plugin", "skills"}),
     ("prompt", {"prompt", "preflight", "postflight"}),
     ("runbook", {"runbook", "docs", "documentation"}),
     ("rollback", {"rollback", "snapshot", "restore"}),
@@ -359,7 +365,7 @@ def _safety_level(text: str, category: str) -> tuple[str, str]:
     if _contains_any(lowered, LOW_SAFETY_KEYWORDS):
         return "low", "The proposal may touch taxonomy, deletion, dependency, migration, or broad movement."
     if category in PATCH_ONLY_CATEGORIES:
-        return "medium", "The proposal affects automation, installer, or core tooling and should start as a patch."
+        return "medium", "The proposal affects automation, installer, Skill workflow, or core tooling and should start as a patch."
     if category in AUTO_APPLY_CATEGORIES:
         return "high", "The proposal is limited to prompt, runbook, validation, or proposal-queue maintenance."
     return "medium", "The proposal is mechanism-scoped but needs patch-level review before code changes."

@@ -16,6 +16,7 @@ if str(SCRIPT_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPT_REPO_ROOT))
 
 from local_kb.config import resolve_repo_root  # noqa: E402
+from local_kb.software_update import startup_block_message  # noqa: E402
 
 
 def _pythonw_executable() -> Path:
@@ -56,6 +57,14 @@ def _launch_command(repo_root: Path, *, prefer_python: bool, language: str) -> t
 
 
 def open_ui(repo_root: Path, *, prefer_python: bool = False, language: str = "") -> dict[str, Any]:
+    update_message = startup_block_message(repo_root, language=language or None)
+    if update_message:
+        return {
+            "ok": False,
+            "status": "upgrading",
+            "message": update_message,
+            "repo_root": str(repo_root),
+        }
     mode, command = _launch_command(repo_root, prefer_python=prefer_python, language=language)
     process = subprocess.Popen(command, cwd=str(repo_root), close_fds=True)
     return {
@@ -80,8 +89,11 @@ def main() -> int:
     if args.json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
-        print(f"Opened Khaos Brain desktop UI with {payload['mode']} launcher.")
-    return 0
+        if payload.get("ok"):
+            print(f"Opened Khaos Brain desktop UI with {payload['mode']} launcher.")
+        else:
+            print(payload.get("message") or "Khaos Brain cannot be opened right now.")
+    return 0 if payload.get("ok") else 3
 
 
 if __name__ == "__main__":

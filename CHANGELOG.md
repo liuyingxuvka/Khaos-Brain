@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.3.0 - 2026-04-26
+
+- Added the repository-managed `khaos-brain-update` Skill and installer/check coverage so software updates can be applied through the same Codex Skill distribution path as maintenance and organization skills.
+- Added `.local/khaos_brain_update_state.json` software-update coordination, with desktop UI version/update capsules, prepared-update toggling, and launch blocking while an update is in progress.
+- Added an Architect update gate that checks remote version state and only invokes `$khaos-brain-update` after the user has prepared the update and the desktop UI is closed.
+- Clarified Sleep vs Architect ownership for Skill-use maintenance signals: Sleep keeps card/candidate work, while Skill prompt/workflow changes surface as proposal-only Architect signals.
+- Expanded Chinese route labels and tightened desktop UI tests so live KB growth no longer creates false failures in navigation-count checks.
+
 ## v0.2.2 - 2026-04-25
 
 - Replaced Sleep/Dream/Architect post-completion cooldown windows with explicit core maintenance lane status checks.

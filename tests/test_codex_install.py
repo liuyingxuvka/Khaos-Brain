@@ -93,6 +93,7 @@ class CodexInstallTests(unittest.TestCase):
             self.assertTrue((codex_home / "skills" / "kb-architect-pass" / "SKILL.md").exists())
             self.assertTrue((codex_home / "skills" / "kb-organization-contribute" / "SKILL.md").exists())
             self.assertTrue((codex_home / "skills" / "kb-organization-maintenance" / "SKILL.md").exists())
+            self.assertTrue((codex_home / "skills" / "khaos-brain-update" / "SKILL.md").exists())
             self.assertTrue(global_agents_path(codex_home).exists())
             self.assertTrue((shell_bin_dir / "git.cmd").exists())
             self.assertTrue((shell_bin_dir / "rg.exe").exists())
@@ -105,6 +106,7 @@ class CodexInstallTests(unittest.TestCase):
                     "kb-architect-pass",
                     "kb-organization-contribute",
                     "kb-organization-maintenance",
+                    "khaos-brain-update",
                 ],
             )
             self.assertEqual(
@@ -217,6 +219,21 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn("allow_implicit_invocation: false", org_maintenance_skill_openai)
             self.assertIn("$kb-organization-maintenance", org_maintenance_skill_openai)
 
+            update_skill_text = (codex_home / "skills" / "khaos-brain-update" / "SKILL.md").read_text(
+                encoding="utf-8"
+            )
+            update_skill_openai = (
+                codex_home / "skills" / "khaos-brain-update" / "agents" / "openai.yaml"
+            ).read_text(encoding="utf-8")
+            self.assertIn("name: khaos-brain-update", update_skill_text)
+            self.assertIn("scripts/install_codex_kb.py", update_skill_text)
+            self.assertIn("Force-close Khaos Brain desktop UI processes", update_skill_text)
+            self.assertIn("Do not require KB preflight", update_skill_text)
+            self.assertIn("fast-forward", update_skill_text)
+            self.assertIn("Do not run `git reset --hard`", update_skill_text)
+            self.assertIn("allow_implicit_invocation: false", update_skill_openai)
+            self.assertIn("$khaos-brain-update", update_skill_openai)
+
             sleep_toml = (codex_home / "automations" / "kb-sleep" / "automation.toml").read_text(encoding="utf-8")
             self.assertIn('kind = "cron"', sleep_toml)
             self.assertIn("$kb-sleep-maintenance", sleep_toml)
@@ -274,6 +291,10 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn("checkpoint statuses", architect_toml)
             self.assertIn("Architect self-preflight", architect_toml)
             self.assertIn("system/knowledge-library/maintenance", architect_toml)
+            self.assertIn("scripts/khaos_brain_update.py --architect-check --json", architect_toml)
+            self.assertIn("$khaos-brain-update", architect_toml)
+            self.assertIn("apply_ready=true", architect_toml)
+            self.assertIn("software update gate result", architect_toml)
             self.assertIn("Evidence, Impact, and Safety", architect_toml)
             self.assertIn("human-review status", architect_toml)
             self.assertIn("long-observation items as watching", architect_toml)
@@ -354,6 +375,7 @@ class CodexInstallTests(unittest.TestCase):
                     "kb-architect-pass",
                     "kb-organization-contribute",
                     "kb-organization-maintenance",
+                    "khaos-brain-update",
                 ],
             )
             self.assertEqual(
@@ -364,6 +386,7 @@ class CodexInstallTests(unittest.TestCase):
                     "kb-architect-pass",
                     "kb-organization-contribute",
                     "kb-organization-maintenance",
+                    "khaos-brain-update",
                 ],
             )
             self.assertEqual(

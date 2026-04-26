@@ -226,9 +226,9 @@ class KbDesktopUiDataTests(unittest.TestCase):
             if item["segment"] == "spec-drift"
         )
 
-        self.assertEqual(len(payload["deck"]), 1)
-        self.assertEqual(child["primary_subtree_count"], 1)
-        self.assertEqual(child["observed_subtree_count"], 1)
+        self.assertGreaterEqual(len(payload["deck"]), 1)
+        self.assertEqual(child["primary_subtree_count"], len(payload["deck"]))
+        self.assertEqual(child["observed_subtree_count"], len(payload["deck"]))
         self.assertEqual(navigation_card_count(child), len(payload["deck"]))
 
 

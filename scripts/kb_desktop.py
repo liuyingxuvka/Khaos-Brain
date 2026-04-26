@@ -14,6 +14,7 @@ def _bootstrap_repo_imports() -> None:
 _bootstrap_repo_imports()
 
 from local_kb.store import resolve_repo_root  # noqa: E402
+from local_kb.software_update import startup_block_message  # noqa: E402
 from local_kb.ui_data import build_overview_payload, build_route_view_payload  # noqa: E402
 
 
@@ -51,6 +52,12 @@ def main() -> None:
     except FileNotFoundError as exc:
         _show_startup_error(str(exc))
         raise SystemExit(2) from exc
+
+    if not args.check:
+        update_message = startup_block_message(repo_root, language=args.language or None)
+        if update_message:
+            _show_startup_error(update_message)
+            raise SystemExit(3)
 
     if args.check:
         check_language = args.language or "en"

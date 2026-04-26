@@ -29,6 +29,7 @@ Current implementation boundary:
 - you must run a final sleep postflight check and append one structured observation when the pass exposed a reusable lesson, miss, process weakness, route gap, card weakness, or maintenance hazard
 - you may record explicit maintenance decisions with `kb_maintenance.py` so ignored observations, rejected candidates, and confidence reviews leave durable history traces
 - you may inspect or restore `kb/history/events.jsonl` through `kb_rollback.py`
+- when Skill-use evidence implies a Skill prompt or workflow change, leave the Skill edit proposal-only as a `review-code-change` signal for Architect; keep Sleep focused on card/candidate maintenance
 - do not silently rewrite trusted cards or official taxonomy during this maintenance pass; trusted-card semantic changes require an explicit semantic-review plan, evidence ids, rationale, risk, utility assessment, expected retrieval effect, and rollback note
 - if a trusted-scope promotion, rewrite, demotion, or deprecation is not clearly represented in a semantic-review plan and supported by the current tooling, leave it as proposal-only
 - after writing the final maintenance observation, stop the current sleep pass; do not immediately rerun consolidation on the observation that was just appended
@@ -76,6 +77,7 @@ For alternate-route maintenance, `python .agents/skills/local-kb-retrieve/script
 `python .agents/skills/local-kb-retrieve/scripts/kb_consolidate.py --json --apply-mode i18n-zh-CN --run-id <run_id>-i18n --i18n-plan kb/history/consolidation/<run_id>-i18n/i18n_zh-CN_plan.yaml`
 11. Inspect the per-action proposal stubs for this run:
 `python .agents/skills/local-kb-retrieve/scripts/kb_proposals.py --run-id <run_id> --json`
+   Treat `review-code-change` actions under `codex/workflow/skills` or `codex/skill-use/<skill-name>` as proposal-only Skill maintenance evidence for Architect. Do not patch Skill files from Sleep.
 12. If a weak observation should stay history-only, a candidate should be rejected, a confidence review should be recorded, or a split review should be closed without rewriting the card yet, append a maintenance decision trace:
 `python .agents/skills/local-kb-retrieve/scripts/kb_maintenance.py --decision-type observation-ignored|candidate-rejected|confidence-reviewed|split-reviewed --action-key <action_key> --resolved-event-ids <csv_event_ids> --reason "<why>" --json`
    For `split-reviewed`, always bind the decision to the concrete supporting event ids from the current review. Do not close split review with empty `resolved-event-ids`.

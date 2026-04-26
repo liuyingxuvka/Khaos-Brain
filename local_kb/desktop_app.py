@@ -47,6 +47,12 @@ from local_kb.settings import (
     organization_sources_from_settings,
     save_desktop_settings,
 )
+from local_kb.software_update import (
+    load_update_state,
+    set_update_request,
+    update_badge_clickable,
+    update_badge_label,
+)
 from local_kb.store import resolve_repo_root
 from local_kb.ui_data import (
     build_card_detail_payload,
@@ -247,6 +253,7 @@ UI_TEXT = {
         "read_only": "Read-only",
         "recent_history": "Recent history",
         "search_title": "Search",
+        "update_prepared_hint": "Update will run during the next Architect pass after the UI is closed.",
         "about_body": (
             "A local predictive memory library for Codex.\n\n"
             "Latest version:\n{github_url}\n\n"
@@ -329,6 +336,7 @@ UI_TEXT = {
         "read_only": "只读",
         "recent_history": "最近历史",
         "search_title": "搜索",
+        "update_prepared_hint": "关闭 UI 后，下次 Architect 检查会自动升级。",
         "about_body": (
             "一个给 Codex 使用的本地预测记忆库。\n\n"
             "最新版本：\n{github_url}\n\n"
@@ -890,6 +898,7 @@ class KbDesktopApp(tk.Tk):
         self.nav_hitboxes: list[tuple[int, int, int, int, str, str]] = []
         self.footer_hitboxes: list[tuple[int, int, int, int, str]] = []
         self.card_hitboxes: list[tuple[int, int, int, int, int]] = []
+        self.update_badge_hitbox: tuple[int, int, int, int] | None = None
         self._main_width = 0
         self._main_height = 0
         self._card_selected_by_user = False
@@ -1861,6 +1870,7 @@ class KbDesktopApp(tk.Tk):
         self.main.delete("all")
         self._card_surface_photos.clear()
         self.card_hitboxes.clear()
+        self.update_badge_hitbox = None
         u = self._u
         f = self._f
         width = max(self._main_width, int(self.main.winfo_width()), u(760))
@@ -1875,10 +1885,15 @@ class KbDesktopApp(tk.Tk):
         header_width = max(visible_grid_width, header_right - content_left)
 
         count_label = f"{len(self.deck)} {self._text('cards_suffix')}"
-        count_w = max(u(78), u(28) + len(count_label) * u(7))
+        count_w = max(u(92), u(34) + len(count_label) * u(8))
+        update_state = load_update_state(self.repo_root)
+        update_label = update_badge_label(update_state, self.language)
+        update_w = max(u(76), u(34) + len(update_label) * u(8)) if update_label else 0
+        badge_gap = u(12) if update_w else 0
         title_top = u(34)
         has_count_room = header_width >= u(620)
-        title_right = header_right - count_w - u(28) if has_count_room else header_right
+        header_badge_width = count_w + badge_gap + update_w
+        title_right = header_right - header_badge_width - u(28) if has_count_room else header_right
         title_width = max(u(260), title_right - content_left)
         title_item = self.main.create_text(
             content_left,
@@ -1895,20 +1910,37 @@ class KbDesktopApp(tk.Tk):
             count_x2 = header_right
             count_x1 = count_x2 - count_w
             count_y1 = title_top + u(5)
-            count_y2 = count_y1 + u(26)
+            count_y2 = count_y1 + u(32)
+            update_x2 = count_x1 - badge_gap
+            update_x1 = update_x2 - update_w
+            update_y1 = count_y1
+            update_y2 = count_y2
         else:
             count_x1 = content_left
             count_x2 = content_left + count_w
             count_y1 = title_bbox[3] + u(8)
-            count_y2 = count_y1 + u(26)
-        self._round_rect(self.main, count_x1, count_y1, count_x2, count_y2, u(13), fill="#f7f7f9", outline=LINE_SOFT)
+            count_y2 = count_y1 + u(32)
+            update_x1 = count_x2 + badge_gap
+            update_x2 = min(header_right, update_x1 + update_w)
+            update_y1 = count_y1
+            update_y2 = count_y2
+        self._round_rect(self.main, count_x1, count_y1, count_x2, count_y2, u(16), fill="#f7f7f9", outline=LINE_SOFT)
         self.main.create_text(
             (count_x1 + count_x2) / 2,
             (count_y1 + count_y2) / 2,
             text=count_label,
             fill=MUTED,
-            font=("Segoe UI", f(10), "bold"),
+            font=self._font(11, "bold"),
         )
+        if update_label and update_w:
+            self._draw_update_badge(
+                update_x1,
+                update_y1,
+                update_x2,
+                update_y2,
+                update_label,
+                update_state,
+            )
 
         subtitle_y = max(title_bbox[3] + u(4), count_y2 + u(6) if not has_count_room else u(68))
         subtitle_item = self.main.create_text(
@@ -1982,6 +2014,42 @@ class KbDesktopApp(tk.Tk):
         rows = (len(self.deck) + columns - 1) // columns
         total_h = start_y + rows * (card_h + gap) + u(42)
         self.main.configure(scrollregion=(0, 0, width, max(total_h, self._main_height)))
+
+    def _draw_update_badge(
+        self,
+        x1: int,
+        y1: int,
+        x2: int,
+        y2: int,
+        label: str,
+        state: dict[str, Any],
+    ) -> None:
+        if x2 <= x1 or y2 <= y1:
+            return
+        u = self._u
+        f = self._f
+        status = str(state.get("status") or "")
+        if status == "available":
+            fill, outline, text_fill = "#ff2d55", "#ff2d55", "#ffffff"
+        elif status == "prepared":
+            fill, outline, text_fill = "#ffe8ee", "#ff2d55", "#c51643"
+        elif status == "upgrading":
+            fill, outline, text_fill = "#171717", "#171717", "#ffffff"
+        elif status == "failed":
+            fill, outline, text_fill = "#fff1e6", "#e36414", "#a54000"
+        else:
+            fill, outline, text_fill = BG, LINE_SOFT, MUTED
+        radius = u(16)
+        self._round_rect(self.main, x1, y1, x2, y2, radius, fill=fill, outline=outline)
+        self.main.create_text(
+            (x1 + x2) / 2,
+            (y1 + y2) / 2,
+            text=label,
+            fill=text_fill,
+            font=self._font(11, "bold" if status in {"available", "prepared", "upgrading"} else "normal"),
+        )
+        if update_badge_clickable(state):
+            self.update_badge_hitbox = (x1, y1, x2, y2)
 
     def _main_grid_layout(self, width: int) -> dict[str, int]:
         u = self._u
@@ -2153,6 +2221,10 @@ class KbDesktopApp(tk.Tk):
         return None
 
     def _on_card_motion(self, event: tk.Event[Any]) -> None:
+        if self._hit_update_badge(event):
+            if self.main.cget("cursor") != "hand2":
+                self.main.configure(cursor="hand2")
+            return
         index = self._hit_card(event)
         if index != self.hovered_index:
             self.hovered_index = -1 if index is None else index
@@ -2169,6 +2241,9 @@ class KbDesktopApp(tk.Tk):
             self.main.configure(cursor="")
 
     def _on_card_click(self, event: tk.Event[Any]) -> None:
+        if self._hit_update_badge(event):
+            self._toggle_update_request()
+            return
         index = self._hit_card(event)
         if index is None:
             return
@@ -2176,6 +2251,20 @@ class KbDesktopApp(tk.Tk):
         self._card_selected_by_user = True
         self.hovered_index = index
         self.open_selected_detail()
+
+    def _hit_update_badge(self, event: tk.Event[Any]) -> bool:
+        if self.update_badge_hitbox is None:
+            return False
+        x = int(self.main.canvasx(event.x))
+        y = int(self.main.canvasy(event.y))
+        x1, y1, x2, y2 = self.update_badge_hitbox
+        return x1 <= x <= x2 and y1 <= y <= y2
+
+    def _toggle_update_request(self) -> None:
+        state = load_update_state(self.repo_root)
+        requested = str(state.get("status") or "") != "prepared"
+        set_update_request(self.repo_root, requested)
+        self._render_main()
 
     def _move_selection(self, delta: int) -> None:
         if not self.deck:

@@ -13,7 +13,7 @@ Rule authority:
 Scope:
 
 - Maintain the KB system's operating mechanisms only.
-- In scope: Sleep/Dream/Architect prompts, runbooks, automation specs, install checks, rollback/snapshot/validation workflow, proposal queue governance, and narrowly scoped tests for those mechanisms.
+- In scope: Sleep/Dream/Architect prompts, runbooks, local Skill prompts/workflows, automation specs, install checks, rollback/snapshot/validation workflow, proposal queue governance, and narrowly scoped tests for those mechanisms.
 - Out of scope: trusted-card rewrites, candidate promotion, card content merging/splitting/deprecation, user preference cards, and ordinary knowledge-card maintenance. Leave those to Sleep.
 
 Mandatory execution contract:
@@ -31,14 +31,18 @@ Required checkpoint order:
 1. Confirm repository root and read `PROJECT_SPEC.md`, `docs/architecture_runbook.md`, and this prompt.
 2. Run Architect self-preflight against `system/knowledge-library/maintenance`.
 3. Run:
+   `python scripts/khaos_brain_update.py --architect-check --json`
+4. If the update check reports `apply_ready=true`, use `$khaos-brain-update` to apply the authorized software update while the UI is closed, report the update result, and stop this old-version Architect pass so the next run uses the updated code.
+5. If the update check reports an available update that is not prepared, or a prepared update while the UI is running, leave the state for the UI and continue normal Architect maintenance.
+6. Run:
    `python .agents/skills/local-kb-retrieve/scripts/kb_architect.py --json`
-4. Inspect the generated artifacts under `kb/history/architecture/runs/<run-id>/`.
-5. Inspect the maintained queue at `kb/history/architecture/proposal_queue.json`.
-6. Confirm each mechanism proposal has exactly these review axes:
+7. Inspect the generated artifacts under `kb/history/architecture/runs/<run-id>/`.
+8. Inspect the maintained queue at `kb/history/architecture/proposal_queue.json`.
+9. Confirm each mechanism proposal has exactly these review axes:
    - `Evidence`
    - `Impact`
    - `Safety`
-7. Confirm statuses are limited to:
+10. Confirm statuses are limited to:
    - `new`
    - `watching`
    - `ready-for-patch`
@@ -46,25 +50,27 @@ Required checkpoint order:
    - `applied`
    - `rejected`
    - `superseded`
-8. For `ready-for-apply` proposals, apply only if all are true:
+11. For `ready-for-apply` proposals, apply only if all are true:
    - the change is mechanism-scoped
    - the change is not card-content maintenance
    - the change stays inside prompt, runbook, validation, or proposal-queue maintenance
    - the diff is narrow and reversible
    - the validation bundle is obvious and can be run immediately
-9. For `ready-for-patch` proposals, generate or refine a patch and validation plan, but do not treat the proposal as applied until the patch is actually implemented and verified.
-10. For `watching` proposals, preserve the observation path and do not force action.
-11. For `rejected` or `superseded` proposals, make sure the reason is recorded.
-12. Run a validation bundle for any file changes made in this pass. The bundle must be strong enough for the touched mechanism:
+12. For `ready-for-patch` proposals, generate or refine a patch and validation plan, but do not treat the proposal as applied until the patch is actually implemented and verified.
+13. For `watching` proposals, preserve the observation path and do not force action.
+14. For `rejected` or `superseded` proposals, make sure the reason is recorded.
+15. Run a validation bundle for any file changes made in this pass. The bundle must be strong enough for the touched mechanism:
     - prompt/runbook-only changes: inspect required markers and run the matching prompt/install tests when available
+    - Skill prompt/workflow changes: inspect Skill invocation markers and run targeted Skill or installer tests when available
     - runner or core-tooling changes: run targeted unit tests plus one smoke run when practical
     - installer or automation changes: run installer tests plus `python scripts/install_codex_kb.py --check --json`
     - any failed validation must be fixed and rerun before the proposal can be marked applied
-13. Inspect the runner's postflight observation id and write an additional structured KB observation only if this pass exposed a new reusable mechanism lesson.
-14. Report:
+16. Inspect the runner's postflight observation id and write an additional structured KB observation only if this pass exposed a new reusable mechanism lesson.
+17. Report:
     - run id
     - plan status for every checkpoint
     - preflight entries retrieved
+    - software update gate result
     - proposal counts by status
     - ready-for-apply and ready-for-patch items
     - changes applied, if any
@@ -84,7 +90,7 @@ Decision model:
   - `low`: cosmetic, speculative, or narrow
 - `Safety`
   - `high`: prompt/runbook/validation/proposal-queue change with narrow diff and immediate validation
-  - `medium`: automation, install-check, or core tooling patch that is testable but should start as patch
+  - `medium`: automation, install-check, local Skill workflow, or core tooling patch that is testable but should start as patch
   - `low`: taxonomy movement, dependency/lockfile change, deletion, broad refactor, or anything hard to roll back
 
 Status rule:

@@ -12,7 +12,7 @@ The repository installer is expected to provision a repo-managed `KB Architect` 
 
 - `sleep` consolidates real task evidence and maintains memory/card surfaces.
 - `dream` runs bounded exploratory checks and writes provisional evidence.
-- `architect` maintains the mechanisms that make Sleep, Dream, retrieval, installation, validation, rollback, and proposal governance work reliably.
+- `architect` maintains the mechanisms that make Sleep, Dream, retrieval, local Skills, installation, validation, rollback, and proposal governance work reliably.
 
 Architect is not a card-content maintainer. It does not rewrite trusted cards, promote candidates, split cards, merge cards, deprecate cards, or tune user-specific knowledge.
 
@@ -22,17 +22,20 @@ Each Architect pass must follow this order and keep the execution plan status cu
 
 1. Confirm repository root and rule files.
 2. Run self-preflight against `system/knowledge-library/maintenance`.
-3. Run the Architect runner.
-4. Inspect generated artifacts.
-5. Inspect the maintained proposal queue.
-6. Review proposals using exactly `Evidence`, `Impact`, and `Safety`.
-7. Assign or confirm statuses.
-8. Apply only `ready-for-apply` items that stay inside the narrow allowlist.
-9. Generate or refine patch plans for `ready-for-patch` items.
-10. Preserve `watching` items for long observation.
-11. Run a validation bundle for any file changes.
-12. Confirm or append the final KB postflight observation.
-13. Report run id, checkpoint statuses, proposal status counts, applied changes, validations, and remaining watching items.
+3. Run `python scripts/khaos_brain_update.py --architect-check --json`.
+4. If the update check returns `apply_ready=true`, use `$khaos-brain-update`, report the update result, and stop the old-version Architect pass so the next run uses the updated code.
+5. If the update is available but not prepared, or prepared while the UI is running, leave the state for the UI and continue.
+6. Run the Architect runner.
+7. Inspect generated artifacts.
+8. Inspect the maintained proposal queue.
+9. Review proposals using exactly `Evidence`, `Impact`, and `Safety`.
+10. Assign or confirm statuses.
+11. Apply only `ready-for-apply` items that stay inside the narrow allowlist.
+12. Generate or refine patch plans for `ready-for-patch` items.
+13. Preserve `watching` items for long observation.
+14. Run a validation bundle for any file changes.
+15. Confirm or append the final KB postflight observation.
+16. Report run id, checkpoint statuses, software update gate result, proposal status counts, applied changes, validations, and remaining watching items.
 
 If a checkpoint is not applicable, mark it skipped with a reason. Do not silently omit it.
 
@@ -75,6 +78,7 @@ These are decision rules, not hidden math.
 - Sleep prompt and runbook quality
 - Dream prompt and runbook quality
 - Architect prompt and runbook quality
+- local Skill prompt and workflow quality when repeated Skill-use evidence shows the instruction should change
 - automation specs and cadence
 - installer and install-check coverage
 - validation bundles and test coverage for maintenance mechanisms
@@ -128,20 +132,23 @@ Run one KB Architect mechanism-maintenance pass for this repository.
 Goals:
 1. Maintain a visible execution plan with every required checkpoint.
 2. Run self-preflight against system/knowledge-library/maintenance.
-3. Run kb_architect.py and inspect all generated artifacts.
-4. Maintain the mechanism proposal queue.
-5. Use only Evidence, Impact, and Safety.
-6. Do not use a human-review status; long-observation items stay watching.
-7. Keep scope limited to system mechanisms, not card content.
-8. Apply only high-evidence, high-impact or medium-impact, high-safety mechanism changes inside the narrow allowlist.
-9. Generate patch plans for medium-safety changes.
-10. Run a validation bundle after any file changes.
-11. Confirm or append the final KB postflight observation.
+3. Run `python scripts/khaos_brain_update.py --architect-check --json`.
+4. If apply_ready is true, use $khaos-brain-update, report, and stop this old-version run.
+5. Otherwise run kb_architect.py and inspect all generated artifacts.
+6. Maintain the mechanism proposal queue.
+7. Use only Evidence, Impact, and Safety.
+8. Do not use a human-review status; long-observation items stay watching.
+9. Keep scope limited to system mechanisms, not card content.
+10. Apply only high-evidence, high-impact or medium-impact, high-safety mechanism changes inside the narrow allowlist.
+11. Generate patch plans for medium-safety changes, including local Skill prompt/workflow patches.
+12. Run a validation bundle after any file changes.
+13. Confirm or append the final KB postflight observation.
 
 Report:
 - run id
 - plan status for every checkpoint
 - preflight entries retrieved
+- software update gate result
 - proposal status counts
 - ready-for-apply and ready-for-patch proposals
 - changes applied
