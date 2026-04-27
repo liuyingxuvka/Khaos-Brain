@@ -34,6 +34,12 @@ def main() -> None:
         default="",
         help="AI-authored semantic review plan YAML for semantic-review apply mode.",
     )
+    parser.add_argument(
+        "--action-key",
+        action="append",
+        default=[],
+        help="Only apply the listed consolidation action key. May be repeated or comma-separated.",
+    )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
@@ -58,6 +64,7 @@ def main() -> None:
         apply_mode=args.apply_mode,
         i18n_plan_path=i18n_plan_path,
         semantic_review_plan_path=semantic_review_plan_path,
+        selected_action_keys=args.action_key,
     )
 
     if args.json:
@@ -74,6 +81,10 @@ def main() -> None:
         print(f"Created candidates: {result['apply_summary'].get('created_candidate_count', 0)}")
         print(f"Updated entries: {result['apply_summary'].get('updated_entry_count', 0)}")
         print(f"Skipped actions: {result['apply_summary']['skipped_action_count']}")
+        if result["apply_summary"].get("action_selection"):
+            selection = result["apply_summary"]["action_selection"]
+            print(f"Selected actions: {selection.get('matched_action_count', 0)}")
+            print(f"Unselected eligible actions: {selection.get('unselected_apply_eligible_action_count', 0)}")
     if result["artifact_paths"]:
         print(f"Snapshot: {result['artifact_paths']['snapshot_path']}")
         print(f"Proposal: {result['artifact_paths']['proposal_path']}")

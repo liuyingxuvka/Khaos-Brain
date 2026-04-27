@@ -6,6 +6,7 @@ from typing import Any
 from urllib.parse import quote
 
 from local_kb.org_sources import _run_git, current_git_commit, utc_timestamp, validate_organization_repo
+from local_kb.store import load_yaml_file
 
 
 def _safe_segment(value: str) -> str:
@@ -61,6 +62,40 @@ def push_organization_branch(
     }
 
 
+def _safe_outbox_path(outbox_dir: Path, path: Path) -> Path | None:
+    try:
+        resolved = Path(path).resolve()
+        resolved.relative_to(outbox_dir.resolve())
+    except (OSError, ValueError):
+        return None
+    return resolved
+
+
+def _proposal_dependency_files(outbox_dir: Path, proposal_file: Path) -> list[Path]:
+    try:
+        payload = load_yaml_file(proposal_file)
+    except Exception:
+        return []
+    proposal = payload.get("organization_proposal") if isinstance(payload.get("organization_proposal"), dict) else {}
+    dependencies = proposal.get("skill_dependencies") if isinstance(proposal.get("skill_dependencies"), list) else []
+    files: set[Path] = set()
+    for dependency in dependencies:
+        if not isinstance(dependency, dict):
+            continue
+        for key in ("bundle_path", "bundle_metadata_path"):
+            rel = str(dependency.get(key) or "").strip()
+            if not rel:
+                continue
+            target = _safe_outbox_path(outbox_dir, outbox_dir / rel)
+            if target is None or not target.exists():
+                continue
+            if target.is_file():
+                files.add(target)
+            elif target.is_dir():
+                files.update(path for path in target.rglob("*") if path.is_file())
+    return sorted(files)
+
+
 def prepare_organization_import_branch(
     org_root: Path,
     outbox_dir: Path,
@@ -71,6 +106,7 @@ def prepare_organization_import_branch(
     push: bool = False,
     remote: str = "origin",
     base_branch: str = "main",
+    proposal_files: list[Path] | None = None,
 ) -> dict[str, Any]:
     org_root = Path(org_root)
     outbox_dir = Path(outbox_dir)
@@ -82,8 +118,19 @@ def prepare_organization_import_branch(
     if not outbox_dir.exists():
         return {"ok": False, "errors": [f"outbox directory does not exist: {outbox_dir}"], "created_files": []}
 
-    proposal_files = sorted(outbox_dir.glob("*.yaml"))
-    outbox_files = [path for path in sorted(outbox_dir.rglob("*")) if path.is_file()]
+    if proposal_files is None:
+        proposal_files = sorted(outbox_dir.glob("*.yaml"))
+        outbox_files = [path for path in sorted(outbox_dir.rglob("*")) if path.is_file()]
+    else:
+        proposal_files = [
+            path
+            for path in (_safe_outbox_path(outbox_dir, Path(item)) for item in proposal_files)
+            if path is not None and path.exists() and path.is_file() and path.suffix == ".yaml"
+        ]
+        outbox_file_set: set[Path] = set(proposal_files)
+        for proposal in proposal_files:
+            outbox_file_set.update(_proposal_dependency_files(outbox_dir, proposal))
+        outbox_files = sorted(outbox_file_set)
     if not proposal_files:
         return {"ok": False, "errors": ["outbox directory has no YAML proposals"], "created_files": []}
 

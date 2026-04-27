@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.4.0 - 2026-04-27
+
+- Added a shared maintenance-agent worldview so Sleep, Dream, Architect, and organization maintenance receive clearer role boundaries, evidence standards, sandbox expectations, and human-review criteria.
+- Expanded local Sleep/Dream/Architect behavior with stronger prompt framing, real sandbox experiment handling, Architect sandbox-ready execution packets, rollback-oriented maintenance traces, and broader validation coverage.
+- Added core maintenance lane locks so local Sleep, Dream, and Architect wait on one another, while organization contribution and organization maintenance share a separate organization-maintenance lock.
+- Upgraded organization contribution and maintenance into a fuller exchange loop: contribution syncs first, avoids re-uploading already exchanged hashes, prepares import branches, and organization maintenance directly applies exact selected Sleep-style cleanup actions with audit records.
+- Updated global predictive-KB preflight defaults so long mixed tasks add phase-change KB checkpoints before substantially different work such as edits, packaging, automation, organization-KB work, GitHub publishing, or public release work.
+- Refreshed installer checks, repository-managed Skills, organization GitHub workflow checks, and tests so new machines inherit the same maintenance, organization, and preflight behavior after bootstrap.
+
 ## v0.3.0 - 2026-04-26
 
 - Added the repository-managed `khaos-brain-update` Skill and installer/check coverage so software updates can be applied through the same Codex Skill distribution path as maintenance and organization skills.

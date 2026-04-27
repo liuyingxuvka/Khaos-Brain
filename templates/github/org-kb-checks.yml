@@ -34,4 +34,4 @@ jobs:
 
       - name: Validate organization KB
         shell: bash
-        run: python .github/scripts/org_kb_check.py --org-root . --changed-files-file changed-files.txt --enforce-low-risk
+        run: python .github/scripts/org_kb_check.py --org-root . --changed-files-file changed-files.txt --enforce-low-risk --allow-maintenance-main

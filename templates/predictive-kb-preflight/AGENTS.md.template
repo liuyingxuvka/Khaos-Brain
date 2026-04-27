@@ -2,6 +2,7 @@
 
 - For almost any coding, planning, writing, or repository task, invoke `$predictive-kb-preflight` before starting the main work. Treat this as a required default recall step, not optional housekeeping.
 - This also applies to release publishing, release audits, README presentation passes, public template cleanup, and repository-boundary or privacy review.
+- For long mixed tasks, add phase-change KB checkpoints to the plan and rerun `$predictive-kb-preflight` before starting a substantially different action class or risk surface, such as code edits, packaging, privacy-sensitive handling, automation changes, organization-KB work, GitHub push/tag/release, or public publication. Do not rerun it for every repeated same-type subtask.
 - For non-trivial tasks, do not treat the work as complete until one explicit KB postflight check has been performed. If the task exposed a reusable lesson, a skill/plugin usage lesson, a subagent/delegation usage lesson, a miss, a route gap, a card weakness, or a KB-process failure, record one structured observation before ending the task.
 - Treat lessons about Codex skill/plugin selection, ordering, combination, fallback, or limitations as valid KB signals when they materially change task outcomes.
 - Treat lessons about Codex subagent/delegation selection, ordering, waiting, parallelization, fallback, overhead, or main-thread clarity as valid KB signals when they materially change task outcomes.

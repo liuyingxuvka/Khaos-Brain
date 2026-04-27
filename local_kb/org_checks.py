@@ -9,8 +9,8 @@ from local_kb.org_sources import validate_organization_repo
 from local_kb.store import load_yaml_file
 
 
-LOW_RISK_PREFIXES = ("kb/candidates/", "kb/imports/", "skills/candidates/")
-PROTECTED_PREFIXES = ("kb/trusted/",)
+LOW_RISK_PREFIXES = ("kb/imports/", "kb/candidates/", "skills/candidates/")
+PROTECTED_PREFIXES = ("kb/main/", "kb/trusted/")
 PROTECTED_FILES = {"khaos_org_kb.yaml", "skills/registry.yaml"}
 TEXT_SUFFIXES = {".yaml", ".yml", ".md", ".json", ".txt"}
 SKILL_REVIEW_STATES = {"candidate", "approved", "rejected"}
@@ -144,7 +144,7 @@ def _check_changed_paths(changed_files: list[str], *, enforce_low_risk: bool) ->
     if invalid:
         errors.extend(f"invalid changed file path: {path}" for path in invalid)
     if protected:
-        warnings.append("protected organization paths require organization-review evidence and merge rules")
+        warnings.append("protected organization paths require organization maintenance evidence and merge rules")
     if enforce_low_risk and outside_low_risk:
         errors.extend(f"path is not eligible for low-risk auto-merge: {path}" for path in outside_low_risk)
 
@@ -237,6 +237,7 @@ def _check_cards(root: Path) -> dict[str, Any]:
     bundle_count = 0
 
     for relative_root, expected_statuses in (
+        ("kb/main", {"trusted", "approved", "candidate", "rejected", "deprecated"}),
         ("kb/trusted", {"trusted", "approved", "deprecated"}),
         ("kb/candidates", {"candidate", "rejected", "deprecated"}),
         ("kb/imports", {"candidate", "rejected", "deprecated"}),

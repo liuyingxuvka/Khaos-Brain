@@ -43,6 +43,12 @@ from local_kb.semantic_review import (
 )
 
 NEW_CANDIDATE_ALTERNATIVE_LIMIT = 3
+DREAM_EVIDENCE_RANK = {
+    "none": 0,
+    "weak": 1,
+    "moderate": 2,
+    "strong": 3,
+}
 
 
 def build_next_step(action_type: str, target_kind: str, target_ref: str, routes: list[str]) -> str:
@@ -99,6 +105,21 @@ def build_next_step(action_type: str, target_kind: str, target_ref: str, routes:
     if routes:
         return f"Inspect supporting history for route {routes[0]} before deciding on any KB edits."
     return "Inspect the grouped history events and choose the next AI consolidation action."
+
+
+def dream_validation_next_step(action: dict[str, Any], summary: dict[str, Any]) -> str:
+    target = action.get("target", {}) if isinstance(action.get("target"), dict) else {}
+    target_ref = str(target.get("ref", "") or "").strip()
+    strongest_grade = str(summary.get("strongest_evidence_grade", "") or "").strip()
+    if target_ref:
+        return (
+            f"Inspect Dream sandbox validation for {target_ref} with {strongest_grade or 'recorded'} evidence, "
+            "then decide whether Sleep should strengthen, rewrite, narrow, merge, or keep watching the card."
+        )
+    return (
+        "Inspect Dream sandbox validation, then decide whether Sleep should strengthen, rewrite, narrow, merge, "
+        "or keep watching the affected card."
+    )
 
 
 def suggested_artifact_kind(action_type: str, target_kind: str) -> str:
@@ -171,6 +192,61 @@ def _normalize_predictive_observation(event: dict[str, Any]) -> dict[str, Any]:
             "revised_action": str(contrastive.get("revised_action", "") or "").strip(),
             "revised_result": str(contrastive.get("revised_result", "") or "").strip(),
         },
+    }
+
+
+def _normalize_dream_validation(event: dict[str, Any]) -> dict[str, Any]:
+    validation = event.get("dream_validation", {})
+    if not isinstance(validation, dict):
+        validation = {}
+    return {
+        "event_id": str(event.get("event_id", "") or "").strip(),
+        "run_id": str(validation.get("run_id", "") or "").strip(),
+        "classification": str(validation.get("classification", "") or "").strip(),
+        "evidence_grade": str(validation.get("evidence_grade", "") or "").strip(),
+        "validation_status": str(validation.get("validation_status", "") or "").strip(),
+        "sandbox_mode": str(validation.get("sandbox_mode", "") or "").strip(),
+        "sandbox_path": str(validation.get("sandbox_path", "") or "").strip(),
+        "source_entry_id": str(validation.get("source_entry_id", "") or "").strip(),
+        "entry_status": str(validation.get("entry_status", "") or "").strip(),
+        "entry_confidence": validation.get("entry_confidence", ""),
+        "entry_ids": normalize_entry_ids(validation.get("entry_ids", [])),
+        "sleep_handoff": str(validation.get("sleep_handoff", "") or "").strip(),
+        "architect_handoff": str(validation.get("architect_handoff", "") or "").strip(),
+        "handoff_action": str(validation.get("handoff_action", "") or "").strip(),
+    }
+
+
+def summarize_dream_validation(supporting_events: list[dict[str, Any]]) -> dict[str, Any] | None:
+    validations = [
+        _normalize_dream_validation(event)
+        for event in supporting_events
+        if isinstance(event.get("dream_validation"), dict)
+        and str(event.get("dream_validation", {}).get("evidence_grade", "") or "").strip()
+    ]
+    if not validations:
+        return None
+
+    grades = Counter(item["evidence_grade"] for item in validations if item["evidence_grade"])
+    statuses = Counter(item["validation_status"] for item in validations if item["validation_status"])
+    classifications = Counter(item["classification"] for item in validations if item["classification"])
+    strongest_grade = max(
+        (item["evidence_grade"] for item in validations if item["evidence_grade"]),
+        key=lambda grade: DREAM_EVIDENCE_RANK.get(grade, 0),
+        default="",
+    )
+    return {
+        "evidence_event_count": len(validations),
+        "strongest_evidence_grade": strongest_grade,
+        "evidence_grades": sort_counter(grades),
+        "validation_statuses": sort_counter(statuses),
+        "classifications": sort_counter(classifications),
+        "run_ids": _ordered_unique_text([item["run_id"] for item in validations]),
+        "sandbox_paths": _ordered_unique_text([item["sandbox_path"] for item in validations]),
+        "source_entry_ids": _ordered_unique_text([item["source_entry_id"] for item in validations]),
+        "entry_statuses": _ordered_unique_text([item["entry_status"] for item in validations]),
+        "sleep_handoffs": _ordered_unique_text([item["sleep_handoff"] for item in validations]),
+        "handoff_actions": sort_counter(Counter(item["handoff_action"] for item in validations if item["handoff_action"])),
     }
 
 
@@ -1200,6 +1276,13 @@ def annotate_actions_with_apply_eligibility(
         timeline_summary = summarize_observation_timeline(supporting_events)
         annotated_action["timeline_summary"] = timeline_summary
         annotated_action["predictive_evidence_summary"] = summarize_predictive_evidence(supporting_events)
+        dream_validation_summary = summarize_dream_validation(supporting_events)
+        if dream_validation_summary:
+            annotated_action["dream_validation_summary"] = dream_validation_summary
+            annotated_action["recommended_next_step"] = dream_validation_next_step(
+                annotated_action,
+                dream_validation_summary,
+            )
         candidate_scaffold = suggest_new_candidate_scaffold(
             action=annotated_action,
             supporting_events=supporting_events,

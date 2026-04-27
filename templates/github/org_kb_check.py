@@ -9,7 +9,8 @@ from typing import Any
 import yaml
 
 
-LOW_RISK_PREFIXES = ("kb/candidates/", "kb/imports/", "skills/candidates/")
+LOW_RISK_PREFIXES = ("kb/imports/", "kb/candidates/", "skills/candidates/")
+MAINTENANCE_MAIN_PREFIXES = ("kb/main/",)
 SKILL_REVIEW_STATES = {"candidate", "approved", "rejected"}
 SECRET_PATTERNS = (
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
@@ -70,7 +71,12 @@ def check_manifest(root: Path) -> list[str]:
         errors.append("schema_version must be 1")
     if not str(manifest.get("organization_id") or "").strip():
         errors.append("organization_id is required")
-    for relative in ("kb/trusted", "kb/candidates", "kb/imports", "skills/candidates"):
+    kb = manifest.get("kb") if isinstance(manifest.get("kb"), dict) else {}
+    main_path = str(kb.get("main_path") or "").strip() or ("kb/main" if (root / "kb" / "main").exists() else "")
+    card_paths = (main_path, "kb/imports") if main_path else ("kb/trusted", "kb/candidates", "kb/imports")
+    for relative in (*card_paths, "skills/candidates"):
+        if not relative:
+            continue
         if not (root / relative).exists():
             errors.append(f"required path does not exist: {relative}")
     if not (root / "skills" / "registry.yaml").exists():
@@ -78,10 +84,19 @@ def check_manifest(root: Path) -> list[str]:
     return errors
 
 
-def check_paths(changed_files: list[str], enforce_low_risk: bool) -> tuple[list[str], list[str]]:
+def check_paths(changed_files: list[str], enforce_low_risk: bool, *, allow_maintenance_main: bool = False) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     blockers: list[str] = []
-    outside = [path for path in changed_files if not path.startswith(LOW_RISK_PREFIXES)]
+    has_maintenance_audit = "maintenance/cleanup_audit.jsonl" in changed_files
+    outside = []
+    for path in changed_files:
+        if path.startswith(LOW_RISK_PREFIXES):
+            continue
+        if allow_maintenance_main and has_maintenance_audit and path.startswith(MAINTENANCE_MAIN_PREFIXES):
+            continue
+        if allow_maintenance_main and has_maintenance_audit and path == "maintenance/cleanup_audit.jsonl":
+            continue
+        outside.append(path)
     if outside:
         blockers.append("changed files are not all low-risk paths")
         if enforce_low_risk:
@@ -146,6 +161,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--org-root", default=".")
     parser.add_argument("--changed-files-file", default="")
     parser.add_argument("--enforce-low-risk", action="store_true")
+    parser.add_argument("--allow-maintenance-main", action="store_true")
     return parser
 
 
@@ -159,7 +175,11 @@ def main() -> None:
             for path in (normalize_changed_file(line) for line in Path(args.changed_files_file).read_text(encoding="utf-8").splitlines())
             if path
         ]
-    path_errors, blockers = check_paths(changed_files, args.enforce_low_risk)
+    path_errors, blockers = check_paths(
+        changed_files,
+        args.enforce_low_risk,
+        allow_maintenance_main=args.allow_maintenance_main,
+    )
     errors = [
         *check_manifest(root),
         *path_errors,

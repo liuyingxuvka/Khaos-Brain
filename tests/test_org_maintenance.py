@@ -6,6 +6,7 @@ from pathlib import Path
 
 from local_kb.org_maintenance import build_organization_maintenance_report
 from local_kb.store import write_yaml_file
+from tests.org_helpers import base_card, write_valid_org_repo
 
 
 class OrganizationMaintenanceTests(unittest.TestCase):
@@ -50,7 +51,6 @@ class OrganizationMaintenanceTests(unittest.TestCase):
         self.assertNotIn("review-duplicate-entry-ids", report["recommendations"])
         self.assertIn("review-local-outbox-proposals", report["recommendations"])
         self.assertIn("review-skill-registry", report["recommendations"])
-        self.assertIn("install-organization-review-skill-before-full-maintenance", report["recommendations"])
         self.assertFalse(report["organization_review_skill"]["installed"])
 
     def test_maintenance_report_detects_installed_organization_review_skill(self) -> None:
@@ -70,7 +70,6 @@ class OrganizationMaintenanceTests(unittest.TestCase):
 
         self.assertTrue(report["ok"], report)
         self.assertTrue(report["organization_review_skill"]["installed"])
-        self.assertNotIn("install-organization-review-skill-before-full-maintenance", report["recommendations"])
 
     def test_maintenance_report_surfaces_duplicate_hash_cleanup_signal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -107,6 +106,37 @@ class OrganizationMaintenanceTests(unittest.TestCase):
         self.assertEqual(report["cleanup"]["similar_card_merge_apply"], "planned")
         self.assertEqual(report["cleanup"]["weak_card_rejection_apply"], "planned")
         self.assertEqual(report["cleanup"]["skill_bundle_cleanup_apply"], "partial")
+
+    def test_maintenance_report_can_review_and_apply_supported_cleanup_actions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo_root = root / "repo"
+            org = root / "org"
+            write_valid_org_repo(org, include_sandbox_cards=False)
+            weak = base_card("weak-card", "Weak org card", "Weak shared candidate.", status="candidate", confidence=0.2)
+            strong = base_card("strong-card", "Strong org card", "Strong shared candidate.", status="candidate", confidence=0.9)
+            trusted_low = base_card("trusted-low", "Trusted low card", "Trusted but weak.", status="trusted", confidence=0.4)
+            write_yaml_file(org / "kb" / "candidates" / "weak-card.yaml", weak)
+            write_yaml_file(org / "kb" / "candidates" / "strong-card.yaml", strong)
+            write_yaml_file(org / "kb" / "trusted" / "trusted-low.yaml", trusted_low)
+
+            report = build_organization_maintenance_report(
+                org,
+                repo_root=repo_root,
+                apply_reviewed_cleanup=True,
+            )
+            promoted = next(item for item in report["cleanup"]["apply"]["applied"] if item["action_type"] == "promote-card")
+            promoted_exists = (org / promoted["updated_path"]).exists()
+
+        self.assertTrue(report["ok"], report)
+        review = report["cleanup"]["review"]
+        apply = report["cleanup"]["apply"]
+        self.assertGreaterEqual(review["approved_count"], 3)
+        self.assertEqual(review["selected_count"], review["approved_count"])
+        self.assertTrue(apply["attempted"])
+        self.assertGreaterEqual(apply["applied_count"], 3)
+        self.assertTrue(report["cleanup"]["post_apply_check"]["ok"], report)
+        self.assertTrue(promoted_exists)
 
 
 if __name__ == "__main__":

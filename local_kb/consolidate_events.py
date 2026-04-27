@@ -160,6 +160,9 @@ SKILL_MAINTENANCE_ROUTE_PREFIXES = (
     "codex/skill-use",
 )
 
+DREAM_VALIDATION_EVIDENCE_GRADES_FOR_REVIEW = {"strong", "moderate"}
+DREAM_VALIDATION_SANDBOX_MODE = "retrieval-ab"
+
 
 def utc_now_compact() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -212,6 +215,15 @@ def normalize_contrastive_evidence(value: Any) -> dict[str, str]:
     }
 
 
+def normalize_optional_float(value: Any) -> float | str:
+    if value is None or value == "":
+        return ""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return ""
+
+
 def normalize_event(raw: dict[str, Any], source_line: int) -> dict[str, Any]:
     event = dict(raw)
     source = event.get("source", {}) if isinstance(event.get("source"), dict) else {}
@@ -259,6 +271,26 @@ def normalize_event(raw: dict[str, Any], source_line: int) -> dict[str, Any]:
         "contrastive_evidence": contrastive_evidence,
         "operational_use": str(predictive_observation.get("operational_use", "") or "").strip(),
         "reuse_judgment": str(predictive_observation.get("reuse_judgment", "") or "").strip(),
+    }
+    dream_validation = context.get("dream_validation", {})
+    if not isinstance(dream_validation, dict):
+        dream_validation = {}
+    event["dream_validation"] = {
+        "run_id": str(dream_validation.get("run_id", "") or "").strip(),
+        "opportunity_kind": str(dream_validation.get("opportunity_kind", "") or "").strip(),
+        "classification": str(dream_validation.get("classification", "") or "").strip(),
+        "evidence_grade": str(dream_validation.get("evidence_grade", "") or "").strip(),
+        "validation_status": str(dream_validation.get("validation_status", "") or "").strip(),
+        "sandbox_mode": str(dream_validation.get("sandbox_mode", "") or "").strip(),
+        "sandbox_path": str(dream_validation.get("sandbox_path", "") or "").strip(),
+        "source_entry_id": str(dream_validation.get("source_entry_id", "") or "").strip(),
+        "entry_status": str(dream_validation.get("entry_status", "") or "").strip(),
+        "entry_confidence": normalize_optional_float(dream_validation.get("entry_confidence")),
+        "entry_ids": normalize_entry_ids(dream_validation.get("entry_ids", [])),
+        "trusted_card_mutation": bool(dream_validation.get("trusted_card_mutation", False)),
+        "sleep_handoff": str(dream_validation.get("sleep_handoff", "") or "").strip(),
+        "architect_handoff": str(dream_validation.get("architect_handoff", "") or "").strip(),
+        "handoff_action": str(dream_validation.get("handoff_action", "") or "").strip(),
     }
     event["source_agent"] = str(source.get("agent", "") or "").strip()
     event["thread_ref"] = str(source.get("thread_ref", "") or "").strip()
@@ -467,6 +499,39 @@ def append_skill_maintenance_review_seed(
     )
 
 
+def dream_validation_review_seeds(event: dict[str, Any], *, route_ref: str) -> list[dict[str, Any]]:
+    validation = event.get("dream_validation", {})
+    if not isinstance(validation, dict):
+        return []
+
+    evidence_grade = str(validation.get("evidence_grade", "") or "").strip()
+    if evidence_grade not in DREAM_VALIDATION_EVIDENCE_GRADES_FOR_REVIEW:
+        return []
+    if str(validation.get("validation_status", "") or "").strip() != "passed":
+        return []
+    if str(validation.get("sandbox_mode", "") or "").strip() != DREAM_VALIDATION_SANDBOX_MODE:
+        return []
+    if bool(validation.get("trusted_card_mutation", False)):
+        return []
+
+    entry_ids = normalize_entry_ids(validation.get("entry_ids", []) or event.get("entry_ids", []))
+    if not entry_ids:
+        return []
+
+    entry_status = str(validation.get("entry_status", "") or "").strip().lower()
+    action_type = "review-candidate" if entry_status == "candidate" else "review-entry-update"
+    return [
+        {
+            "action_type": action_type,
+            "target_kind": "entry",
+            "target_ref": entry_id,
+            "route_ref": route_ref,
+            "reason": f"dream-validation:{evidence_grade}",
+        }
+        for entry_id in entry_ids
+    ]
+
+
 def build_action_seeds(event: dict[str, Any]) -> list[dict[str, Any]]:
     seeds: list[dict[str, Any]] = []
     event_type = event.get("event_type", "")
@@ -486,12 +551,22 @@ def build_action_seeds(event: dict[str, Any]) -> list[dict[str, Any]]:
         )
         return seeds
 
+    dream_validation_seeds = dream_validation_review_seeds(event, route_ref=route_ref)
+    seeds.extend(dream_validation_seeds)
+
     suggested_action = event.get("suggested_action", "none")
     hit_quality = str(event.get("hit_quality", "none") or "none")
     if suggested_action == "update-card":
         entry_ids = event.get("entry_ids", [])
         if entry_ids:
+            dream_reviewed_entry_ids = {
+                str(seed.get("target_ref", "") or "")
+                for seed in dream_validation_seeds
+                if str(seed.get("target_ref", "") or "")
+            }
             for entry_id in entry_ids:
+                if str(entry_id) in dream_reviewed_entry_ids:
+                    continue
                 seeds.append(
                     {
                         "action_type": "review-entry-update",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fnmatch
 import json
 import hashlib
 from datetime import datetime, timezone
@@ -10,7 +11,8 @@ from local_kb.common import normalize_text, slugify, utc_now_iso
 from local_kb.consolidate import APPLY_MODE_NONE, consolidate_history, sanitize_run_id
 from local_kb.consolidate_events import load_history_events, relative_repo_path
 from local_kb.feedback import build_observation, record_observation
-from local_kb.maintenance_lanes import build_lane_guard, write_lane_status
+from local_kb.history import build_history_event, record_history_event
+from local_kb.maintenance_lanes import acquire_lane_lock, build_lane_guard, release_lane_lock, write_lane_status
 from local_kb.search import render_search_payload, search_entries
 from local_kb.store import history_events_path
 
@@ -32,6 +34,7 @@ DECISIONS_FILENAME = "decisions.json"
 EXECUTION_PLAN_FILENAME = "execution_plan.json"
 REPORT_FILENAME = "report.json"
 QUEUE_FILENAME = "proposal_queue.json"
+TRIAL_SELECTION_FILENAME = "sandbox_trial_selection.json"
 
 LEVELS = {"low": 1, "medium": 2, "high": 3}
 TERMINAL_STATUSES = {"applied", "rejected", "superseded"}
@@ -114,6 +117,58 @@ LOW_SAFETY_KEYWORDS = {
 
 PATCH_ONLY_CATEGORIES = {"automation", "install-check", "core-tooling", "skill-maintenance"}
 AUTO_APPLY_CATEGORIES = {"prompt", "runbook", "proposal-queue", "validation"}
+EXECUTION_CLOSURE_STATES = {"applied", "blocked"}
+EXECUTION_CONTINUATION_STATES = {"ready-for-agent", "patch-required"}
+
+AUTO_APPLY_ALLOWED_PATHS = {
+    "prompt": [
+        ".agents/skills/local-kb-retrieve/ARCHITECT_PROMPT.md",
+        ".agents/skills/local-kb-retrieve/DREAM_PROMPT.md",
+        ".agents/skills/local-kb-retrieve/MAINTENANCE_PROMPT.md",
+        ".agents/skills/kb-architect-pass/SKILL.md",
+        ".agents/skills/kb-dream-pass/SKILL.md",
+        ".agents/skills/kb-sleep-maintenance/SKILL.md",
+    ],
+    "runbook": [
+        "docs/architecture_runbook.md",
+        "docs/dream_runbook.md",
+        "docs/maintenance_runbook.md",
+    ],
+    "proposal-queue": [
+        "kb/history/architecture/proposal_queue.json",
+    ],
+    "validation": [
+        "tests/test_kb_architect.py",
+        "tests/test_kb_dream.py",
+        "tests/test_codex_install.py",
+    ],
+}
+
+PATCH_PLAN_ALLOWED_PATHS = {
+    "automation": ["$CODEX_HOME/automations/*/automation.toml", "local_kb/install.py"],
+    "install-check": ["scripts/install_codex_kb.py", "local_kb/install.py", "tests/test_codex_install.py"],
+    "skill-maintenance": [".agents/skills/**"],
+    "core-tooling": ["local_kb/**", "tests/**"],
+    "rollback": ["local_kb/snapshots.py", "local_kb/rollback.py", "tests/**"],
+    "sleep-dream-boundary": ["local_kb/maintenance_lanes.py", "local_kb/dream.py", "local_kb/consolidate.py", "tests/**"],
+}
+
+DISALLOWED_EXECUTION_PATHS = [
+    "kb/public/**",
+    "kb/private/**",
+    "kb/candidates/**",
+    "VERSION",
+    "pyproject.toml",
+    "uv.lock",
+]
+SANDBOX_TRIAL_ROOT = ".local/architect/sandbox"
+SANDBOX_TRIAL_DECISIONS = {"applied", "blocked"}
+SANDBOX_TRIAL_CATEGORY_PRIORITY = {
+    "prompt": 0,
+    "runbook": 1,
+    "validation": 2,
+    "proposal-queue": 3,
+}
 
 CATEGORY_KEYWORDS = (
     ("automation", {"automation", "automations", "cron", "schedule"}),
@@ -235,6 +290,7 @@ def build_initial_execution_plan(
             _checkpoint("three-axis-review", "Assign Evidence, Impact, and Safety levels"),
             _checkpoint("status-decisions", "Decide watching, patch, apply, rejected, or superseded states"),
             _checkpoint("queue-write", "Write the maintained proposal queue"),
+            _checkpoint("sandbox-trial-selection", "Select at most one sandbox-ready packet for this Architect pass"),
             _checkpoint("postflight-observation", "Append one KB observation for this Architect run"),
             _checkpoint("report", "Write final Architect report"),
         ],
@@ -387,6 +443,806 @@ def _decide_status(evidence: str, impact: str, safety: str, category: str) -> tu
     return "watching", "The proposal is useful enough to keep, but not ready to execute."
 
 
+def _prior_execution_state(prior: dict[str, Any]) -> dict[str, Any]:
+    packet = prior.get("execution_packet", {})
+    packet_state = packet.get("execution_state") if isinstance(packet, dict) else None
+    for source in (prior.get("execution_state"), packet_state):
+        if not isinstance(source, dict):
+            continue
+        state = str(source.get("state", "") or "").strip().lower()
+        if state in EXECUTION_CLOSURE_STATES:
+            copied = dict(source)
+            copied["state"] = state
+            return copied
+
+    status = str(prior.get("status", "") or "").strip().lower()
+    if status == "blocked":
+        return {
+            "state": "blocked",
+            "reason": str(prior.get("status_reason", "") or "Proposal was marked blocked by an earlier execution attempt."),
+        }
+    if status == "applied":
+        return {
+            "state": "applied",
+            "reason": str(prior.get("status_reason", "") or "Proposal was marked applied by an earlier execution attempt."),
+        }
+    return {}
+
+
+def _prior_continuation_state(prior: dict[str, Any]) -> dict[str, Any]:
+    packet = prior.get("execution_packet", {})
+    packet_state = packet.get("execution_state") if isinstance(packet, dict) else None
+    for source in (prior.get("execution_state"), packet_state):
+        if not isinstance(source, dict):
+            continue
+        state = str(source.get("state", "") or "").strip().lower()
+        if state in EXECUTION_CONTINUATION_STATES:
+            copied = dict(source)
+            copied["state"] = state
+            return copied
+    return {}
+
+
+def _execution_state_reason(state: dict[str, Any]) -> str:
+    for key in ("reason", "blocked_reason", "result", "notes"):
+        value = str(state.get(key, "") or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _apply_prior_execution_closure(
+    proposal: dict[str, Any],
+    prior: dict[str, Any],
+    *,
+    generated_at: str,
+) -> None:
+    state = _prior_execution_state(prior)
+    if not state:
+        return
+
+    state.setdefault("updated_at", generated_at)
+    reason = _execution_state_reason(state)
+    proposal["execution_state"] = state
+    if state["state"] == "applied":
+        proposal["status"] = "applied"
+        proposal["status_reason"] = "Preserved execution closure state: applied."
+        if reason:
+            proposal["status_reason"] = f"{proposal['status_reason']} {reason}"
+        proposal["next_action"] = _next_action_for_status("applied")
+        return
+
+    proposal["status"] = "watching"
+    proposal["status_reason"] = "Execution packet was marked blocked; keep the proposal out of the immediate apply lane."
+    if reason:
+        proposal["status_reason"] = f"{proposal['status_reason']} Blocker: {reason}"
+    proposal["next_action"] = "Resolve the recorded execution blocker before returning this proposal to ready-for-apply or ready-for-patch."
+
+
+def _allowed_paths_for_category(category: str) -> list[str]:
+    if category in AUTO_APPLY_ALLOWED_PATHS:
+        return list(AUTO_APPLY_ALLOWED_PATHS[category])
+    if category in PATCH_PLAN_ALLOWED_PATHS:
+        return list(PATCH_PLAN_ALLOWED_PATHS[category])
+    return ["local_kb/**", "tests/**", "docs/**", ".agents/skills/**"]
+
+
+def _validation_plan_for_category(category: str) -> dict[str, Any]:
+    commands = ["python -m unittest tests.test_kb_architect"]
+    manual_checks = [
+        "Confirm the diff stays inside the execution packet allowed_paths.",
+        "Confirm no trusted cards, private cards, candidates, taxonomy routes, dependencies, or lockfiles changed.",
+    ]
+
+    if category == "install-check":
+        commands = ["python -m unittest tests.test_codex_install"]
+        manual_checks.append("Run python scripts/install_codex_kb.py --check --json after installer-affecting changes.")
+    elif category == "core-tooling":
+        commands.append(
+            "python .agents/skills/local-kb-retrieve/scripts/kb_architect.py --run-id architect-smoke --max-events 20 --json"
+        )
+    elif category == "validation":
+        manual_checks.append("The test change must fail against the old behavior or assert a new Architect closure contract.")
+    elif category == "proposal-queue":
+        manual_checks.append("Inspect kb/history/architecture/proposal_queue.json and confirm only queue metadata changed.")
+    elif category in {"prompt", "runbook", "skill-maintenance"}:
+        manual_checks.append("Inspect required prompt/runbook markers and run the matching prompt or install test when available.")
+
+    return {
+        "commands": commands,
+        "manual_checks": manual_checks,
+        "success_criteria": [
+            "All listed commands pass.",
+            "The implementation stays inside allowed_paths.",
+            "The proposal is marked applied only after validation succeeds.",
+        ],
+        "failure_criteria": [
+            "Any validation command fails.",
+            "The needed change touches disallowed paths or broad mechanism code outside the packet.",
+            "The implementation requires card-content maintenance, taxonomy movement, dependency changes, or human product judgment.",
+        ],
+    }
+
+
+def _expected_effect_for_proposal(proposal: dict[str, Any], mode: str) -> str:
+    title = str(proposal.get("title", "") or "the mechanism proposal")
+    target = proposal.get("target", {})
+    target_ref = ""
+    if isinstance(target, dict):
+        target_ref = str(target.get("ref", "") or "")
+    target_label = f" for {target_ref}" if target_ref else ""
+    if mode == "agent-ready-apply":
+        return f"Trial a narrow mechanism update{target_label}: {title}."
+    if mode == "patch-plan":
+        return f"Prepare patch evidence{target_label} without applying repository writes: {title}."
+    if mode == "blocked":
+        return f"Keep the proposal out of apply until the recorded blocker is resolved{target_label}."
+    if mode == "closed-applied":
+        return f"Preserve applied mechanism history{target_label}; no sandbox write is expected."
+    return f"Observe mechanism evidence{target_label}; no sandbox write is expected."
+
+
+def _sandbox_apply_metadata(
+    proposal: dict[str, Any],
+    *,
+    packet_id: str,
+    mode: str,
+    allowed_paths: list[str],
+    disallowed_paths: list[str],
+    validation_plan: dict[str, Any],
+) -> dict[str, Any]:
+    sandbox_ready = mode == "agent-ready-apply"
+    planned_sandbox_path = f"{SANDBOX_TRIAL_ROOT}/{packet_id}"
+    validation_commands = list(validation_plan.get("commands", []))
+    manual_checks = list(validation_plan.get("manual_checks", []))
+    return {
+        "strategy": "sandbox-trial",
+        "sandbox_ready": sandbox_ready,
+        "sandbox_path": "",
+        "planned_sandbox_path": planned_sandbox_path,
+        "allowed_writes": list(allowed_paths) if sandbox_ready else [],
+        "planned_write_surface": list(allowed_paths),
+        "disallowed_writes": list(disallowed_paths),
+        "expected_effect": _expected_effect_for_proposal(proposal, mode),
+        "validation_commands": validation_commands,
+        "manual_checks": manual_checks,
+        "merge_decision": {
+            "decision_required": sandbox_ready,
+            "merge_when": [
+                "Sandbox diff stays inside allowed_writes.",
+                "Validation commands pass and manual checks are satisfied.",
+                "The reviewed effect matches expected_effect.",
+            ],
+            "record_fields": {
+                "proposal.status": "applied",
+                "proposal.execution_state.state": "applied",
+                "proposal.execution_state.sandbox_path": "<sandbox_path_or_planned_sandbox_path>",
+                "proposal.execution_state.validation": "passed",
+            },
+        },
+        "block_decision": {
+            "decision_required": sandbox_ready,
+            "block_when": [
+                "Sandbox diff touches disallowed_writes or escapes allowed_writes.",
+                "Validation commands fail or cannot be run.",
+                "Manual checks fail, expected_effect is not achieved, or the change needs human/card-content judgment.",
+            ],
+            "record_fields": {
+                "proposal.status": "watching",
+                "proposal.execution_state.state": "blocked",
+                "proposal.execution_state.blocker": "<concrete_blocker>",
+                "proposal.execution_state.sandbox_path": "<sandbox_path_or_planned_sandbox_path>",
+            },
+        },
+    }
+
+
+def _execution_state_for_proposal(proposal: dict[str, Any], *, generated_at: str) -> dict[str, Any]:
+    existing = proposal.get("execution_state")
+    status = str(proposal.get("status", "") or "").strip()
+    state_name = {
+        "ready-for-apply": "ready-for-agent",
+        "ready-for-patch": "patch-required",
+        "applied": "applied",
+        "rejected": "closed",
+        "superseded": "closed",
+        "watching": "watching",
+        "new": "watching",
+    }.get(status, "watching")
+    if isinstance(existing, dict):
+        state = str(existing.get("state", "") or "").strip().lower()
+        if state in EXECUTION_CLOSURE_STATES:
+            carried = dict(existing)
+            carried["state"] = state
+            carried.setdefault("updated_at", generated_at)
+            return carried
+        if state == state_name and state in EXECUTION_CONTINUATION_STATES:
+            carried = dict(existing)
+            carried["state"] = state
+            carried.setdefault("ready_since_at", existing.get("updated_at") or generated_at)
+            carried["last_seen_at"] = generated_at
+            carried["updated_at"] = generated_at
+            return carried
+
+    result = {
+        "state": state_name,
+        "updated_at": generated_at,
+        "reason": str(proposal.get("status_reason", "") or ""),
+    }
+    if state_name in EXECUTION_CONTINUATION_STATES:
+        result["ready_since_at"] = generated_at
+        result["last_seen_at"] = generated_at
+    return result
+
+
+def _execution_mode_for(proposal: dict[str, Any], execution_state: dict[str, Any]) -> str:
+    state = str(execution_state.get("state", "") or "")
+    if state == "applied":
+        return "closed-applied"
+    if state == "blocked":
+        return "blocked"
+    status = str(proposal.get("status", "") or "")
+    category = str(proposal.get("category", "") or "")
+    if status == "ready-for-apply" and category in AUTO_APPLY_CATEGORIES:
+        return "agent-ready-apply"
+    if status == "ready-for-patch":
+        return "patch-plan"
+    if status in {"rejected", "superseded"}:
+        return "terminal-record"
+    return "watch"
+
+
+def _implementation_prompt_for_mode(mode: str, category: str) -> str:
+    if mode == "agent-ready-apply":
+        return (
+            "A follow-on Architect agent may implement this now only if the edit stays inside allowed_paths, "
+            "keeps the diff narrow and reversible, runs the validation_plan immediately, and then marks the proposal applied."
+        )
+    if mode == "patch-plan":
+        return (
+            "Generate or refine a patch and validation plan for this medium-safety mechanism change. "
+            "Do not mark it applied until the patch is implemented and validated."
+        )
+    if mode == "blocked":
+        return "Resolve the recorded blocker before returning this proposal to a ready execution lane."
+    if mode == "closed-applied":
+        return "Keep this applied mechanism change as terminal history unless a concrete regression appears."
+    if mode == "terminal-record":
+        return "Do not execute this proposal; preserve the terminal decision as queue history."
+    return f"Keep observing this {category} proposal until evidence, impact, safety, and validation readiness justify action."
+
+
+def _build_execution_packet(
+    proposal: dict[str, Any],
+    *,
+    generated_at: str,
+    execution_state: dict[str, Any],
+) -> dict[str, Any]:
+    proposal_id = str(proposal.get("proposal_id", "") or "")
+    category = str(proposal.get("category", "") or "")
+    status = str(proposal.get("status", "") or "")
+    mode = _execution_mode_for(proposal, execution_state)
+    architect_agent_may_apply = mode == "agent-ready-apply"
+    packet_id = f"arch-exec-{proposal_id}"
+    allowed_paths = _allowed_paths_for_category(category)
+    disallowed_paths = list(DISALLOWED_EXECUTION_PATHS)
+    validation_plan = _validation_plan_for_category(category)
+    return {
+        "schema_version": ARCHITECT_SCHEMA_VERSION,
+        "kind": "local-kb-architect-execution-packet",
+        "packet_id": packet_id,
+        "proposal_id": proposal_id,
+        "generated_at": generated_at,
+        "category": category,
+        "status": status,
+        "execution_mode": mode,
+        "runner_direct_write_allowed": False,
+        "architect_agent_direct_apply_allowed": architect_agent_may_apply,
+        "requires_patch_or_human": mode == "patch-plan",
+        "allowed_action_surface": (
+            "prompt/runbook/validation/proposal-queue"
+            if architect_agent_may_apply
+            else "patch-plan-or-human-review"
+        ),
+        "allowed_paths": allowed_paths,
+        "disallowed_paths": disallowed_paths,
+        "implementation_prompt": _implementation_prompt_for_mode(mode, category),
+        "validation_plan": validation_plan,
+        "sandbox_apply": _sandbox_apply_metadata(
+            proposal,
+            packet_id=packet_id,
+            mode=mode,
+            allowed_paths=allowed_paths,
+            disallowed_paths=disallowed_paths,
+            validation_plan=validation_plan,
+        ),
+        "closure_contract": {
+            "mark_applied_when": [
+                "The implementation stayed inside allowed_paths.",
+                "All validation_plan commands passed.",
+                "A KB postflight observation records the applied mechanism change when the pass exposed a reusable lesson.",
+            ],
+            "mark_blocked_when": [
+                "The required change touches disallowed_paths or broad mechanism code.",
+                "The validation bundle cannot be run or fails after a reasonable fix attempt.",
+                "The change requires card-content maintenance, taxonomy movement, dependency installation, or unresolved human judgment.",
+            ],
+            "applied_update": {
+                "proposal.status": "applied",
+                "proposal.execution_state.state": "applied",
+            },
+            "blocked_update": {
+                "proposal.status": "watching",
+                "proposal.execution_state.state": "blocked",
+            },
+        },
+        "execution_state": execution_state,
+    }
+
+
+def _attach_execution_packets(proposals: list[dict[str, Any]], *, generated_at: str) -> None:
+    for proposal in proposals:
+        execution_state = _execution_state_for_proposal(proposal, generated_at=generated_at)
+        proposal["execution_state"] = execution_state
+        proposal["execution_packet"] = _build_execution_packet(
+            proposal,
+            generated_at=generated_at,
+            execution_state=execution_state,
+        )
+
+
+def _execution_summary(proposals: list[dict[str, Any]]) -> dict[str, Any]:
+    mode_counts: dict[str, int] = {}
+    state_counts: dict[str, int] = {}
+    sandbox_ready_count = 0
+    for proposal in proposals:
+        packet = proposal.get("execution_packet", {})
+        mode = str(packet.get("execution_mode", "") or "unknown") if isinstance(packet, dict) else "unknown"
+        sandbox_apply = packet.get("sandbox_apply", {}) if isinstance(packet, dict) else {}
+        if isinstance(sandbox_apply, dict) and sandbox_apply.get("sandbox_ready") is True:
+            sandbox_ready_count += 1
+        state = str(proposal.get("execution_state", {}).get("state", "") or "unknown")
+        mode_counts[mode] = mode_counts.get(mode, 0) + 1
+        state_counts[state] = state_counts.get(state, 0) + 1
+    return {
+        "mode_counts": dict(sorted(mode_counts.items())),
+        "state_counts": dict(sorted(state_counts.items())),
+        "agent_ready_count": mode_counts.get("agent-ready-apply", 0),
+        "patch_plan_count": mode_counts.get("patch-plan", 0),
+        "blocked_count": state_counts.get("blocked", 0),
+        "applied_count": state_counts.get("applied", 0),
+        "sandbox_ready_count": sandbox_ready_count,
+    }
+
+
+def _sandbox_ready_packets(proposals: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    ready_packets: list[dict[str, Any]] = []
+    for proposal in proposals:
+        packet = proposal.get("execution_packet", {})
+        sandbox_apply = packet.get("sandbox_apply", {}) if isinstance(packet, dict) else {}
+        if not isinstance(sandbox_apply, dict) or sandbox_apply.get("sandbox_ready") is not True:
+            continue
+        ready_packets.append(
+            {
+                "packet_id": str(packet.get("packet_id", "") or ""),
+                "proposal_id": str(proposal.get("proposal_id", "") or ""),
+                "category": str(proposal.get("category", "") or ""),
+                "status": str(proposal.get("status", "") or ""),
+                "execution_mode": str(packet.get("execution_mode", "") or ""),
+                "planned_sandbox_path": str(sandbox_apply.get("planned_sandbox_path", "") or ""),
+                "allowed_writes": list(sandbox_apply.get("allowed_writes", [])),
+                "disallowed_writes": list(sandbox_apply.get("disallowed_writes", [])),
+                "expected_effect": str(sandbox_apply.get("expected_effect", "") or ""),
+                "validation_commands": list(sandbox_apply.get("validation_commands", [])),
+                "manual_checks": list(sandbox_apply.get("manual_checks", [])),
+                "ready_since_at": str(proposal.get("execution_state", {}).get("ready_since_at", "") or ""),
+                "merge_decision_fields": dict(sandbox_apply.get("merge_decision", {}).get("record_fields", {})),
+                "block_decision_fields": dict(sandbox_apply.get("block_decision", {}).get("record_fields", {})),
+            }
+        )
+    return ready_packets
+
+
+def select_sandbox_trial_packet(queue: dict[str, Any]) -> dict[str, Any]:
+    candidates: list[dict[str, Any]] = []
+    for proposal in queue.get("proposals", []):
+        if not isinstance(proposal, dict):
+            continue
+        if str(proposal.get("status", "") or "") != "ready-for-apply":
+            continue
+        execution_state = proposal.get("execution_state", {})
+        if not isinstance(execution_state, dict) or str(execution_state.get("state", "") or "") != "ready-for-agent":
+            continue
+        packet = proposal.get("execution_packet", {})
+        if not isinstance(packet, dict):
+            continue
+        sandbox_apply = packet.get("sandbox_apply", {})
+        if not isinstance(sandbox_apply, dict) or sandbox_apply.get("sandbox_ready") is not True:
+            continue
+        if packet.get("runner_direct_write_allowed") is not False:
+            continue
+        if packet.get("architect_agent_direct_apply_allowed") is not True:
+            continue
+        candidates.append(
+            {
+                "proposal": proposal,
+                "packet": packet,
+                "sandbox_apply": sandbox_apply,
+                "ready_since_at": str(execution_state.get("ready_since_at", "") or ""),
+            }
+        )
+
+    if not candidates:
+        return {}
+
+    candidates.sort(
+        key=lambda item: (
+            item["ready_since_at"] or "9999",
+            SANDBOX_TRIAL_CATEGORY_PRIORITY.get(str(item["proposal"].get("category", "") or ""), 99),
+            str(item["proposal"].get("proposal_id", "") or ""),
+        )
+    )
+    selected = candidates[0]
+    proposal = selected["proposal"]
+    packet = selected["packet"]
+    sandbox_apply = selected["sandbox_apply"]
+    sandbox_path = str(sandbox_apply.get("planned_sandbox_path", "") or "")
+    return {
+        "schema_version": ARCHITECT_SCHEMA_VERSION,
+        "kind": "local-kb-architect-sandbox-trial-selection",
+        "proposal_id": str(proposal.get("proposal_id", "") or ""),
+        "packet_id": str(packet.get("packet_id", "") or ""),
+        "category": str(proposal.get("category", "") or ""),
+        "status": str(proposal.get("status", "") or ""),
+        "execution_state": str(proposal.get("execution_state", {}).get("state", "") or ""),
+        "planned_sandbox_path": sandbox_path,
+        "allowed_writes": list(sandbox_apply.get("allowed_writes", [])),
+        "disallowed_writes": list(sandbox_apply.get("disallowed_writes", [])),
+        "expected_effect": str(sandbox_apply.get("expected_effect", "") or ""),
+        "validation_commands": list(sandbox_apply.get("validation_commands", [])),
+        "manual_checks": list(sandbox_apply.get("manual_checks", [])),
+        "ready_since_at": selected["ready_since_at"],
+        "result_record_command": (
+            "python .agents/skills/local-kb-retrieve/scripts/kb_architect.py "
+            f"--record-trial-result {sandbox_path}/trial_result.json --json"
+        ),
+        "decision_required": "run-sandbox-trial-or-record-blocker",
+    }
+
+
+def _attach_selected_sandbox_trial(queue: dict[str, Any]) -> dict[str, Any]:
+    selected = select_sandbox_trial_packet(queue)
+    queue["selected_sandbox_trial"] = selected
+    return selected
+
+
+def _normalize_repo_path(value: Any) -> str:
+    text = str(value or "").strip().replace("\\", "/")
+    while text.startswith("./"):
+        text = text[2:]
+    return text.strip("/")
+
+
+def _path_matches(pattern: str, path: str) -> bool:
+    normalized_pattern = _normalize_repo_path(pattern)
+    normalized_path = _normalize_repo_path(path)
+    if not normalized_pattern or not normalized_path:
+        return False
+    if normalized_pattern.endswith("/**"):
+        prefix = normalized_pattern[:-3].rstrip("/")
+        return normalized_path == prefix or normalized_path.startswith(f"{prefix}/")
+    return normalized_path == normalized_pattern or fnmatch.fnmatch(normalized_path, normalized_pattern)
+
+
+def _touched_path_check(touched_paths: list[str], allowed_writes: list[str], disallowed_writes: list[str]) -> dict[str, Any]:
+    normalized_paths = [_normalize_repo_path(path) for path in touched_paths if _normalize_repo_path(path)]
+    disallowed = [
+        path
+        for path in normalized_paths
+        if any(_path_matches(pattern, path) for pattern in disallowed_writes)
+    ]
+    outside_allowed = [
+        path
+        for path in normalized_paths
+        if not any(_path_matches(pattern, path) for pattern in allowed_writes)
+    ]
+    return {
+        "touched_paths": normalized_paths,
+        "allowed_writes": list(allowed_writes),
+        "disallowed_writes": list(disallowed_writes),
+        "disallowed_touched_paths": disallowed,
+        "outside_allowed_paths": outside_allowed,
+        "passed": bool(normalized_paths) and not disallowed and not outside_allowed,
+    }
+
+
+def _all_results_passed(results: list[dict[str, Any]]) -> bool:
+    if not results:
+        return False
+    for result in results:
+        status = str(result.get("status", "") or "").strip().lower()
+        if status not in {"passed", "ok", "success"}:
+            return False
+    return True
+
+
+def _find_proposal(proposals: list[dict[str, Any]], proposal_id: str) -> dict[str, Any]:
+    for proposal in proposals:
+        if str(proposal.get("proposal_id", "") or "") == proposal_id:
+            return proposal
+    raise ValueError(f"Architect proposal not found: {proposal_id}")
+
+
+def _normalize_trial_results(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [dict(item) for item in value if isinstance(item, dict)]
+
+
+def _validate_trial_target(proposal: dict[str, Any], packet_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    if str(proposal.get("status", "") or "") != "ready-for-apply":
+        raise ValueError("Architect sandbox trial result can only close a ready-for-apply proposal.")
+    packet = proposal.get("execution_packet", {})
+    if not isinstance(packet, dict):
+        raise ValueError("Architect proposal does not have an execution packet.")
+    if packet_id and str(packet.get("packet_id", "") or "") != packet_id:
+        raise ValueError("Architect sandbox trial packet_id does not match the proposal execution packet.")
+    sandbox_apply = packet.get("sandbox_apply", {})
+    if not isinstance(sandbox_apply, dict) or sandbox_apply.get("sandbox_ready") is not True:
+        raise ValueError("Architect proposal is not sandbox-ready.")
+    if packet.get("architect_agent_direct_apply_allowed") is not True:
+        raise ValueError("Architect proposal is not agent-ready for direct sandbox apply.")
+    return packet, sandbox_apply
+
+
+def _build_trial_result_payload(
+    *,
+    trial_result: dict[str, Any],
+    proposal: dict[str, Any],
+    packet: dict[str, Any],
+    sandbox_apply: dict[str, Any],
+    generated_at: str,
+) -> dict[str, Any]:
+    touched_paths = [
+        _normalize_repo_path(path)
+        for path in trial_result.get("touched_paths", [])
+        if _normalize_repo_path(path)
+    ]
+    allowed_writes = list(sandbox_apply.get("allowed_writes", []))
+    disallowed_writes = list(sandbox_apply.get("disallowed_writes", []))
+    path_check = _touched_path_check(touched_paths, allowed_writes, disallowed_writes)
+    validation_results = _normalize_trial_results(trial_result.get("validation_results", []))
+    manual_check_results = _normalize_trial_results(trial_result.get("manual_check_results", []))
+    return {
+        "schema_version": ARCHITECT_SCHEMA_VERSION,
+        "kind": "local-kb-architect-sandbox-trial-result",
+        "recorded_at": generated_at,
+        "run_id": str(trial_result.get("run_id", "") or ""),
+        "proposal_id": str(proposal.get("proposal_id", "") or ""),
+        "packet_id": str(packet.get("packet_id", "") or ""),
+        "decision": str(trial_result.get("decision", "") or "").strip().lower(),
+        "sandbox_path": str(
+            trial_result.get("sandbox_path")
+            or sandbox_apply.get("sandbox_path")
+            or sandbox_apply.get("planned_sandbox_path")
+            or ""
+        ),
+        "touched_paths": touched_paths,
+        "diff_within_allowed": bool(trial_result.get("diff_within_allowed", False)),
+        "path_check": path_check,
+        "validation_results": validation_results,
+        "manual_check_results": manual_check_results,
+        "validation_passed": _all_results_passed(validation_results),
+        "manual_checks_passed": _all_results_passed(manual_check_results),
+        "reason": str(trial_result.get("reason", "") or "").strip(),
+        "expected_effect": str(sandbox_apply.get("expected_effect", "") or ""),
+    }
+
+
+def _trial_result_supports_applied(payload: dict[str, Any]) -> bool:
+    return bool(
+        payload.get("diff_within_allowed", False)
+        and payload.get("path_check", {}).get("passed", False)
+        and payload.get("validation_passed", False)
+        and payload.get("manual_checks_passed", False)
+    )
+
+
+def _record_architect_trial_event(repo_root: Path, payload: dict[str, Any]) -> str:
+    event = build_history_event(
+        "architect-sandbox-trial",
+        source={
+            "kind": "architect-maintenance",
+            "agent": "kb-architect",
+            "thread_ref": payload.get("run_id", ""),
+            "project_ref": repo_root.name,
+            "workspace_root": str(repo_root),
+        },
+        target={
+            "kind": "architect-proposal",
+            "proposal_id": payload.get("proposal_id", ""),
+            "packet_id": payload.get("packet_id", ""),
+        },
+        rationale=str(payload.get("reason", "") or f"Architect sandbox trial recorded {payload.get('decision', '')}."),
+        context={"sandbox_trial": payload},
+    )
+    record_history_event(repo_root, event)
+    return str(event["event_id"])
+
+
+def record_architect_sandbox_trial_result(
+    repo_root: Path,
+    trial_result: dict[str, Any],
+    *,
+    generated_at: str | None = None,
+) -> dict[str, Any]:
+    generated_at = generated_at or utc_now_iso()
+    proposal_id = str(trial_result.get("proposal_id", "") or "").strip()
+    packet_id = str(trial_result.get("packet_id", "") or "").strip()
+    decision = str(trial_result.get("decision", "") or "").strip().lower()
+    if decision not in SANDBOX_TRIAL_DECISIONS:
+        raise ValueError("Architect sandbox trial decision must be applied or blocked.")
+    if not proposal_id:
+        raise ValueError("Architect sandbox trial result requires proposal_id.")
+
+    queue_path = architect_queue_path(repo_root)
+    queue = load_json_object(queue_path)
+    proposals = list(queue.get("proposals", []))
+    proposal = _find_proposal(proposals, proposal_id)
+    packet, sandbox_apply = _validate_trial_target(proposal, packet_id)
+    payload = _build_trial_result_payload(
+        trial_result=trial_result,
+        proposal=proposal,
+        packet=packet,
+        sandbox_apply=sandbox_apply,
+        generated_at=generated_at,
+    )
+    if decision == "applied" and not _trial_result_supports_applied(payload):
+        raise ValueError("Architect sandbox trial cannot be marked applied until paths, validation, and manual checks pass.")
+    if decision == "blocked" and not payload["reason"]:
+        raise ValueError("Architect blocked sandbox trial requires a concrete reason.")
+
+    proposal["sandbox_trial"] = payload
+    proposal.setdefault("sandbox_trials", []).append(payload)
+    proposal["updated_at"] = generated_at
+    if decision == "applied":
+        proposal["status"] = "applied"
+        proposal["status_reason"] = str(payload["reason"] or "Sandbox trial stayed inside allowed writes and validation passed.")
+        proposal["next_action"] = _next_action_for_status("applied")
+        proposal["execution_state"] = {
+            "state": "applied",
+            "updated_at": generated_at,
+            "reason": proposal["status_reason"],
+            "sandbox_path": payload["sandbox_path"],
+            "validation": "passed",
+            "trial_recorded_at": generated_at,
+        }
+    else:
+        proposal["status"] = "watching"
+        proposal["status_reason"] = f"Sandbox trial blocked. Blocker: {payload['reason']}"
+        proposal["next_action"] = "Resolve the recorded execution blocker before returning this proposal to ready-for-apply."
+        proposal["execution_state"] = {
+            "state": "blocked",
+            "updated_at": generated_at,
+            "reason": payload["reason"],
+            "blocker": payload["reason"],
+            "sandbox_path": payload["sandbox_path"],
+            "validation": "failed" if not payload["validation_passed"] else "blocked",
+            "trial_recorded_at": generated_at,
+        }
+
+    _attach_execution_packets(proposals, generated_at=generated_at)
+    queue["proposals"] = proposals
+    queue["proposal_count"] = len(proposals)
+    queue["updated_at"] = generated_at
+    queue["execution_summary"] = _execution_summary(proposals)
+    queue["sandbox_ready_packets"] = _sandbox_ready_packets(proposals)
+    queue["selected_sandbox_trial"] = select_sandbox_trial_packet(queue)
+    event_id = _record_architect_trial_event(repo_root, payload)
+    queue["last_sandbox_trial_event_id"] = event_id
+    write_json_file(queue_path, queue)
+    return {
+        "schema_version": ARCHITECT_SCHEMA_VERSION,
+        "kind": "local-kb-architect-sandbox-trial-record",
+        "recorded_at": generated_at,
+        "queue_path": relative_repo_path(repo_root, queue_path),
+        "history_event_id": event_id,
+        "proposal_id": proposal_id,
+        "packet_id": payload["packet_id"],
+        "decision": decision,
+        "sandbox_trial": payload,
+        "execution_summary": queue["execution_summary"],
+        "selected_sandbox_trial": queue["selected_sandbox_trial"],
+    }
+
+
+def _proposal_cluster_key(proposal: dict[str, Any]) -> str:
+    category = str(proposal.get("category", "") or "").strip().lower()
+    target = proposal.get("target", {})
+    if isinstance(target, dict):
+        target_ref = str(target.get("ref", "") or "").strip().lower()
+    else:
+        target_ref = str(proposal.get("target_ref", "") or "").strip().lower()
+    return f"{category}::{target_ref}"
+
+
+def _proposal_primary_rank(proposal: dict[str, Any]) -> tuple[int, int, str]:
+    status = str(proposal.get("status", "") or "").strip()
+    status_rank = {
+        "applied": 0,
+        "ready-for-apply": 1,
+        "ready-for-patch": 2,
+        "watching": 3,
+        "new": 4,
+        "rejected": 5,
+        "superseded": 6,
+    }.get(status, 7)
+    support_count = int(proposal.get("evidence", {}).get("supporting_run_count", 0) or 0)
+    return (status_rank, -support_count, str(proposal.get("proposal_id", "") or ""))
+
+
+def _merge_duplicate_source_actions(primary: dict[str, Any], duplicate: dict[str, Any]) -> None:
+    primary_actions = primary.setdefault("source_actions", [])
+    if not isinstance(primary_actions, list):
+        primary_actions = []
+        primary["source_actions"] = primary_actions
+    seen = {
+        str(item.get("action_key", "") or "")
+        for item in primary_actions
+        if isinstance(item, dict)
+    }
+    for action in duplicate.get("source_actions", []):
+        if not isinstance(action, dict):
+            continue
+        key = str(action.get("action_key", "") or "")
+        if key and key in seen:
+            continue
+        primary_actions.append(action)
+        if key:
+            seen.add(key)
+    if isinstance(primary.get("evidence"), dict):
+        primary["evidence"]["source_action_count"] = len(primary_actions)
+
+
+def _collapse_duplicate_proposals(
+    proposals: list[dict[str, Any]],
+    decisions: list[dict[str, Any]],
+    *,
+    generated_at: str,
+) -> list[dict[str, Any]]:
+    clusters: dict[str, list[dict[str, Any]]] = {}
+    for proposal in proposals:
+        key = _proposal_cluster_key(proposal)
+        if not key or key == "::":
+            continue
+        clusters.setdefault(key, []).append(proposal)
+
+    for cluster_items in clusters.values():
+        if len(cluster_items) <= 1:
+            continue
+        primary = sorted(cluster_items, key=_proposal_primary_rank)[0]
+        primary_id = str(primary.get("proposal_id", "") or "")
+        for duplicate in cluster_items:
+            if duplicate is primary:
+                continue
+            previous_status = str(duplicate.get("status", "") or "")
+            _merge_duplicate_source_actions(primary, duplicate)
+            duplicate["status"] = "superseded"
+            duplicate["status_reason"] = f"Superseded by {primary_id} during Architect queue hygiene for the same mechanism target."
+            duplicate["superseded_by"] = primary_id
+            duplicate["next_action"] = _next_action_for_status("superseded")
+            duplicate["updated_at"] = generated_at
+            decisions.append(
+                {
+                    "proposal_id": str(duplicate.get("proposal_id", "") or ""),
+                    "previous_status": previous_status,
+                    "new_status": "superseded",
+                    "reason": duplicate["status_reason"],
+                }
+            )
+    return proposals
+
+
 def _source_action_summary(repo_root: Path, action: dict[str, Any]) -> dict[str, Any]:
     return {
         "action_key": str(action.get("action_key", "") or ""),
@@ -486,7 +1342,7 @@ def _proposal_from_signal(
         safety=safety_level,
         category=signal["category"],
     )
-    if prior.get("status") in TERMINAL_STATUSES and status not in {"ready-for-apply", "ready-for-patch"}:
+    if prior.get("status") in TERMINAL_STATUSES:
         status = str(prior.get("status"))
         status_reason = "Preserved terminal status from an earlier Architect decision."
 
@@ -522,6 +1378,14 @@ def _proposal_from_signal(
         "last_seen_at": generated_at,
         "updated_at": generated_at,
     }
+    if prior:
+        _apply_prior_execution_closure(proposal, prior, generated_at=generated_at)
+        if "execution_state" not in proposal:
+            prior_state = _prior_continuation_state(prior)
+            if prior_state:
+                proposal["execution_state"] = prior_state
+    status = str(proposal.get("status", status) or status)
+    status_reason = str(proposal.get("status_reason", status_reason) or status_reason)
     decision = {
         "proposal_id": proposal["proposal_id"],
         "previous_status": prior.get("status", "new") if prior else "new",
@@ -552,12 +1416,16 @@ def _next_action_for_status(status: str) -> str:
 
 def _carry_forward_proposal(proposal: dict[str, Any], *, generated_at: str) -> tuple[dict[str, Any], dict[str, Any]]:
     carried = dict(proposal)
+    _apply_prior_execution_closure(carried, proposal, generated_at=generated_at)
     status = str(carried.get("status", "watching") or "watching")
     if status not in TERMINAL_STATUSES:
+        state = carried.get("execution_state", {})
+        state_name = str(state.get("state", "") or "") if isinstance(state, dict) else ""
+        if state_name != "blocked":
+            carried["status_reason"] = "No fresh matching signal appeared in this run."
+            carried["next_action"] = _next_action_for_status("watching")
         status = "watching"
         carried["status"] = status
-        carried["status_reason"] = "No fresh matching signal appeared in this run."
-        carried["next_action"] = _next_action_for_status(status)
     carried["updated_at"] = generated_at
     return carried, {
         "proposal_id": str(carried.get("proposal_id", "") or ""),
@@ -615,6 +1483,9 @@ def build_architect_queue(
         proposals.append(proposal)
         decisions.append(decision)
 
+    proposals = _collapse_duplicate_proposals(proposals, decisions, generated_at=generated_at)
+    _attach_execution_packets(proposals, generated_at=generated_at)
+
     proposals = sorted(
         proposals,
         key=lambda item: (
@@ -631,8 +1502,11 @@ def build_architect_queue(
         "generated_at": generated_at,
         "updated_at": generated_at,
         "proposal_count": len(proposals),
+        "execution_summary": _execution_summary(proposals),
+        "sandbox_ready_packets": _sandbox_ready_packets(proposals),
         "proposals": proposals,
     }
+    _attach_selected_sandbox_trial(queue)
     signals = {
         "schema_version": ARCHITECT_SCHEMA_VERSION,
         "kind": "local-kb-architect-signals",
@@ -748,6 +1622,7 @@ def run_architect_maintenance(
     resolved_run_id = sanitize_run_id(run_id or f"kb-architect-{utc_now_compact()}")
     run_dir = architect_run_dir(repo_root, resolved_run_id)
     run_dir.mkdir(parents=True, exist_ok=True)
+    lane_lock = acquire_lane_lock(repo_root, "kb-architect", run_id=resolved_run_id)
     write_lane_status(repo_root, "kb-architect", "running", run_id=resolved_run_id)
 
     execution_plan = build_initial_execution_plan(repo_root, run_id=resolved_run_id, generated_at=generated_at)
@@ -800,6 +1675,8 @@ def run_architect_maintenance(
                 "report_path": relative_repo_path(repo_root, run_dir / REPORT_FILENAME),
             },
         }
+        result["lane_lock"] = lane_lock
+        result["lock_release"] = release_lane_lock(repo_root, "kb-architect", run_id=resolved_run_id)
         write_json_file(run_dir / REPORT_FILENAME, result)
         return result
 
@@ -834,9 +1711,22 @@ def run_architect_maintenance(
         generated_at=generated_at,
         actions=actions,
     )
+    selected_sandbox_trial = dict(queue.get("selected_sandbox_trial", {}))
     write_json_file(run_dir / SIGNALS_FILENAME, signals)
     write_json_file(run_dir / PROPOSALS_FILENAME, queue)
     write_json_file(run_dir / DECISIONS_FILENAME, decisions)
+    write_json_file(
+        run_dir / TRIAL_SELECTION_FILENAME,
+        selected_sandbox_trial
+        if selected_sandbox_trial
+        else {
+            "schema_version": ARCHITECT_SCHEMA_VERSION,
+            "kind": "local-kb-architect-sandbox-trial-selection",
+            "run_id": resolved_run_id,
+            "selected": False,
+            "reason": "No sandbox-ready ready-for-apply packet is available in this run.",
+        },
+    )
     write_json_file(architect_queue_path(repo_root), queue)
     _set_checkpoint_status(
         execution_plan,
@@ -862,6 +1752,16 @@ def run_architect_maintenance(
         "completed",
         f"Wrote {relative_repo_path(repo_root, architect_queue_path(repo_root))}.",
     )
+    _set_checkpoint_status(
+        execution_plan,
+        "sandbox-trial-selection",
+        "completed" if selected_sandbox_trial else "skipped",
+        (
+            f"Selected {selected_sandbox_trial.get('packet_id')} for one sandbox trial."
+            if selected_sandbox_trial
+            else "No sandbox-ready ready-for-apply packet was available."
+        ),
+    )
 
     observation_event_id = _record_architect_observation(
         repo_root,
@@ -880,6 +1780,8 @@ def run_architect_maintenance(
     execution_plan["completed_at"] = utc_now_iso()
     write_json_file(run_dir / EXECUTION_PLAN_FILENAME, execution_plan)
 
+    execution_summary = queue.get("execution_summary", {})
+    sandbox_ready_packets = list(queue.get("sandbox_ready_packets", []))
     result = {
         "schema_version": ARCHITECT_SCHEMA_VERSION,
         "kind": ARCHITECT_REPORT_KIND,
@@ -898,6 +1800,14 @@ def run_architect_maintenance(
         "status_counts": _status_counts(queue.get("proposals", [])),
         "ready_for_apply_count": _status_counts(queue.get("proposals", [])).get("ready-for-apply", 0),
         "ready_for_patch_count": _status_counts(queue.get("proposals", [])).get("ready-for-patch", 0),
+        "execution_summary": execution_summary,
+        "agent_ready_count": int(execution_summary.get("agent_ready_count", 0) or 0),
+        "patch_plan_count": int(execution_summary.get("patch_plan_count", 0) or 0),
+        "sandbox_ready_count": int(execution_summary.get("sandbox_ready_count", 0) or 0),
+        "sandbox_ready_packets": sandbox_ready_packets,
+        "selected_sandbox_trial": selected_sandbox_trial,
+        "blocked_execution_count": int(execution_summary.get("blocked_count", 0) or 0),
+        "applied_execution_count": int(execution_summary.get("applied_count", 0) or 0),
         "skipped_non_mechanism_action_count": signals["skipped_non_mechanism_action_count"],
         "artifact_paths": {
             "run_dir": relative_repo_path(repo_root, run_dir),
@@ -906,6 +1816,7 @@ def run_architect_maintenance(
             "signals_path": relative_repo_path(repo_root, run_dir / SIGNALS_FILENAME),
             "proposals_path": relative_repo_path(repo_root, run_dir / PROPOSALS_FILENAME),
             "decisions_path": relative_repo_path(repo_root, run_dir / DECISIONS_FILENAME),
+            "trial_selection_path": relative_repo_path(repo_root, run_dir / TRIAL_SELECTION_FILENAME),
             "execution_plan_path": relative_repo_path(repo_root, run_dir / EXECUTION_PLAN_FILENAME),
             "queue_path": relative_repo_path(repo_root, architect_queue_path(repo_root)),
             "report_path": relative_repo_path(repo_root, run_dir / REPORT_FILENAME),
@@ -914,4 +1825,6 @@ def run_architect_maintenance(
     }
     write_json_file(run_dir / REPORT_FILENAME, result)
     write_lane_status(repo_root, "kb-architect", "completed", run_id=resolved_run_id)
+    result["lock_release"] = release_lane_lock(repo_root, "kb-architect", run_id=resolved_run_id)
+    write_json_file(run_dir / REPORT_FILENAME, result)
     return result

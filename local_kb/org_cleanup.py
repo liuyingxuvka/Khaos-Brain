@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 from typing import Any
 
@@ -11,8 +12,28 @@ from local_kb.store import append_jsonl, load_yaml_file, write_yaml_file
 
 
 ORG_CLEANUP_AUDIT_RELATIVE_PATH = Path("maintenance") / "cleanup_audit.jsonl"
-CARD_ROOTS = ("kb/trusted", "kb/candidates", "kb/imports")
-LOW_RISK_APPLY_ACTIONS = {"confidence-adjust", "status-adjust", "mark-duplicate"}
+CARD_ROOTS = ("kb/main", "kb/imports", "kb/trusted", "kb/candidates")
+LOW_RISK_APPLY_ACTIONS = {"confidence-adjust", "status-adjust", "mark-duplicate", "accept-import", "promote-card"}
+ORGANIZATION_EXCHANGE_SLEEP_MODEL = {
+    "role": "organization-exchange-sleep",
+    "description": (
+        "Organization maintenance treats the shared repository as an exchange layer, "
+        "not a central truth layer. Trusted, candidate, and imported cards are all "
+        "maintainable card surfaces when evidence supports keep, reject, watch, merge, "
+        "split, rewrite, promote, demote, deprecate, or cross-link decisions."
+    ),
+    "local_final_adoption": True,
+    "trusted_card_content_maintenance": "in-scope",
+    "extra_boundaries": ["privacy", "skill-safety"],
+}
+TEST_ARTIFACT_PHRASES = (
+    "smoke test",
+    "demo candidate",
+    "demo registry",
+    "dummy",
+    "test fixture",
+    "for testing",
+)
 
 
 def _relative(path: Path, root: Path) -> str:
@@ -54,7 +75,7 @@ def _status(payload: dict[str, Any]) -> str:
 
 
 def _risk_for_path(path: str) -> str:
-    if path.startswith("kb/trusted/"):
+    if path.startswith("kb/main/") or path.startswith("kb/trusted/"):
         return "high"
     if path.startswith("kb/imports/"):
         return "low"
@@ -74,6 +95,26 @@ def _action(action_type: str, target_path: str, **payload: Any) -> dict[str, Any
         "target_path": target_path,
         **payload,
     }
+
+
+def _safe_segment(value: Any, *, fallback: str = "card") -> str:
+    text = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(value or "").strip()).strip(".-")
+    return text[:120] or fallback
+
+
+def _promotion_target_path(record: dict[str, Any], org_root: Path) -> str:
+    payload = record["payload"] if isinstance(record.get("payload"), dict) else {}
+    route = payload.get("domain_path") if isinstance(payload.get("domain_path"), list) else []
+    route_segments = [_safe_segment(item, fallback="route") for item in route if str(item or "").strip()]
+    entry_id = _safe_segment(record.get("entry_id") or Path(str(record.get("relative_path") or "")).stem)
+    target = Path("kb") / "main"
+    for segment in route_segments[:6]:
+        target /= segment
+    target /= f"{entry_id}.yaml"
+    if (org_root / target).exists():
+        digest = hashlib.sha256(str(record.get("content_hash") or "").encode("utf-8")).hexdigest()[:8]
+        target = target.with_name(f"{target.stem}-{digest}{target.suffix}")
+    return target.as_posix()
 
 
 def _title_tokens(payload: dict[str, Any]) -> set[str]:
@@ -108,9 +149,28 @@ def _collect_card_records(org_root: Path) -> list[dict[str, Any]]:
     return records
 
 
+def _looks_like_test_artifact(record: dict[str, Any]) -> bool:
+    payload = record["payload"] if isinstance(record.get("payload"), dict) else {}
+    fields: list[str] = [
+        str(record.get("entry_id") or ""),
+        str(record.get("relative_path") or ""),
+        str(payload.get("title") or ""),
+    ]
+    for key in ("tags", "trigger_keywords"):
+        value = payload.get(key)
+        if isinstance(value, list):
+            fields.extend(str(item) for item in value)
+        else:
+            fields.append(str(value or ""))
+    for key in ("description", "comment", "rationale"):
+        fields.append(str(payload.get(key) or ""))
+    text = normalize_text(" ".join(fields)).lower()
+    return any(phrase in text for phrase in TEST_ARTIFACT_PHRASES)
+
+
 def _preferred_duplicate_record(records: list[dict[str, Any]]) -> dict[str, Any]:
     status_rank = {"trusted": 0, "approved": 0, "candidate": 1, "deprecated": 2, "rejected": 3}
-    path_rank = {"kb/trusted/": 0, "kb/candidates/": 1, "kb/imports/": 2}
+    path_rank = {"kb/main/": 0, "kb/trusted/": 1, "kb/imports/": 2, "kb/candidates/": 3}
 
     def sort_key(record: dict[str, Any]) -> tuple[int, int, float, str]:
         relative_path = str(record["relative_path"])
@@ -208,7 +268,7 @@ def build_organization_cleanup_proposal(
         for duplicate in duplicates:
             if duplicate is canonical:
                 continue
-            proposed_status = "deprecated" if duplicate["relative_path"].startswith("kb/trusted/") else "rejected"
+            proposed_status = "deprecated" if duplicate["relative_path"].startswith(("kb/main/", "kb/trusted/")) else "rejected"
             actions.append(
                 _action(
                     "mark-duplicate",
@@ -244,7 +304,22 @@ def build_organization_cleanup_proposal(
                 )
             )
             continue
-        if status == "candidate" and confidence <= weak_confidence_threshold:
+        if status == "candidate" and _looks_like_test_artifact(record):
+            actions.append(
+                _action(
+                    "status-adjust",
+                    path,
+                    entry_id=record["entry_id"],
+                    current_status=status,
+                    proposed_status="rejected",
+                    current_confidence=confidence,
+                    proposed_confidence=min(confidence, 0.25),
+                    risk=record["risk"],
+                    apply_supported=True,
+                    reason="Candidate appears to be a smoke/demo/test fixture artifact rather than reusable organization knowledge.",
+                )
+            )
+        elif status == "candidate" and confidence <= weak_confidence_threshold:
             actions.append(
                 _action(
                     "status-adjust",
@@ -259,7 +334,23 @@ def build_organization_cleanup_proposal(
                     reason="Candidate confidence is below the weak-card threshold.",
                 )
             )
-        elif status == "candidate" and confidence >= strong_candidate_threshold:
+        elif status == "candidate" and path.startswith("kb/imports/") and confidence < strong_candidate_threshold:
+            actions.append(
+                _action(
+                    "accept-import",
+                    path,
+                    entry_id=record["entry_id"],
+                    current_status=status,
+                    proposed_status="candidate",
+                    current_confidence=confidence,
+                    proposed_confidence=confidence,
+                    proposed_path=_promotion_target_path(record, org_root),
+                    risk="medium",
+                    apply_supported=True,
+                    reason="Imported candidate is usable organization exchange material and should enter main for future maintenance.",
+                )
+            )
+        elif status == "candidate" and path.startswith("kb/main/") and confidence >= strong_candidate_threshold:
             actions.append(
                 _action(
                     "status-adjust",
@@ -269,9 +360,25 @@ def build_organization_cleanup_proposal(
                     proposed_status="trusted",
                     current_confidence=confidence,
                     proposed_confidence=min(0.95, confidence + 0.03),
+                    risk=record["risk"],
+                    apply_supported=True,
+                    reason="High-confidence main candidate is eligible for reviewed organization trust upgrade.",
+                )
+            )
+        elif status == "candidate" and confidence >= strong_candidate_threshold:
+            actions.append(
+                _action(
+                    "promote-card",
+                    path,
+                    entry_id=record["entry_id"],
+                    current_status=status,
+                    proposed_status="trusted",
+                    current_confidence=confidence,
+                    proposed_confidence=min(0.95, confidence + 0.03),
+                    proposed_path=_promotion_target_path(record, org_root),
                     risk="medium",
-                    apply_supported=False,
-                    reason="High-confidence candidate should be reviewed for promotion.",
+                    apply_supported=True,
+                    reason="High-confidence candidate is eligible for reviewed organization promotion.",
                 )
             )
         elif status == "trusted" and confidence < 0.45:
@@ -322,6 +429,7 @@ def build_organization_cleanup_proposal(
         "ok": True,
         "organization_id": organization_id,
         "generated_at": utc_now_iso(),
+        "maintenance_model": ORGANIZATION_EXCHANGE_SLEEP_MODEL,
         "card_count": len(records),
         "actions": actions,
         "counts": counts,
@@ -353,12 +461,15 @@ def apply_organization_cleanup_proposal(
     proposal: dict[str, Any],
     *,
     allow_actions: set[str] | None = None,
+    allow_action_ids: set[str] | None = None,
     allow_trusted: bool = False,
     allow_delete: bool = False,
+    allow_promote: bool = False,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     org_root = Path(org_root)
     allowed = allow_actions or LOW_RISK_APPLY_ACTIONS
+    allowed_ids = {str(item) for item in allow_action_ids} if allow_action_ids is not None else None
     applied: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     errors: list[str] = []
@@ -371,6 +482,9 @@ def apply_organization_cleanup_proposal(
         action_id = str(action.get("action_id") or "").strip()
         target_path = str(action.get("target_path") or "").strip()
         target = _safe_target_path(org_root, target_path)
+        if allowed_ids is not None and action_id not in allowed_ids:
+            skipped.append({"action_id": action_id, "reason": "action was not selected by organization Sleep", "action_type": action_type})
+            continue
         if action.get("apply_supported") is False:
             skipped.append({"action_id": action_id, "reason": "proposal action is not implemented for apply", "action_type": action_type})
             continue
@@ -382,6 +496,60 @@ def apply_organization_cleanup_proposal(
             continue
         if target_path.startswith("kb/trusted/") and not allow_trusted:
             skipped.append({"action_id": action_id, "reason": "trusted card apply requires allow_trusted", "target_path": target_path})
+            continue
+        if target_path.startswith("kb/main/") and not allow_trusted:
+            skipped.append({"action_id": action_id, "reason": "main card apply requires allow_trusted", "target_path": target_path})
+            continue
+        if action_type in {"accept-import", "promote-card"}:
+            if not allow_promote:
+                skipped.append({"action_id": action_id, "reason": "main transfer requires allow_promote", "target_path": target_path})
+                continue
+            proposed_path = str(action.get("proposed_path") or "").strip()
+            promoted_target = _safe_target_path(org_root, proposed_path)
+            if promoted_target is None or not proposed_path.startswith("kb/main/"):
+                skipped.append({"action_id": action_id, "reason": "main target path is missing or unsafe", "target_path": target_path})
+                continue
+            if promoted_target.exists():
+                skipped.append({"action_id": action_id, "reason": "promotion target already exists", "target_path": proposed_path})
+                continue
+            payload = load_yaml_file(target)
+            previous_status = str(payload.get("status") or "")
+            previous_confidence = payload.get("confidence")
+            payload["status"] = str(action.get("proposed_status") or ("trusted" if action_type == "promote-card" else "candidate"))
+            if "proposed_confidence" in action:
+                payload["confidence"] = max(0.0, min(1.0, safe_float(action.get("proposed_confidence"), _confidence(payload))))
+            cleanup = payload.get("organization_cleanup") if isinstance(payload.get("organization_cleanup"), dict) else {}
+            cleanup.update(
+                {
+                    "last_action_id": action_id,
+                    "last_action_type": action_type,
+                    "last_reason": str(action.get("reason") or ""),
+                    "promoted_from": target_path,
+                    "moved_to_main_from": target_path,
+                    "updated_at": now,
+                }
+            )
+            payload["organization_cleanup"] = cleanup
+            if not dry_run:
+                promoted_target.parent.mkdir(parents=True, exist_ok=True)
+                write_yaml_file(promoted_target, payload)
+                target.unlink()
+                _append_audit(
+                    org_root,
+                    {
+                        "event_type": "organization-cleanup-applied",
+                        "action_id": action_id,
+                        "action_type": action_type,
+                        "target_path": target_path,
+                        "updated_path": proposed_path,
+                        "previous_status": previous_status,
+                        "updated_status": payload.get("status"),
+                        "previous_confidence": previous_confidence,
+                        "updated_confidence": payload.get("confidence"),
+                        "created_at": now,
+                    },
+                )
+            applied.append({"action_id": action_id, "action_type": action_type, "target_path": target_path, "updated_path": proposed_path})
             continue
         if action_type == "delete-card":
             if not allow_delete:

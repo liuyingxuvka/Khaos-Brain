@@ -55,6 +55,41 @@ class OrganizationSourceTests(unittest.TestCase):
         self.assertEqual(result["candidate_count"], 1)
         self.assertEqual(result["skill_count"], 1)
 
+    def test_validate_organization_repo_accepts_main_imports_layout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_yaml_file(
+                root / "khaos_org_kb.yaml",
+                {
+                    "kind": "khaos-organization-kb",
+                    "schema_version": 1,
+                    "organization_id": "sandbox",
+                    "kb": {
+                        "main_path": "kb/main",
+                        "imports_path": "kb/imports",
+                    },
+                    "skills": {
+                        "registry_path": "skills/registry.yaml",
+                        "candidates_path": "skills/candidates",
+                    },
+                },
+            )
+            write_yaml_file(root / "kb" / "main" / "trusted.yaml", {"id": "model", "status": "trusted"})
+            write_yaml_file(root / "kb" / "main" / "candidate.yaml", {"id": "candidate", "status": "candidate"})
+            write_yaml_file(root / "kb" / "main" / "rejected.yaml", {"id": "rejected", "status": "rejected"})
+            (root / "kb" / "imports").mkdir(parents=True)
+            write_yaml_file(root / "skills" / "registry.yaml", {"skills": []})
+            (root / "skills" / "candidates").mkdir(parents=True)
+
+            result = validate_organization_repo(root)
+
+        self.assertTrue(result["ok"], result["errors"])
+        self.assertEqual(result["layout"], "main-imports")
+        self.assertEqual(result["main_count"], 3)
+        self.assertEqual(result["main_active_count"], 2)
+        self.assertEqual(result["trusted_count"], 1)
+        self.assertEqual(result["candidate_count"], 1)
+
     def test_validate_organization_repo_rejects_missing_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             result = validate_organization_repo(Path(tmp))

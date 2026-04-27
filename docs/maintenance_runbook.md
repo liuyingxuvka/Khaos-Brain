@@ -2,13 +2,14 @@
 
 This runbook is for the independent `kb-sleeper` maintenance pass. It is operational on purpose: use the current file-based tools, keep every change logged, emit snapshots before risky steps, and prefer reversible updates.
 
-`PROJECT_SPEC.md` remains the canonical source for repository rules and thresholds. This runbook describes how to operate the current tooling safely. If the runbook and the spec disagree, follow the spec and then simplify the runbook.
+`PROJECT_SPEC.md` remains the canonical source for repository rules and thresholds. `docs/maintenance_agent_worldview.md` defines the shared Sleep/Dream/Architect judgment model. This runbook describes how to operate the current tooling safely. If the runbook and the spec disagree, follow the spec and then simplify the runbook.
 
 The repository installer is expected to provision a repo-managed `KB Sleep` cron automation under `$CODEX_HOME/automations/`. Re-running `python scripts/install_codex_kb.py --json` on another machine should refresh that schedule automatically. The automation spec should keep model selection policy-based: strongest available model plus deepest supported reasoning, resolved during install rather than pinned to a specific model version.
 
 ## Rule Discipline
 
 - Keep the mathematical rules simple and explicit. Prefer additive scores, counts, and fixed thresholds over adaptive or opaque heuristics.
+- Read the shared maintenance-agent worldview before judging large maintenance output. Treat incomplete role framing as a prompt/mechanism problem to fix, not as proof that the model cannot reason.
 - Start with a visible sleep execution plan. The maintenance agent should write a concrete checkpoint plan before the first stateful maintenance command and keep each checkpoint marked pending, in progress, completed, skipped with reason, or blocked with a concrete blocker.
 - Do not stop after a short proposal or one successful command when a natural next checkpoint remains. Continue through all safe maintenance checkpoints before finalizing.
 - If a command exposes a low-risk issue that current tooling supports, attempt the supported repair and rerun the relevant validation. If it is outside the current apply boundary, record it as proposal-only or as a maintenance observation and keep moving through remaining safe checkpoints.
@@ -69,6 +70,7 @@ The repository installer is expected to provision a repo-managed `KB Sleep` cron
    - after any candidate/card creation or review pass, inspect route quality; prefer functional, reusable `domain_path` routes and keep project/repository/product names as provenance or tags unless the card is truly project-specific
 8. Inspect per-action proposal stubs with `kb_proposals.py`.
    - When a grouped route action includes explicit contrastive evidence, prefer candidate scaffolds whose main `predict.expected_result` reflects the stronger revised path and whose `predict.alternatives` preserves the weaker earlier branch.
+   - When a `review-candidate` or `review-entry-update` stub includes `dream_validation_summary`, inspect the cited sandbox path, evidence grade, validation status, and Sleep handoff. Use it as a reason to consider semantic review of that card, not as automatic promotion.
    - When a route such as `codex/workflow/skills` or `codex/skill-use/<skill-name>` emits a `review-code-change` action, treat it as an Architect proposal signal only; do not edit the Skill during the Sleep pass.
 9. When a semantic card change is justified, author a local semantic review plan. The plan must cite current action `evidence_event_ids`, set `apply: true`, include `rationale`, `risk`, `utility_assessment`, `expected_retrieval_effect`, and `rollback_note`, and respect the trusted-card budget of 3. Use `utility_assessment.judgment: useful` for `keep`, `rewrite`, `adjust-confidence`, or `promote`; use a non-useful judgment such as `low-utility`, `obsolete`, `misleading`, `unclear`, or `insufficient-evidence` for `demote` or `deprecate`.
 10. If a weak observation should be ignored, a candidate should be rejected, a confidence review should be logged, or a split review should be closed without rewriting the trusted card yet, append that decision with `kb_maintenance.py`.

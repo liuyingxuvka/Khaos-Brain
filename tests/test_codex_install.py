@@ -132,6 +132,8 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn("search-style calls without the explicit `search` subcommand", skill_text)
             self.assertIn("Skill and plugin usage lessons count as reusable signals", skill_text)
             self.assertIn("Subagent and delegation usage lessons count as reusable signals", skill_text)
+            self.assertIn("phase-change KB checkpoints", skill_text)
+            self.assertIn("repeated same-type subtask", skill_text)
 
             openai_text = (
                 codex_home / "skills" / "predictive-kb-preflight" / "agents" / "openai.yaml"
@@ -141,6 +143,7 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn("required default preflight", openai_text)
             self.assertIn("skill/plugin usage lesson", openai_text)
             self.assertIn("subagent/delegation usage lesson", openai_text)
+            self.assertIn("phase-change KB checkpoints", openai_text)
 
             global_agents_text = global_agents_path(codex_home).read_text(encoding="utf-8")
             self.assertIn("BEGIN MANAGED PREDICTIVE KB DEFAULTS", global_agents_text)
@@ -148,6 +151,7 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn("explicit KB postflight check", global_agents_text)
             self.assertIn("skill/plugin usage", global_agents_text)
             self.assertIn("subagent/delegation usage", global_agents_text)
+            self.assertIn("phase-change KB checkpoints", global_agents_text)
 
             sleep_skill_text = (codex_home / "skills" / "kb-sleep-maintenance" / "SKILL.md").read_text(
                 encoding="utf-8"
@@ -156,11 +160,13 @@ class CodexInstallTests(unittest.TestCase):
                 codex_home / "skills" / "kb-sleep-maintenance" / "agents" / "openai.yaml"
             ).read_text(encoding="utf-8")
             self.assertIn("name: kb-sleep-maintenance", sleep_skill_text)
+            self.assertIn("docs/maintenance_agent_worldview.md", sleep_skill_text)
             self.assertIn("MAINTENANCE_PROMPT.md", sleep_skill_text)
             self.assertIn("mandatory similar-card merge checkpoint", sleep_skill_text)
             self.assertIn("mandatory overloaded-card split checkpoint", sleep_skill_text)
             self.assertIn("organization Skill bundle consolidation checkpoint", sleep_skill_text)
             self.assertIn("Do not skip the merge, split, or Skill bundle consolidation checkpoint itself", sleep_skill_text)
+            self.assertIn("mechanical apply eligibility", sleep_skill_text)
             self.assertIn("allow_implicit_invocation: false", sleep_skill_openai)
             self.assertIn("$kb-sleep-maintenance", sleep_skill_openai)
 
@@ -171,7 +177,9 @@ class CodexInstallTests(unittest.TestCase):
                 codex_home / "skills" / "kb-dream-pass" / "agents" / "openai.yaml"
             ).read_text(encoding="utf-8")
             self.assertIn("name: kb-dream-pass", dream_skill_text)
+            self.assertIn("docs/maintenance_agent_worldview.md", dream_skill_text)
             self.assertIn("DREAM_PROMPT.md", dream_skill_text)
+            self.assertIn("sandbox experiment artifacts", dream_skill_text)
             self.assertIn("allow_implicit_invocation: false", dream_skill_openai)
             self.assertIn("$kb-dream-pass", dream_skill_openai)
 
@@ -182,7 +190,9 @@ class CodexInstallTests(unittest.TestCase):
                 codex_home / "skills" / "kb-architect-pass" / "agents" / "openai.yaml"
             ).read_text(encoding="utf-8")
             self.assertIn("name: kb-architect-pass", architect_skill_text)
+            self.assertIn("docs/maintenance_agent_worldview.md", architect_skill_text)
             self.assertIn("ARCHITECT_PROMPT.md", architect_skill_text)
+            self.assertIn("sandbox_apply.sandbox_ready=true", architect_skill_text)
             self.assertIn("allow_implicit_invocation: false", architect_skill_openai)
             self.assertIn("$kb-architect-pass", architect_skill_openai)
 
@@ -242,6 +252,8 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn(f'reasoning_effort = "{automation_runtime["reasoning_effort"]}"', sleep_toml)
             self.assertIn('model_policy = "strongest-available"', sleep_toml)
             self.assertIn('reasoning_effort_policy = "deepest"', sleep_toml)
+            self.assertIn("docs/maintenance_agent_worldview.md", sleep_toml)
+            self.assertIn("shared maintenance-agent worldview", sleep_toml)
             self.assertIn("visible sleep execution plan", sleep_toml)
             self.assertIn("checkpoint statuses", sleep_toml)
             self.assertIn("every safe checkpoint", sleep_toml)
@@ -254,9 +266,13 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn("organization Skill bundle consolidation checkpoint", sleep_toml)
             self.assertIn("latest approved version by version_time", sleep_toml)
             self.assertIn("skip-with-reason decisions", sleep_toml)
+            self.assertIn("mechanical apply eligibility", sleep_toml)
+            self.assertIn("high-volume lanes proposal-only", sleep_toml)
             self.assertIn("sleep postflight check", sleep_toml)
             self.assertIn("structured maintenance observation", sleep_toml)
             self.assertIn("recursively consolidating", sleep_toml)
+            self.assertIn("selected action keys", sleep_toml)
+            self.assertIn("--action-key", sleep_toml)
             self.assertIn(str(repo_root).replace("\\", "\\\\"), sleep_toml)
 
             dream_toml = (codex_home / "automations" / "kb-dream" / "automation.toml").read_text(encoding="utf-8")
@@ -268,13 +284,24 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn(f'reasoning_effort = "{automation_runtime["reasoning_effort"]}"', dream_toml)
             self.assertIn('model_policy = "strongest-available"', dream_toml)
             self.assertIn('reasoning_effort_policy = "deepest"', dream_toml)
+            self.assertIn("docs/maintenance_agent_worldview.md", dream_toml)
+            self.assertIn("shared maintenance-agent worldview", dream_toml)
             self.assertIn("generated preflight", dream_toml)
             self.assertIn("preflight entries retrieved", dream_toml)
-            self.assertIn("exactly one executable experiment", dream_toml)
+            self.assertIn("bounded route-deduped batch", dream_toml)
+            self.assertIn("experiments executed in order", dream_toml)
+            self.assertIn("report a no-op", dream_toml)
             self.assertIn("execution-plan checkpoint status", dream_toml)
             self.assertIn("safety tier and rollback plan", dream_toml)
+            self.assertIn("sandbox experiment artifacts", dream_toml)
+            self.assertIn("retrieval-ab sandbox paths", dream_toml)
+            self.assertIn("allowed writes", dream_toml)
+            self.assertIn("evidence grades", dream_toml)
+            self.assertIn("validation results", dream_toml)
+            self.assertIn("prior Dream report", dream_toml)
             self.assertIn("external-system experiments proposal-only", dream_toml)
-            self.assertIn("run-level Dream-process observation", dream_toml)
+            self.assertIn("Sleep handoff", dream_toml)
+            self.assertIn("Sleep/Architect handoff", dream_toml)
 
             architect_toml = (
                 codex_home / "automations" / "kb-architect" / "automation.toml"
@@ -287,6 +314,8 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn(f'reasoning_effort = "{automation_runtime["reasoning_effort"]}"', architect_toml)
             self.assertIn('model_policy = "strongest-available"', architect_toml)
             self.assertIn('reasoning_effort_policy = "deepest"', architect_toml)
+            self.assertIn("docs/maintenance_agent_worldview.md", architect_toml)
+            self.assertIn("shared maintenance-agent worldview", architect_toml)
             self.assertIn("visible Architect execution plan", architect_toml)
             self.assertIn("checkpoint statuses", architect_toml)
             self.assertIn("Architect self-preflight", architect_toml)
@@ -300,6 +329,15 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn("long-observation items as watching", architect_toml)
             self.assertIn("KB operating mechanisms rather than card content", architect_toml)
             self.assertIn("do not rewrite trusted cards or promote candidates", architect_toml)
+            self.assertIn("execution packet is agent-ready", architect_toml)
+            self.assertIn("sandbox_apply.sandbox_ready=true", architect_toml)
+            self.assertIn("planned sandbox path", architect_toml)
+            self.assertIn("allowed/disallowed writes", architect_toml)
+            self.assertIn("merge/block decision fields", architect_toml)
+            self.assertIn("choose at most one", architect_toml)
+            self.assertIn("instead of repeatedly reporting", architect_toml)
+            self.assertIn("sandbox-ready packets", architect_toml)
+            self.assertIn("blocked execution states", architect_toml)
             self.assertIn("validation bundle", architect_toml)
             self.assertIn("postflight observation status", architect_toml)
 
@@ -319,10 +357,14 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn("desktop settings", org_contribute_toml)
             self.assertIn("validated organization repository", org_contribute_toml)
             self.assertIn("successful no-op", org_contribute_toml)
+            self.assertIn("sync the organization mirror first", org_contribute_toml)
             self.assertIn("KB preflight", org_contribute_toml)
             self.assertIn("content-hash-gated outbox", org_contribute_toml)
-            self.assertIn("prior download hashes", org_contribute_toml)
-            self.assertIn("prior upload hashes", org_contribute_toml)
+            self.assertIn("every exchanged hash", org_contribute_toml)
+            self.assertIn("downloaded, used, absorbed, exported, uploaded", org_contribute_toml)
+            self.assertIn("prepare an import branch", org_contribute_toml)
+            self.assertIn("push eligible import proposals automatically", org_contribute_toml)
+            self.assertIn("org-kb:auto-merge", org_contribute_toml)
             self.assertIn("card-bound Skill bundles", org_contribute_toml)
             self.assertIn("bundle_id", org_contribute_toml)
             self.assertIn("local latest version for that bundle", org_contribute_toml)
@@ -344,6 +386,8 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn(f'reasoning_effort = "{automation_runtime["reasoning_effort"]}"', org_maintenance_toml)
             self.assertIn("desktop settings", org_maintenance_toml)
             self.assertIn("organization maintenance participation", org_maintenance_toml)
+            self.assertIn("shared exchange layer", org_maintenance_toml)
+            self.assertIn("same editorial posture as local Sleep", org_maintenance_toml)
             self.assertIn("successful no-op", org_maintenance_toml)
             self.assertIn("KB preflight", org_maintenance_toml)
             self.assertIn("organization candidate intake checkpoint", org_maintenance_toml)
@@ -353,6 +397,8 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn("candidate decision checkpoint", org_maintenance_toml)
             self.assertIn("Skill safety checkpoint", org_maintenance_toml)
             self.assertIn("Skill bundle version checkpoint", org_maintenance_toml)
+            self.assertIn("decision-apply checkpoint", org_maintenance_toml)
+            self.assertIn("post-apply organization check", org_maintenance_toml)
             self.assertIn("GitHub merge-readiness checkpoint", org_maintenance_toml)
             self.assertIn("organization-review", org_maintenance_toml)
             self.assertIn("Skill registry", org_maintenance_toml)
@@ -362,6 +408,11 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn("original-author updates", org_maintenance_toml)
             self.assertIn("latest approved version by version_time", org_maintenance_toml)
             self.assertIn("do not auto-install", org_maintenance_toml)
+            self.assertIn("organization Sleep decision set", org_maintenance_toml)
+            self.assertIn("organization-review as guidance rather than an apply gate", org_maintenance_toml)
+            self.assertIn("exact selected action ids", org_maintenance_toml)
+            self.assertIn("post-apply check result", org_maintenance_toml)
+            self.assertIn("maintenance branch, PR, push, and auto-merge-label result", org_maintenance_toml)
             self.assertIn("KB postflight", org_maintenance_toml)
 
             check = build_installation_check(repo_root=repo_root, codex_home=codex_home)
@@ -416,8 +467,10 @@ class CodexInstallTests(unittest.TestCase):
             self.assertTrue(checklist["global_skill_postflight"]["ok"])
             self.assertTrue(checklist["global_skill_skill_usage"]["ok"])
             self.assertTrue(checklist["global_skill_subagent_usage"]["ok"])
+            self.assertTrue(checklist["global_skill_phase_checkpoints"]["ok"])
             self.assertTrue(checklist["global_agents_skill_usage"]["ok"])
             self.assertTrue(checklist["global_agents_subagent_usage"]["ok"])
+            self.assertTrue(checklist["global_agents_phase_checkpoints"]["ok"])
 
     def test_organization_automation_times_are_stable_and_windowed(self) -> None:
         specs = {str(spec["id"]): spec for spec in REPO_AUTOMATION_SPECS}

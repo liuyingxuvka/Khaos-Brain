@@ -13,6 +13,7 @@ from local_kb.store import load_yaml_file
 ORG_KB_MANIFEST = "khaos_org_kb.yaml"
 ORG_KB_KIND = "khaos-organization-kb"
 SUPPORTED_SCHEMA_VERSION = 1
+ORG_MAIN_ACTIVE_STATUSES = {"trusted", "candidate"}
 
 
 def utc_timestamp() -> str:
@@ -225,13 +226,17 @@ def validate_organization_repo(repo_path: Path) -> dict[str, Any]:
     kb = manifest.get("kb") if isinstance(manifest.get("kb"), dict) else {}
     skills = manifest.get("skills") if isinstance(manifest.get("skills"), dict) else {}
 
+    main_path_text = _as_relative_path(kb.get("main_path") or "")
     trusted_path_text = _as_relative_path(kb.get("trusted_path") or "kb/trusted")
     candidates_path_text = _as_relative_path(kb.get("candidates_path") or "kb/candidates")
     imports_path_text = _as_relative_path(kb.get("imports_path") or "kb/imports")
     registry_path_text = _as_relative_path(skills.get("registry_path") or "skills/registry.yaml")
     skill_candidates_path_text = _as_relative_path(skills.get("candidates_path") or "skills/candidates")
 
-    required_dirs = {
+    if not main_path_text and (repo_path / "kb" / "main").exists():
+        main_path_text = "kb/main"
+
+    required_dirs = {"main_path": main_path_text} if main_path_text else {
         "trusted_path": trusted_path_text,
         "candidates_path": candidates_path_text,
     }
@@ -262,6 +267,29 @@ def validate_organization_repo(repo_path: Path) -> dict[str, Any]:
         else:
             errors.append(f"skills registry does not exist: {registry_path_text}")
 
+    main_count = 0
+    main_active_count = 0
+    trusted_count = 0
+    candidate_count = 0
+    if main_path_text and (repo_path / main_path_text).exists():
+        for card_path in (repo_path / main_path_text).rglob("*.yaml"):
+            main_count += 1
+            try:
+                card = load_yaml_file(card_path)
+            except Exception:
+                continue
+            status = str(card.get("status") or "").strip().lower()
+            if status in ORG_MAIN_ACTIVE_STATUSES:
+                main_active_count += 1
+            if status in {"trusted", "approved"}:
+                trusted_count += 1
+            elif status == "candidate":
+                candidate_count += 1
+    else:
+        trusted_count = len(list((repo_path / trusted_path_text).rglob("*.yaml"))) if trusted_path_text else 0
+        candidate_count = len(list((repo_path / candidates_path_text).rglob("*.yaml"))) if candidates_path_text else 0
+        main_active_count = trusted_count + candidate_count
+
     return {
         "ok": not errors,
         "errors": errors,
@@ -269,13 +297,17 @@ def validate_organization_repo(repo_path: Path) -> dict[str, Any]:
         "manifest_path": str(manifest_path),
         "organization_id": organization_id,
         "schema_version": manifest.get("schema_version"),
+        "layout": "main-imports" if main_path_text else "legacy-trusted-candidates",
+        "main_path": main_path_text,
         "trusted_path": trusted_path_text,
         "candidates_path": candidates_path_text,
         "imports_path": imports_path_text,
         "skills_registry_path": registry_path_text,
         "skill_candidates_path": skill_candidates_path_text,
-        "trusted_count": len(list((repo_path / trusted_path_text).rglob("*.yaml"))) if trusted_path_text else 0,
-        "candidate_count": len(list((repo_path / candidates_path_text).rglob("*.yaml"))) if candidates_path_text else 0,
+        "main_count": main_count,
+        "main_active_count": main_active_count,
+        "trusted_count": trusted_count,
+        "candidate_count": candidate_count,
         "skill_count": len(registry_skills),
         "commit": current_git_commit(repo_path),
     }

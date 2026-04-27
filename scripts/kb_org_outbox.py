@@ -29,11 +29,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run the settings-gated organization contribution automation entry point.",
     )
-    parser.add_argument("--prepare-branch", action="store_true")
+    parser.add_argument("--prepare-branch", dest="prepare_branch", action="store_true", default=True)
+    parser.add_argument("--no-prepare-branch", dest="prepare_branch", action="store_false")
     parser.add_argument("--contributor-id", default="")
     parser.add_argument("--branch-name", default="")
     parser.add_argument("--no-commit", action="store_true")
-    parser.add_argument("--push", action="store_true")
+    parser.add_argument("--push", dest="push", action="store_true", default=True)
+    parser.add_argument("--no-push", dest="push", action="store_false")
     parser.add_argument("--remote", default="origin")
     parser.add_argument("--base-branch", default="main")
     parser.add_argument("--no-postflight", action="store_true")

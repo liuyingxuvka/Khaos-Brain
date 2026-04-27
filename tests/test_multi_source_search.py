@@ -16,7 +16,7 @@ from local_kb.ui_data import (
 
 
 class MultiSourceSearchTests(unittest.TestCase):
-    def _write_card(self, path: Path, entry_id: str, title: str, route: list[str]) -> None:
+    def _write_card(self, path: Path, entry_id: str, title: str, route: list[str], *, status: str = "trusted") -> None:
         write_yaml_file(
             path,
             {
@@ -24,7 +24,7 @@ class MultiSourceSearchTests(unittest.TestCase):
                 "title": title,
                 "type": "model",
                 "scope": "public",
-                "status": "trusted",
+                "status": status,
                 "confidence": 0.9,
                 "domain_path": route,
                 "tags": ["shared", "organization"],
@@ -77,6 +77,49 @@ class MultiSourceSearchTests(unittest.TestCase):
 
         self.assertEqual(payload["results"][0]["id"], "org-card")
         self.assertEqual(payload["results"][0]["source_info"]["kind"], "organization")
+
+    def test_organization_reads_only_main_active_statuses_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            org = root / "org"
+            self._write_card(org / "kb" / "main" / "trusted.yaml", "trusted-card", "Organization trusted card", ["shared"])
+            self._write_card(
+                org / "kb" / "main" / "candidate.yaml",
+                "candidate-card",
+                "Organization candidate card",
+                ["shared"],
+                status="candidate",
+            )
+            rejected = {
+                "id": "rejected-card",
+                "title": "Organization rejected card",
+                "type": "model",
+                "scope": "public",
+                "status": "rejected",
+                "confidence": 0.1,
+                "domain_path": ["shared"],
+                "tags": ["shared"],
+                "trigger_keywords": ["shared"],
+                "if": {"notes": "Rejected organization material."},
+                "action": {"description": "Do not use."},
+                "predict": {"expected_result": "It is filtered."},
+                "use": {"guidance": "Filtered."},
+            }
+            write_yaml_file(org / "kb" / "main" / "rejected.yaml", rejected)
+            self._write_card(org / "kb" / "imports" / "import.yaml", "import-card", "Organization import card", ["shared"])
+
+            payload = build_search_payload(
+                root,
+                query="Organization",
+                route_hint="shared",
+                organization_sources=[{"path": str(org), "organization_id": "sandbox"}],
+            )
+            result_ids = {item["id"] for item in payload["results"]}
+
+        self.assertIn("trusted-card", result_ids)
+        self.assertIn("candidate-card", result_ids)
+        self.assertNotIn("rejected-card", result_ids)
+        self.assertNotIn("import-card", result_ids)
 
     def test_route_and_source_views_include_organization_sources_when_connected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

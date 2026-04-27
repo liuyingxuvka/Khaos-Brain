@@ -48,7 +48,7 @@ Validation should check for a minimal repository contract, such as:
 - organization KB manifest, for example `khaos_org_kb.yaml`;
 - supported schema version;
 - organization id;
-- readable `kb/trusted` or `kb/candidates` paths;
+- readable `kb/main` paths, with `kb/imports` kept as the incoming lane;
 - optional `skills/registry.yaml`.
 
 If validation fails, the UI should show the failure reason and keep the local
@@ -129,8 +129,8 @@ kind: khaos-organization-kb
 schema_version: 1
 organization_id: acme
 kb:
-  trusted_path: kb/trusted
-  candidates_path: kb/candidates
+  main_path: kb/main
+  imports_path: kb/imports
 skills:
   registry_path: skills/registry.yaml
 ```
@@ -505,7 +505,7 @@ organization_adoption:
   source_entry_id: org-release-checklist
   source_repo: https://github.com/acme/org-kb
   source_commit: abc1234
-  source_path: kb/trusted/release-checklist.yaml
+  source_path: kb/main/release-checklist.yaml
   source_exchange_hash: 6f4c...
   state: clean
   hit_count: 3
@@ -645,11 +645,12 @@ Participation model:
 - The local "participate in organization maintenance" switch schedules work; it
   does not grant merge authority.
 
-Machines that participate in organization maintenance should install a local
-organization-review Skill. That Skill teaches Codex how to audit other Skills,
-card dependencies, evidence quality, privacy boundaries, and install safety.
-Without that Skill, a machine can still submit candidates, but it should not run
-full organization maintenance reviews.
+Machines that participate in organization maintenance may use a local
+organization-review Skill as a judgment aid. That Skill teaches Codex how to
+audit other Skills, card dependencies, evidence quality, privacy boundaries,
+and install safety, but it is not an apply gate for ordinary organization
+Sleep-style card maintenance. Routine organization maintenance should select
+exact supported actions, apply them directly, and leave audit evidence.
 
 ## UI Information Architecture
 
@@ -797,8 +798,10 @@ before continuing.
 
 2. **Prepare the private GitHub sandbox**
    - Use one private repository as the organization KB sandbox.
-   - Add `khaos_org_kb.yaml`, `kb/trusted`, `kb/candidates`,
+   - Add `khaos_org_kb.yaml`, `kb/main`, `kb/imports`,
      `skills/registry.yaml`, `skills/candidates`, and policy docs.
+     Keep `.gitkeep` files in initially empty `kb/imports` and
+     `skills/candidates` directories so fresh clones validate.
    - Seed it with real shareable public/sanitized cards and demo Skill registry
      entries, never private preferences or raw local observations.
    - Checkpoint: a clean clone validates as a Khaos Brain organization KB.
@@ -820,7 +823,7 @@ before continuing.
 5. **Add source and provenance everywhere**
    - Treat old local cards as local by default.
    - Add source labels for local private/public/candidate and organization
-     trusted/candidate/Skill.
+     main-card status (`trusted` or `candidate`) plus Skill status.
    - Carry contributor, organization id, source repo, and source commit on
      organization cards.
    - Checkpoint: every search result and card detail can explain where the card
@@ -864,10 +867,11 @@ before continuing.
    - Checkpoint: the outbox is generated locally and writes nothing to GitHub.
 
 10. **Contribute candidates through GitHub branches or PRs**
-    - Convert outbox items into branch changes under `kb/candidates`,
-      `kb/imports`, or `skills/candidates`.
+    - Convert outbox items into branch changes under `kb/imports` or
+      `skills/candidates`.
     - Include provenance and a sanitization summary.
-    - Never write directly to `kb/trusted`.
+    - Never write directly to `kb/main` from contribution; organization
+      maintenance moves reviewed imports into `main`.
     - Checkpoint: one generated candidate can be pushed or prepared for the
       sandbox as a reviewable GitHub change.
 
@@ -1027,7 +1031,7 @@ Goal: make shared organization cards available locally without allowing local
 machines to mutate trusted shared data.
 
 - Clone or fetch the organization KB repo into the configured local mirror.
-- Read `kb/trusted`, `kb/candidates`, and Skill registry metadata from that
+- Read active `trusted` and `candidate` cards from `kb/main`, plus Skill registry metadata from that
   mirror.
 - Show sync status, last fetched commit, and last sync time.
 - Do not upload anything in this phase.
@@ -1113,8 +1117,8 @@ knowledge.
 - Support policy-approved automatic installation of approved, version-time
   pinned, hash-pinned Skill bundles.
 - Never silently install candidate or rejected Skills.
-- Add or install an organization-review Skill before allowing a machine to run
-  full organization maintenance reviews.
+- Use organization-review guidance when available, but do not require it before
+  ordinary organization Sleep-style card maintenance can run.
 
 Done when: a generated organization card can carry its Skill dependency, and a
 missing dependency can become a linked Skill candidate for bundle review.
@@ -1238,8 +1242,8 @@ Add organization-source tooling that can:
 
 - clone or fetch the configured GitHub repo into a local mirror;
 - read `khaos_org_kb.yaml`;
-- validate `kind`, `schema_version`, `organization_id`, `kb/trusted`,
-  `kb/candidates`, and optional `skills/registry.yaml`;
+- validate `kind`, `schema_version`, `organization_id`, `kb/main`,
+  `kb/imports`, and optional `skills/registry.yaml`;
 - record sync status, last fetched commit, and last sync time.
 
 GitHub identity discovery should happen only after this validation passes.
@@ -1377,11 +1381,13 @@ remote repository.
 
 Convert outbox items into GitHub contribution branches or forks.
 
-- Write only to `kb/candidates`, `kb/imports`, or `skills/candidates`.
+- Write contribution PRs only to `kb/imports` or `skills/candidates`.
 - Include provenance and sanitization summary.
 - Preserve links to local evidence ids.
 - Prepare or open a PR.
-- Never write directly to `kb/trusted`.
+- Never write directly to `kb/main` from contribution; organization
+  maintenance is the only automated path that moves reviewed cards into
+  `main`.
 
 Done when: one generated candidate can be pushed to the private sandbox as a PR
 against candidate/import paths.
@@ -1410,10 +1416,11 @@ Required checks for organization-maintenance pull requests:
 - Skill registry state check using only `candidate`, `approved`, and
   `rejected`;
 - approved Skill version and content-hash pinning check;
-- organization-review Skill requirement for full maintenance proposals.
+- organization-review guidance availability for full maintenance proposals.
 
-Done when: a labeled low-risk maintenance PR can merge automatically after all
-checks pass, while a PR that fails any required rule remains unmerged.
+Done when: a labeled low-risk import PR or reviewed maintenance PR can merge
+automatically after all checks pass, while a PR that fails any required rule
+remains unmerged.
 
 ### Step 13: Add Organization Sleep And Maintenance Workflows
 
@@ -1422,8 +1429,8 @@ automation switch, not a merge-permission switch.
 
 Organization maintenance workflows should support:
 
-- install or require the local organization-review Skill before full automated
-  review;
+- use local organization-review guidance when available before full automated
+  review, without blocking ordinary Sleep-style card maintenance;
 - review card-and-Skill bundles;
 - merge, split, reject, supersede, or deprecate;
 - compare local feedback against current organization card versions;
@@ -1435,9 +1442,11 @@ GitHub permissions and repository rules decide whether that work is merged.
 The local switch should not grant merge authority, but it should not block
 ordinary contributors from producing maintenance proposals.
 
-Done when: a machine with organization mode enabled and the organization-review
-Skill installed can generate a reviewable maintenance proposal for sandbox
-candidates without bypassing GitHub protected branch rules.
+Done when: a machine with organization mode enabled can run Sleep-style
+organization maintenance, apply exact selected actions with audit evidence, and
+produce a reviewable maintenance branch or PR without bypassing GitHub protected
+branch rules. Organization-review guidance improves judgment when present, but
+is not required for ordinary card cleanup.
 
 ### Step 14: Multi-Machine Rollout Test
 
@@ -1521,7 +1530,7 @@ Current local script entry points:
 python scripts\kb_org_outbox.py --repo-root . --organization-id <org-id> --dry-run
 python scripts\kb_org_maintainer.py --repo-root . --org-root <local-org-mirror>
 python scripts\kb_org_contribute.py --repo-root . --org-root <local-org-mirror> --organization-id <org-id> --contributor-id <github-or-machine-id>
-python scripts\kb_org_check.py --org-root <local-org-mirror> --changed-file kb/candidates/example.yaml --enforce-low-risk
+python scripts\kb_org_check.py --org-root <local-org-mirror> --changed-file kb/imports/example.yaml --enforce-low-risk
 python scripts\kb_org_install_skill.py --org-root <local-org-mirror> --skill-id <approved-skill-id> --allow-auto-policy
 python scripts\kb_org_install_github_automation.py --org-root <local-org-mirror>
 python scripts\kb_org_configure_github_repo.py --repo-url <github-org-kb-url> --use-git-credential

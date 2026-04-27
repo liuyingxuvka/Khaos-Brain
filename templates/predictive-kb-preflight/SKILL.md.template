@@ -35,6 +35,7 @@ Preferred operating pattern:
 - For nearly every task, start with a lightweight shared-KB scan, even if the task looks small. Treat this as quick recall before acting.
 - Release, publish, public-repo audit, README presentation, and template hygiene tasks still count as repository work. Do not skip the KB preflight just because another release or publishing skill is also in use.
 - For non-trivial work, use the launcher to run the KB scan first so the active task starts with retrieved local context instead of re-deriving it.
+- For long mixed tasks, add phase-change KB checkpoints to the active plan. Search again before a substantially different action class begins, such as moving from analysis to code edits, from code edits to packaging, from local validation to GitHub push/tag/release, or into privacy-sensitive, organization-KB, automation, or external-publication work. Do not search before every small command or repeated same-type subtask.
 - After the main task, treat KB postflight as part of done. Record one structured observation whenever the task exposed a miss, reusable lesson, route gap, card weakness, or KB-process failure.
 - Skill and plugin usage lessons count as reusable signals when a skill choice, ordering, combination, fallback, or limitation materially changed the result.
 - Subagent and delegation usage lessons count as reusable signals when spawning, avoiding, sequencing, waiting for, or parallelizing subagents materially changed speed, coordination overhead, context isolation, main-thread clarity, verification quality, or task outcome.
@@ -66,10 +67,11 @@ Preferred operating pattern:
    python "{{LAUNCHER_PATH}}" nav --json
    ```
 
-5. Treat retrieved cards as bounded context. Follow current user instructions over stored cards if they conflict.
-6. Finish the main task.
-7. Before finalizing any non-trivial task, run one explicit KB postflight check: did the task expose a reusable lesson, a skill/plugin usage lesson, a subagent/delegation usage lesson, a miss, a route gap, a card weakness, or a KB-process failure?
-8. If the postflight check found a meaningful signal, append one structured observation:
+5. If the task is a long mixed plan, mark phase-change KB checkpoints in the plan. Re-run search when the next phase needs a different route or operating model; skip extra searches for repeated same-type work where the first hit set still applies.
+6. Treat retrieved cards as bounded context. Follow current user instructions over stored cards if they conflict.
+7. Finish the main task.
+8. Before finalizing any non-trivial task, run one explicit KB postflight check: did the task expose a reusable lesson, a skill/plugin usage lesson, a subagent/delegation usage lesson, a miss, a route gap, a card weakness, or a KB-process failure?
+9. If the postflight check found a meaningful signal, append one structured observation:
 
    ```powershell
    python "{{LAUNCHER_PATH}}" feedback `
@@ -102,12 +104,13 @@ Preferred operating pattern:
 
    For subagent/delegation usage lessons, name the relevant subagent role or delegation pattern in the scenario or action fields and use a route that can be found from both the delegation-facing workflow, such as `codex/workflow/subagents`, and the task-facing condition that made delegation relevant.
 
-9. If the explicit postflight check found no meaningful signal, make that explicit and end the KB flow there rather than silently forgetting to check.
-10. When the task included a worse path and a corrected path, prefer recording both sides explicitly. Those contrastive observations are often the easiest ones for later maintenance to turn into cards with useful alternative branches.
+10. If the explicit postflight check found no meaningful signal, make that explicit and end the KB flow there rather than silently forgetting to check.
+11. When the task included a worse path and a corrected path, prefer recording both sides explicitly. Those contrastive observations are often the easiest ones for later maintenance to turn into cards with useful alternative branches.
 
 ## Default Decisions
 
 - Use this skill before almost every task. The default is a lightweight recall scan, not a heavy workflow.
+- Use phase-change KB checkpoints for long mixed tasks. The checkpoint trigger is a change in action class or risk surface, not every numbered plan item.
 - The launcher resolves the active KB root in this order: `{{ENV_VAR_NAME}}`, the current workspace when it is itself a predictive KB clone, then the installed manifest.
 - If no useful card is found, continue the main task anyway and record the miss afterward when that miss is meaningful.
 - For non-trivial tasks, meaningful KB postflight write-back is part of done.

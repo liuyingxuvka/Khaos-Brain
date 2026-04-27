@@ -17,7 +17,9 @@ except ImportError as exc:  # pragma: no cover
 
 
 DEFAULT_SCOPES = ("public", "private", "candidates")
-DEFAULT_ORGANIZATION_SCOPES = ("trusted", "candidates")
+DEFAULT_ORGANIZATION_SCOPES = ("main",)
+DEFAULT_ORGANIZATION_READ_STATUSES = ("trusted", "candidate")
+ORGANIZATION_MAIN_STATUSES = ("trusted", "candidate", "deprecated", "rejected")
 
 
 def local_source_scope(scope: str) -> str:
@@ -45,11 +47,18 @@ def build_local_entry_source(repo_root: Path, scope: str, path: Path) -> dict[st
     }
 
 
-def organization_source_scope(scope: str) -> str:
+def organization_source_scope(scope: str, status: str = "") -> str:
+    normalized_status = str(status or "").strip().lower()
+    if normalized_status in {"trusted", "approved"}:
+        return "trusted"
+    if normalized_status in {"candidate", "deprecated", "rejected"}:
+        return normalized_status
     if scope == "candidates":
         return "candidate"
     if scope == "trusted":
         return "trusted"
+    if scope == "imports":
+        return "candidate"
     return "unknown"
 
 
@@ -62,7 +71,11 @@ def build_organization_entry_source(
     source_repo: str = "",
     source_commit: str = "",
 ) -> dict[str, Any]:
-    source_scope = organization_source_scope(scope)
+    try:
+        data = load_yaml_file(path)
+    except Exception:
+        data = {}
+    source_scope = organization_source_scope(scope, str(data.get("status") or ""))
     return {
         "kind": "organization",
         "source_id": organization_id,
@@ -76,6 +89,28 @@ def build_organization_entry_source(
         "contribution_eligible": source_scope == "candidate",
         "path": os.path.relpath(path, org_root),
     }
+
+
+def _organization_scope_targets(org_root: Path, scopes: Iterable[str]) -> list[tuple[str, Path]]:
+    kb_root = Path(org_root) / "kb"
+    targets: list[tuple[str, Path]] = []
+    seen: set[Path] = set()
+    for scope in tuple(scopes):
+        if scope == "main":
+            main = kb_root / "main"
+            if main.exists():
+                candidates = [("main", main)]
+            else:
+                candidates = [("trusted", kb_root / "trusted"), ("candidates", kb_root / "candidates")]
+        else:
+            candidates = [(scope, kb_root / scope)]
+        for resolved_scope, target in candidates:
+            normalized = target.resolve() if target.exists() else target
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            targets.append((resolved_scope, target))
+    return targets
 
 
 def resolve_repo_root(value: str | os.PathLike[str]) -> Path:
@@ -140,15 +175,18 @@ def load_organization_entries(
     source_repo: str = "",
     source_commit: str = "",
     scopes: Iterable[str] = DEFAULT_ORGANIZATION_SCOPES,
+    allowed_statuses: Iterable[str] | None = DEFAULT_ORGANIZATION_READ_STATUSES,
 ) -> list[Entry]:
     entries: list[Entry] = []
-    kb_root = Path(org_root) / "kb"
-    for scope in tuple(scopes):
-        target = kb_root / scope
+    status_filter = None if allowed_statuses is None else {str(item).strip().lower() for item in allowed_statuses}
+    for scope, target in _organization_scope_targets(Path(org_root), scopes):
         if not target.exists():
             continue
         for path in sorted(target.rglob("*.yaml")):
             data = load_yaml_file(path)
+            status = str(data.get("status") or "").strip().lower()
+            if status_filter is not None and status not in status_filter:
+                continue
             entries.append(
                 Entry(
                     path=path,

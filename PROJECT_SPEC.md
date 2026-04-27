@@ -1029,7 +1029,7 @@ The default cadence is after Sleep and Dream, with lane-status checks preventing
 - `KB Dream`: 13:00
 - `KB Architect`: 14:00
 
-Each core maintenance lane should mark itself running before stateful work and completed after it finishes. A lane should skip when either of the other two core lanes is still running. This avoids overlap without forcing arbitrary post-completion cooldown windows.
+Each core maintenance lane should acquire the shared local maintenance lock before stateful work and mark itself completed after it finishes. If another core lane is still running, the new lane waits and rechecks every five minutes instead of skipping. Stale or corrupt lock state should be recovered with an auditable lock record so scheduled work is not permanently lost.
 
 The installer should provision the repository-managed maintenance, organization, and update skills (`kb-sleep-maintenance`, `kb-dream-pass`, `kb-architect-pass`, `kb-organization-contribute`, `kb-organization-maintenance`, and `khaos-brain-update`) plus the repository-managed automations, and the install check should verify them. These skills are explicit entry points for scheduled maintenance, organization exchange, organization maintenance, or authorized software update; they should remain narrow and should not enable broad implicit invocation.
 

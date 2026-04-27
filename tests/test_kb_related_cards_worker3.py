@@ -131,12 +131,12 @@ class RelatedCardMaintenanceTests(unittest.TestCase):
                 2,
             )
 
-            stub_path = next(
-                repo_root / stub_path
+            stub_payload = next(
+                json.loads((repo_root / stub_path).read_text(encoding="utf-8"))
                 for stub_path in result["artifact_paths"]["action_stub_paths"]
-                if "review-related-cards-entry-model-a" in stub_path
+                if json.loads((repo_root / stub_path).read_text(encoding="utf-8"))["action_key"]
+                == "review-related-cards::entry::model-a"
             )
-            stub_payload = json.loads(stub_path.read_text(encoding="utf-8"))
             self.assertEqual(
                 stub_payload["related_card_suggestion"]["suggested_related_cards"],
                 ["model-b"],
@@ -296,6 +296,104 @@ class RelatedCardMaintenanceTests(unittest.TestCase):
             ]
             self.assertEqual(history_events[-1]["event_type"], "related-cards-updated")
             self.assertEqual(history_events[-2]["event_type"], "related-cards-updated")
+
+    def test_selected_action_keys_apply_only_the_approved_related_card_actions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            model_a_path = repo_root / "kb" / "public" / "system" / "knowledge-library" / "retrieval" / "model-a.yaml"
+            model_b_path = repo_root / "kb" / "public" / "engineering" / "debugging" / "version-change" / "model-b.yaml"
+            write_yaml(
+                model_a_path,
+                {
+                    "id": "model-a",
+                    "title": "A",
+                    "type": "model",
+                    "scope": "public",
+                    "domain_path": ["system", "knowledge-library", "retrieval"],
+                    "cross_index": [],
+                    "tags": ["kb"],
+                    "trigger_keywords": ["kb"],
+                    "if": {"notes": "A"},
+                    "action": {"description": "A"},
+                    "predict": {"expected_result": "A", "alternatives": []},
+                    "use": {"guidance": "A"},
+                    "confidence": 0.9,
+                    "status": "trusted",
+                    "updated_at": "2026-04-20",
+                },
+            )
+            write_yaml(
+                model_b_path,
+                {
+                    "id": "model-b",
+                    "title": "B",
+                    "type": "heuristic",
+                    "scope": "public",
+                    "domain_path": ["engineering", "debugging", "version-change"],
+                    "cross_index": [],
+                    "tags": ["debugging"],
+                    "trigger_keywords": ["upgrade"],
+                    "if": {"notes": "B"},
+                    "action": {"description": "B"},
+                    "predict": {"expected_result": "B", "alternatives": []},
+                    "use": {"guidance": "B"},
+                    "confidence": 0.88,
+                    "status": "trusted",
+                    "updated_at": "2026-04-20",
+                },
+            )
+
+            write_history(
+                repo_root / "kb" / "history" / "events.jsonl",
+                [
+                    {
+                        "event_id": "obs-1",
+                        "event_type": "observation",
+                        "created_at": "2026-04-20T09:00:00+00:00",
+                        "source": {"kind": "task", "agent": "worker-1"},
+                        "target": {
+                            "kind": "task-observation",
+                            "entry_ids": ["model-a", "model-b"],
+                            "route_hint": ["system", "knowledge-library", "retrieval"],
+                            "task_summary": "Used A and B together",
+                        },
+                        "rationale": "used together",
+                        "context": {"hit_quality": "hit"},
+                    },
+                    {
+                        "event_id": "obs-2",
+                        "event_type": "observation",
+                        "created_at": "2026-04-20T09:05:00+00:00",
+                        "source": {"kind": "task", "agent": "worker-1"},
+                        "target": {
+                            "kind": "task-observation",
+                            "entry_ids": ["model-a", "model-b"],
+                            "route_hint": ["repository", "usage", "local-kb-retrieve"],
+                            "task_summary": "Used A and B together again",
+                        },
+                        "rationale": "used together again",
+                        "context": {"hit_quality": "hit"},
+                    },
+                ],
+            )
+
+            result = consolidate_history(
+                repo_root=repo_root,
+                run_id="related-selected-apply-run",
+                apply_mode="related-cards",
+                selected_action_keys=["review-related-cards::entry::model-a"],
+            )
+
+            self.assertEqual(result["apply_summary"]["updated_entry_count"], 1)
+            self.assertEqual(result["apply_summary"]["action_selection"]["matched_action_count"], 1)
+            self.assertEqual(
+                result["apply_summary"]["action_selection"]["unselected_apply_eligible_action_count"],
+                1,
+            )
+            model_a = yaml.safe_load(model_a_path.read_text(encoding="utf-8"))
+            model_b = yaml.safe_load(model_b_path.read_text(encoding="utf-8"))
+            self.assertEqual(model_a["related_cards"], ["model-b"])
+            self.assertNotIn("related_cards", model_b)
 
     def test_proposal_report_human_output_includes_related_card_hint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

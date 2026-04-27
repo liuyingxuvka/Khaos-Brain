@@ -13,7 +13,7 @@ SCRIPT_REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(SCRIPT_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPT_REPO_ROOT))
 
-from local_kb.architect import run_architect_maintenance
+from local_kb.architect import record_architect_sandbox_trial_result, run_architect_maintenance
 from local_kb.store import resolve_repo_root
 
 
@@ -22,10 +22,27 @@ def main() -> None:
     parser.add_argument("--repo-root", default="auto")
     parser.add_argument("--run-id", default="")
     parser.add_argument("--max-events", type=int, default=0)
+    parser.add_argument("--record-trial-result", default="")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
     repo_root = resolve_repo_root(args.repo_root)
+    if args.record_trial_result:
+        trial_path = Path(args.record_trial_result)
+        if not trial_path.is_absolute():
+            trial_path = repo_root / trial_path
+        with trial_path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        result = record_architect_sandbox_trial_result(repo_root=repo_root, trial_result=payload)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+            return
+        print(
+            f"Architect sandbox trial for {result['proposal_id']} recorded "
+            f"decision={result['decision']}."
+        )
+        return
+
     result = run_architect_maintenance(
         repo_root=repo_root,
         run_id=args.run_id or None,

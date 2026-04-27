@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from local_kb.adoption import ADOPTION_KEY, adoption_state, card_exchange_hash, record_exchange_hash, recorded_exchange_hashes
+from local_kb.adoption import ADOPTION_KEY, adoption_state, card_exchange_hash, recorded_exchange_hashes
 from local_kb.org_sources import utc_timestamp
 from local_kb.skill_sharing import build_card_skill_dependency_manifest, materialize_skill_bundle_dependencies
 from local_kb.store import load_entries, load_organization_entries, write_yaml_file
@@ -44,7 +44,8 @@ def _organization_exchange_hashes(
             source_org_id or organization_id,
             source_repo=str(source.get("source_repo") or source.get("repo_url") or ""),
             source_commit=str(source.get("source_commit") or ""),
-            scopes=("trusted", "candidates", "imports"),
+            scopes=("main", "imports", "trusted", "candidates"),
+            allowed_statuses=None,
         ):
             hashes.add(card_exchange_hash(entry.data))
     return hashes
@@ -120,7 +121,7 @@ def build_organization_outbox(
     skipped: list[dict[str, Any]] = []
     now = utc_timestamp()
     exported_hashes: set[str] = set()
-    prior_export_hashes = recorded_exchange_hashes(repo_root, {"exported", "uploaded"})
+    prior_exchange_hashes = recorded_exchange_hashes(repo_root, {"downloaded", "used", "absorbed", "exported", "uploaded"})
     organization_hashes = _organization_exchange_hashes(organization_sources, organization_id=organization_id)
 
     for entry in load_entries(repo_root):
@@ -131,8 +132,8 @@ def build_organization_outbox(
             skipped.append({"entry_id": entry_id, "path": source_path, "reasons": eligibility["reasons"]})
             continue
         content_hash = card_exchange_hash(entry.data)
-        if content_hash in prior_export_hashes:
-            skipped.append({"entry_id": entry_id, "path": source_path, "reasons": ["content hash was already exported from this installation"]})
+        if content_hash in prior_exchange_hashes:
+            skipped.append({"entry_id": entry_id, "path": source_path, "reasons": ["content hash was already exchanged with organization"]})
             continue
         if content_hash in organization_hashes:
             skipped.append({"entry_id": entry_id, "path": source_path, "reasons": ["content hash already exists in organization repository"]})
@@ -171,16 +172,6 @@ def build_organization_outbox(
             }
         )
         exported_hashes.add(content_hash)
-        if not dry_run:
-            record_exchange_hash(
-                repo_root,
-                content_hash,
-                direction="exported",
-                organization_id=organization_id,
-                source_path=source_path,
-                local_path=str(target_path),
-                entry_id=entry_id,
-            )
 
     return {
         "ok": True,

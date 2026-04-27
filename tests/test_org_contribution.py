@@ -67,6 +67,41 @@ class OrganizationContributionTests(unittest.TestCase):
         self.assertTrue(result["commit"])
         self.assertTrue(imported_exists)
 
+    def test_prepare_organization_import_branch_can_copy_selected_outbox_files_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            org = root / "org"
+            outbox = root / "outbox"
+            self._write_org_repo(org)
+            write_yaml_file(outbox / "proposal.yaml", {"id": "proposal", "status": "candidate"})
+            write_yaml_file(outbox / "stale.yaml", {"id": "stale", "status": "candidate"})
+            self.assertEqual(0, _run_git(["init"], cwd=org).returncode)
+            self.assertEqual(0, _run_git(["add", "."], cwd=org).returncode)
+            self.assertEqual(
+                0,
+                _run_git(
+                    ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "seed"],
+                    cwd=org,
+                ).returncode,
+            )
+
+            result = prepare_organization_import_branch(
+                org,
+                outbox,
+                contributor_id="alice",
+                branch_name="contrib/test/selected-imports",
+                proposal_files=[outbox / "proposal.yaml"],
+            )
+            imported = org / "kb" / "imports" / "alice" / "proposal.yaml"
+            stale = org / "kb" / "imports" / "alice" / "stale.yaml"
+            imported_exists = imported.exists()
+            stale_exists = stale.exists()
+
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["created_files"], ["kb/imports/alice/proposal.yaml"])
+        self.assertTrue(imported_exists)
+        self.assertFalse(stale_exists)
+
     def test_prepare_organization_import_branch_can_push_to_remote(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

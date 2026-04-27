@@ -79,30 +79,40 @@ MAINTENANCE_SKILL_NAMES = tuple(item["name"] for item in MAINTENANCE_SKILL_SPECS
 SLEEP_AUTOMATION_PROMPT = (
     "Use $kb-sleep-maintenance to run the repository's local KB sleep-maintenance pass for this workspace. "
     "Use PROJECT_SPEC.md, "
-    "docs/maintenance_runbook.md, and .agents/skills/local-kb-retrieve/MAINTENANCE_PROMPT.md as the "
+    "docs/maintenance_agent_worldview.md, docs/maintenance_runbook.md, and .agents/skills/local-kb-retrieve/MAINTENANCE_PROMPT.md as the "
     "authoritative guides. Before the first stateful command, run "
     "`python .agents/skills/local-kb-retrieve/scripts/kb_lane_status.py --lane kb-sleep --status running "
-    "--require-clear --json`; if another core maintenance lane is running, stop as a successful no-op. "
-    "First write a visible sleep execution plan with checkpoint statuses, start with a "
+    "--wait-clear --poll-seconds 300 --json`; if another core maintenance lane is running, wait and recheck "
+    "every 5 minutes instead of skipping. "
+    "First read the shared maintenance-agent worldview, write a visible sleep execution plan with checkpoint statuses, start with a "
     "sleep self-preflight search against system/knowledge-library/maintenance, then run proposal mode, inspect "
-    "taxonomy and route gaps, run a mandatory similar-card merge checkpoint, run a mandatory overloaded-card "
+    "taxonomy and route gaps, treat high-volume proposal output and candidate backlog as editorial triage inputs "
+    "rather than an apply agenda, run a mandatory similar-card merge checkpoint, run a mandatory overloaded-card "
     "split checkpoint, run an organization Skill bundle consolidation checkpoint that groups imported read-only "
     "Skills by bundle_id and keeps only the latest approved version by version_time, record skip-with-reason "
     "decisions when merge, split, or Skill replacement is not safe, review "
     "candidate route quality by preferring functional "
-    "domain paths over project-name roots, allow the current low-risk new-candidate, related-card, cross-index, "
+    "domain paths over project-name roots, do not create new candidates merely because the tooling can, "
+    "treat mechanical apply eligibility as capability rather than approval and keep high-volume lanes proposal-only "
+    "unless a compact reviewed action-key set is explicitly selected, "
+    "inspect `dream_validation_summary` on review-candidate or review-entry-update actions as Dream sandbox evidence for Sleep judgment "
+    "rather than automatic promotion, "
+    "allow the current low-risk new-candidate, related-card, cross-index, "
     "AI-authored semantic-review, and AI-authored i18n apply paths when clearly eligible, "
+    "use selected action keys with `--action-key` when only part of an apply lane is approved, "
     "require future utility before auto-creating candidate cards, require semantic-review utility assessments, "
     "limit semantic-review to at most 3 trusted-card modifications per run, run zh-CN display translation cleanup "
     "after candidate/card creation or semantic card text changes, keep taxonomy rewrites proposal-only unless current "
-    "tooling cleanly supports them, inspect rollback artifacts when needed, continue "
+    "tooling cleanly supports them, inspect rollback artifacts including history-events, related-card-entries, "
+    "cross-index-entries, and semantic-review-entries when present, continue "
     "through every safe checkpoint instead of stopping after a short proposal, attempt supported low-risk repairs "
     "and rerun the relevant validation when a command exposes a fixable issue, run a final sleep postflight check, "
     "append one structured maintenance observation when the pass exposed a reusable lesson or process hazard, stop "
     "after that final observation instead of recursively consolidating it, then run "
     "`python .agents/skills/local-kb-retrieve/scripts/kb_lane_status.py --lane kb-sleep --status completed --json`, "
     "and report the run id, execution plan "
-    "status, self-preflight entries, reviewed observation counts, candidates created, route adjustments or concerns, "
+    "status, self-preflight entries, what became more accurate or clearer, reviewed observation counts, "
+    "candidates created or deliberately not created, weak/noisy material rejected or kept history-only, route adjustments or concerns, "
     "semantic-review decisions applied or skipped, translations updated or still missing, validations run, "
     "repaired or proposal-only issues, maintenance decisions, "
     "final postflight observation status, undeclared taxonomy gaps, hub-vs-overloaded card reviews, and the next "
@@ -111,23 +121,32 @@ SLEEP_AUTOMATION_PROMPT = (
 
 DREAM_AUTOMATION_PROMPT = (
     "Use $kb-dream-pass to run one bounded local KB dream-mode pass for this workspace. "
-    "Use PROJECT_SPEC.md, docs/dream_runbook.md, "
-    "and .agents/skills/local-kb-retrieve/DREAM_PROMPT.md as the authoritative guides. Run "
+    "Use PROJECT_SPEC.md, docs/maintenance_agent_worldview.md, docs/dream_runbook.md, "
+    "and .agents/skills/local-kb-retrieve/DREAM_PROMPT.md as the authoritative guides. First read the "
+    "shared maintenance-agent worldview; the runner must wait on the shared local maintenance lock instead of skipping when Sleep or Architect is active, then run "
     "`python .agents/skills/local-kb-retrieve/scripts/kb_dream.py --json`, "
     "inspect the generated preflight, plan, opportunity, experiment, execution-plan, "
-    "and report artifacts, require exactly one executable experiment with experiment design, validation plan, "
-    "safety tier, rollback plan, and explicit success/failure criteria before execution, keep write-back "
-    "history-only or candidate-only, keep external-system experiments proposal-only, avoid trusted-card or taxonomy "
-    "rewrites, and report the run id, preflight entries retrieved, selected experiment, execution-plan checkpoint "
-    "status, safety tier and rollback plan, created candidates if any, history events written, run-level "
-    "Dream-process observation, and anything still needing live-task confirmation."
+    "and report artifacts, select a bounded route-deduped batch of grounded evidence gaps only when each one "
+    "clarifies future retrieval, routing, card use, or Sleep consolidation, report a no-op when no valuable gap exists, require experiment "
+    "design, validation plan, safety tier, rollback plan, and explicit success/failure/inconclusive criteria before "
+    "execution, write sandbox experiment artifacts only under kb/history/dream/<run-id>/sandbox/ and record "
+    "retrieval-ab sandbox paths, allowed writes, evidence grades, validation results, Sleep handoff, and Architect handoff, "
+    "skip route-and-mode experiments already passed with strong or moderate sandbox evidence in a prior Dream report, "
+    "when a strong or moderate passed sandbox result validates an existing candidate or low-confidence card, record "
+    "the source entry id and structured Sleep handoff with suggested_action update-card, "
+    "keep write-back history-only by default, create candidates only when history-only is insufficient, "
+    "keep external-system experiments proposal-only, avoid trusted-card or taxonomy rewrites, avoid repeating known "
+    "route-gap observations without new decision value, and report the run id, preflight entries retrieved, selected "
+    "evidence gaps or no-op reason, future retrieval/use decisions clarified, experiments executed in order, "
+    "execution-plan checkpoint status, safety tier and rollback plan, result classifications, candidates created if any with why history-only was insufficient, "
+    "history events written, sandbox paths, evidence grades, validation results, Sleep/Architect handoff, and anything still needing live-task confirmation."
 )
 
 ARCHITECT_AUTOMATION_PROMPT = (
     "Use $kb-architect-pass to run one KB Architect mechanism-maintenance pass for this workspace. "
     "Use PROJECT_SPEC.md, "
-    "docs/architecture_runbook.md, and .agents/skills/local-kb-retrieve/ARCHITECT_PROMPT.md as the "
-    "authoritative guides. Before the first stateful command, write a visible Architect execution plan with "
+    "docs/maintenance_agent_worldview.md, docs/architecture_runbook.md, and .agents/skills/local-kb-retrieve/ARCHITECT_PROMPT.md as the "
+    "authoritative guides. First read the shared maintenance-agent worldview. The runner must wait on the shared local maintenance lock instead of skipping when Sleep or Dream is active. Before the first stateful command, write a visible Architect execution plan with "
     "checkpoint statuses and include every required checkpoint; do not skip any checkpoint silently. Start with "
     "Architect self-preflight against system/knowledge-library/maintenance, then run "
     "`python scripts/khaos_brain_update.py --architect-check --json`; if it reports apply_ready=true, use "
@@ -137,17 +156,28 @@ ARCHITECT_AUTOMATION_PROMPT = (
     "maintenance. Then run "
     "`python .agents/skills/local-kb-retrieve/scripts/kb_architect.py --json`, "
     "inspect the generated plan, preflight, signals, proposals, decisions, "
-    "execution-plan, report, and proposal_queue artifacts, use only Evidence, Impact, and Safety for proposal "
+    "execution-plan, report, and proposal_queue artifacts as incoming evidence, inspect the maintained queue before "
+    "acting on new signals, start with queue hygiene by merging duplicates, closing resolved or obsolete items, and "
+    "avoiding reopened terminal items unless there is a real regression, use only Evidence, Impact, and Safety for proposal "
     "review, keep statuses limited to new, watching, ready-for-patch, ready-for-apply, applied, rejected, and "
     "superseded, do not use a human-review status, keep long-observation items as watching, keep the scope to "
     "KB operating mechanisms rather than card content, do not rewrite trusted cards or promote candidates, apply "
-    "only high-evidence high-safety mechanism changes inside prompt, runbook, validation, or proposal-queue "
-    "maintenance with an immediate validation bundle, generate patch plans for medium-safety mechanism changes, confirm the "
+    "only narrow, reversible, high-value mechanism changes whose execution packet is agent-ready inside prompt, "
+    "runbook, validation, or proposal-queue maintenance with an immediate validation bundle, sandbox-apply only "
+    "when sandbox_apply.sandbox_ready=true and the packet lists planned sandbox path, allowed/disallowed writes, "
+    "expected effect, validation commands, manual checks, and merge/block decision fields, choose at most one "
+    "sandbox-ready packet to trial before ending the full Architect pass instead of repeatedly reporting the same "
+    "ready packet, inspect selected_sandbox_trial, write <planned_sandbox_path>/trial_result.json after the trial, "
+    "record it with --record-trial-result, generate patch plans "
+    "for medium-safety mechanism changes, mark successful packets applied and unsafe or failed packets blocked, "
+    "create a new proposal only when the signal is not already represented by an active or terminal queue item, confirm the "
     "runner's KB postflight observation or append one structured Architect observation if a new mechanism lesson "
     "was exposed, and report the run id, checkpoint status for every plan item, preflight entries retrieved, "
     "software update gate result, "
-    "proposal counts by status, ready-for-apply and ready-for-patch items, changes applied, validation bundle run, "
-    "postflight observation status, and watching items left for long observation."
+    "proposal counts by status before and after queue hygiene, duplicate clusters merged or superseded, resolved or "
+    "already-applied items closed, ready-for-apply and ready-for-patch items, sandbox-ready packets with planned sandbox path and write boundaries, execution packets by mode, changes "
+    "applied, validation bundle run, blocked execution states, postflight observation status, watching items left "
+    "for long observation, and the system evolution route."
 )
 
 ORG_CONTRIBUTE_AUTOMATION_PROMPT = (
@@ -156,46 +186,52 @@ ORG_CONTRIBUTE_AUTOMATION_PROMPT = (
     "as the authoritative guides. Start by reading .local/khaos_brain_desktop_settings.json through "
     "scripts/kb_org_outbox.py --automation; if the desktop settings are personal mode, missing, unvalidated, or not "
     "connected to a validated organization repository, return a successful no-op. When organization mode is valid, "
-    "run KB preflight against system/knowledge-library/organization, then export only shareable public model and "
-    "heuristic cards through the content-hash-gated outbox. Respect prior download hashes, prior upload hashes, "
-    "current local card hashes, current organization repository hashes, and current import hashes; do not export "
+    "sync the organization mirror first, run KB preflight against system/knowledge-library/organization, then export only shareable public model and "
+    "heuristic cards through the content-hash-gated outbox. Respect every exchanged hash including downloaded, used, absorbed, exported, uploaded, "
+    "current local card hashes, current organization main-card hashes, and current import hashes; do not export "
     "private cards, personal preferences, credentials, raw local paths, or raw machine identifiers. When cards "
     "depend on local Skills, upload card-bound Skill bundles with bundle_id, content_hash, version_time, "
     "original_author, readonly_when_imported, and update_policy=original_author_only; if several local cards point "
     "at the same bundle_id, upload the local latest version for that bundle rather than an older card-carried copy. Use "
-    "`python scripts/kb_org_outbox.py --automation` for the safe scheduled pass; add --prepare-branch, commit, "
-    "or --push only when organization policy allows branch creation or remote submission. Run KB postflight after "
+    "`python scripts/kb_org_outbox.py --automation` for the scheduled pass; it should prepare an import branch under kb/imports, push eligible import proposals automatically, open a GitHub PR when available, and apply org-kb:auto-merge only when checks allow it "
+    "while leaving movement into organization main, trust upgrades, and final merge to organization maintenance and GitHub checks. Run KB postflight after "
     "any non-skipped pass, record a "
-    "structured observation, and report the settings gate, preflight entries, created and skipped proposal counts, "
-    "outbox path, branch or import proposal status, push or pull request URL if attempted, postflight path, and "
+    "structured observation, and report the settings gate, sync result, preflight entries, created and skipped proposal counts, "
+    "outbox path, import branch status, push or pull request URL, postflight path, and "
     "errors."
 )
 
 ORG_MAINTENANCE_AUTOMATION_PROMPT = (
     "Use $kb-organization-maintenance to run one settings-gated organization-level Sleep-like maintenance pass "
-    "for this workspace. Use PROJECT_SPEC.md, docs/organization_mode_plan.md, "
-    ".agents/skills/local-kb-retrieve/SKILL.md, and $organization-review as the authoritative guides. Start by "
+    "for this workspace. Treat the organization KB as a shared exchange layer rather than a central truth layer: "
+    "organization maintenance may maintain organization main cards and imported card content with the same editorial "
+    "posture as local Sleep, while local machines keep final adoption authority. Use PROJECT_SPEC.md, "
+    "docs/maintenance_agent_worldview.md, docs/organization_mode_plan.md, "
+    ".agents/skills/local-kb-retrieve/SKILL.md, and organization-review guidance when available. Start by "
     "reading .local/khaos_brain_desktop_settings.json through scripts/kb_org_maintainer.py --automation; if the "
     "desktop settings are personal mode, missing, unvalidated, or organization maintenance participation is not "
     "requested, return a successful no-op. When participation is available for a validated organization "
     "repository, run KB preflight against system/knowledge-library/organization, validate the organization "
-    "manifest, expected paths, imports lane, candidates lane, trusted lane, Skill registry, and current Git state, "
-    "then run the organization candidate intake checkpoint, content-hash checkpoint, mandatory organization "
+    "manifest, expected paths, imports entry lane, main exchange lane, Skill registry, and current Git state, "
+    "then run the organization card-surface map checkpoint, organization candidate intake checkpoint, content-hash checkpoint, mandatory organization "
     "similar-card merge checkpoint, mandatory organization overloaded-card split checkpoint, candidate decision "
-    "checkpoint, Skill safety checkpoint, Skill bundle version checkpoint, and GitHub merge-readiness checkpoint. Inspect organization candidates, "
-    "imports, Skill registry entries, card-and-Skill bundles, privacy boundaries, and GitHub auto-merge readiness "
-    "using organization-review. Treat duplicate content hashes as maintenance signals and duplicate entry ids as "
-    "non-blocking handles. For card-bound Skill bundles, group by bundle_id, approve only original-author updates "
+    "checkpoint, Skill safety checkpoint, Skill bundle version checkpoint, decision-apply checkpoint, post-apply organization check, and GitHub merge-readiness checkpoint. Inspect organization trusted cards, candidates, "
+    "main cards, imports, Skill registry entries, card-and-Skill bundles, privacy boundaries, and GitHub auto-merge readiness "
+    "using the organization maintenance worldview and organization-review guidance when available. Treat duplicate content hashes as maintenance signals and duplicate entry ids as "
+    "non-blocking handles. Trusted/shared card content maintenance is allowed when the evidence supports a "
+    "Sleep-style keep, reject, watch, merge, split, rewrite, promote, demote, deprecate, or cross-link decision. "
+    "For card-bound Skill bundles, group by bundle_id, approve only original-author updates "
     "on the same bundle, require sha256 content_hash and version_time, treat non-author changes as forks, and select "
     "the latest approved version by version_time for organization distribution. Use candidate, approved, and rejected "
     "as the first-pass Skill states; do not auto-install candidate, rejected, unknown, unpinned, or non-hash-verified "
-    "Skills. It is acceptable to skip applying a change when evidence, "
+    "Skills. Build an organization Sleep decision set over cleanup proposals, select-for-apply or watch each action with a reason, treat organization-review as guidance rather than an apply gate, and apply only exact selected action ids. "
+    "Keep privacy and executable Skill boundaries stricter than ordinary card content. It is acceptable to skip applying a change when evidence, "
     "safety, tooling, permissions, or scope is insufficient, but the inspection and recorded decision must still "
     "happen. Run KB postflight after any non-skipped pass, record a structured observation, and report the settings "
-    "gate, participation status, preflight entries, manifest status, candidate and import counts, content-hash "
+    "gate, participation status, preflight entries, manifest status, main status counts and import counts, content-hash "
     "duplicate decisions, organization merge checkpoint decisions, organization split checkpoint decisions, "
-    "candidate approval or rejection decisions, Skill dependency decisions, Skill bundle version decisions, GitHub "
-    "merge-readiness result, organization-review availability, recommendations, postflight path, and errors."
+    "candidate approval or rejection decisions, Sleep decision counts, selected action ids, apply result, post-apply check result, maintenance branch, PR, push, and auto-merge-label result, Skill dependency decisions, Skill bundle version decisions, GitHub "
+    "merge-readiness result, organization-review guidance availability, recommendations, postflight path, and errors."
 )
 
 REPO_AUTOMATION_SPECS = (
@@ -995,6 +1031,11 @@ def build_installation_check(
             "Global skill default_prompt does not mention subagent/delegation usage lessons as KB signals. "
             "Re-run the installer to refresh the installed prompt."
         )
+    if openai_text and "phase-change KB checkpoints" not in openai_text:
+        issues.append(
+            "Global skill default_prompt does not mention phase-change KB checkpoints for long mixed tasks. "
+            "Re-run the installer to refresh the installed prompt."
+        )
     if not global_agents.exists():
         issues.append(
             f"Global AGENTS defaults file is missing: {global_agents}. "
@@ -1031,6 +1072,11 @@ def build_installation_check(
     if global_agents_text and "subagent/delegation usage" not in global_agents_text:
         issues.append(
             "Global AGENTS defaults do not mention subagent/delegation usage lessons as KB signals. "
+            "Re-run the installer to refresh the session-wide defaults."
+        )
+    if global_agents_text and "phase-change KB checkpoints" not in global_agents_text:
+        issues.append(
+            "Global AGENTS defaults do not mention phase-change KB checkpoints for long mixed tasks. "
             "Re-run the installer to refresh the session-wide defaults."
         )
 
@@ -1215,13 +1261,26 @@ def build_installation_check(
                 issues_for_automation.append("Automation kb-dream prompt must reference kb_dream.py.")
             if expected["id"] == "kb-dream":
                 for marker in (
+                    "docs/maintenance_agent_worldview.md",
+                    "shared maintenance-agent worldview",
                     "generated preflight",
                     "preflight entries retrieved",
-                    "exactly one executable experiment",
+                    "bounded route-deduped batch",
+                    "experiments executed in order",
+                    "report a no-op",
                     "execution-plan checkpoint status",
                     "safety tier and rollback plan",
+                    "sandbox experiment artifacts",
+                    "retrieval-ab sandbox paths",
+                    "allowed writes",
+                    "evidence grades",
+                    "validation results",
+                    "prior Dream report",
+                    "structured Sleep handoff",
+                    "suggested_action update-card",
                     "external-system experiments proposal-only",
-                    "run-level Dream-process observation",
+                    "Sleep handoff",
+                    "Sleep/Architect handoff",
                 ):
                     if marker not in prompt_text:
                         issues_for_automation.append(
@@ -1234,9 +1293,11 @@ def build_installation_check(
             if expected["id"] == "kb-sleep":
                 for marker in (
                     "visible sleep execution plan",
+                    "shared maintenance-agent worldview",
                     "checkpoint statuses",
                     "kb_lane_status.py",
-                    "--require-clear",
+                    "--wait-clear",
+                    "wait and recheck",
                     "sleep self-preflight",
                     "system/knowledge-library/maintenance",
                     "mandatory similar-card merge checkpoint",
@@ -1244,11 +1305,16 @@ def build_installation_check(
                     "organization Skill bundle consolidation checkpoint",
                     "latest approved version by version_time",
                     "skip-with-reason decisions",
+                    "mechanical apply eligibility",
+                    "high-volume lanes proposal-only",
+                    "dream_validation_summary",
                     "every safe checkpoint",
                     "supported low-risk repairs",
                     "rerun the relevant validation",
                     "sleep postflight check",
                     "structured maintenance observation",
+                    "selected action keys",
+                    "--action-key",
                     "status completed",
                     "recursively consolidating",
                 ):
@@ -1260,6 +1326,8 @@ def build_installation_check(
                 issues_for_automation.append("Automation kb-architect prompt must reference kb_architect.py.")
             if expected["id"] == "kb-architect":
                 for marker in (
+                    "docs/maintenance_agent_worldview.md",
+                    "shared maintenance-agent worldview",
                     "visible Architect execution plan",
                     "checkpoint statuses",
                     "Architect self-preflight",
@@ -1272,6 +1340,18 @@ def build_installation_check(
                     "long-observation items as watching",
                     "KB operating mechanisms rather than card content",
                     "do not rewrite trusted cards or promote candidates",
+                    "execution packet is agent-ready",
+                    "sandbox_apply.sandbox_ready=true",
+                    "planned sandbox path",
+                    "allowed/disallowed writes",
+                    "merge/block decision fields",
+                    "choose at most one",
+                    "instead of repeatedly reporting",
+                    "selected_sandbox_trial",
+                    "trial_result.json",
+                    "--record-trial-result",
+                    "sandbox-ready packets",
+                    "blocked execution states",
                     "validation bundle",
                     "postflight observation status",
                 ):
@@ -1286,10 +1366,14 @@ def build_installation_check(
                     "organization mode",
                     "validated organization repository",
                     "successful no-op",
+                    "sync the organization mirror first",
                     "KB preflight",
                     "content-hash-gated outbox",
-                    "prior download hashes",
-                    "prior upload hashes",
+                    "every exchanged hash",
+                    "downloaded, used, absorbed, exported, uploaded",
+                    "prepare an import branch",
+                    "push eligible import proposals automatically",
+                    "org-kb:auto-merge",
                     "KB postflight",
                 ):
                     if marker not in prompt_text:
@@ -1311,6 +1395,8 @@ def build_installation_check(
                     "candidate decision checkpoint",
                     "Skill safety checkpoint",
                     "Skill bundle version checkpoint",
+                    "decision-apply checkpoint",
+                    "post-apply organization check",
                     "GitHub merge-readiness checkpoint",
                     "organization-review",
                     "Skill registry",
@@ -1320,6 +1406,11 @@ def build_installation_check(
                     "original-author updates",
                     "latest approved version by version_time",
                     "do not auto-install",
+                    "organization Sleep decision set",
+                    "organization-review as guidance rather than an apply gate",
+                    "exact selected action ids",
+                    "post-apply check result",
+                    "maintenance branch, PR, push, and auto-merge-label result",
                     "KB postflight",
                 ):
                     if marker not in prompt_text:
@@ -1362,6 +1453,7 @@ def build_installation_check(
     )
     global_skill_skill_usage = bool(openai_text and "skill/plugin usage lesson" in openai_text)
     global_skill_subagent_usage = bool(openai_text and "subagent/delegation usage lesson" in openai_text)
+    global_skill_phase_checkpoints = bool(openai_text and "phase-change KB checkpoints" in openai_text)
     global_agents_present = global_agents.exists()
     global_agents_managed = bool(
         global_agents_text
@@ -1372,6 +1464,7 @@ def build_installation_check(
     global_agents_postflight = bool(global_agents_text and "explicit KB postflight check" in global_agents_text)
     global_agents_skill_usage = bool(global_agents_text and "skill/plugin usage" in global_agents_text)
     global_agents_subagent_usage = bool(global_agents_text and "subagent/delegation usage" in global_agents_text)
+    global_agents_phase_checkpoints = bool(global_agents_text and "phase-change KB checkpoints" in global_agents_text)
     kb_sleep_ok = not automation_issue_map.get("kb-sleep")
     kb_dream_ok = not automation_issue_map.get("kb-dream")
     kb_architect_ok = not automation_issue_map.get("kb-architect")
@@ -1389,6 +1482,8 @@ def build_installation_check(
         and global_agents_skill_usage
         and global_skill_subagent_usage
         and global_agents_subagent_usage
+        and global_skill_phase_checkpoints
+        and global_agents_phase_checkpoints
         and maintenance_skill_ok
     )
     checklist = [
@@ -1420,6 +1515,12 @@ def build_installation_check(
             "global_skill_subagent_usage",
             "Global predictive KB prompt treats subagent/delegation lessons as recordable KB signals",
             global_skill_subagent_usage,
+            f"openai_path={openai_path}",
+        ),
+        _checklist_item(
+            "global_skill_phase_checkpoints",
+            "Global predictive KB prompt requires phase-change KB checkpoints for long mixed tasks",
+            global_skill_phase_checkpoints,
             f"openai_path={openai_path}",
         ),
         _checklist_item(
@@ -1456,6 +1557,12 @@ def build_installation_check(
             "global_agents_subagent_usage",
             "Global AGENTS defaults treat subagent/delegation lessons as recordable KB signals",
             global_agents_subagent_usage,
+            f"global_agents_path={global_agents}",
+        ),
+        _checklist_item(
+            "global_agents_phase_checkpoints",
+            "Global AGENTS defaults require phase-change KB checkpoints for long mixed tasks",
+            global_agents_phase_checkpoints,
             f"global_agents_path={global_agents}",
         ),
         _checklist_item(

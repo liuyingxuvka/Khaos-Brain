@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from local_kb.consolidate import consolidation_run_dir, sanitize_run_id
-from local_kb.store import history_events_path, write_yaml_file
+from local_kb.store import history_events_path, load_yaml_file, write_yaml_file
 
 
 SCHEMA_VERSION = 1
@@ -14,7 +14,12 @@ PROPOSAL_FILENAME = "proposal.json"
 APPLY_FILENAME = "apply.json"
 MANIFEST_FILENAME = "rollback_manifest.json"
 ROLLBACK_MANIFEST_KIND = "local-kb-rollback-manifest"
-SUPPORTED_RESTORE_ARTIFACTS = ("history-events", "semantic-review-entries")
+SUPPORTED_RESTORE_ARTIFACTS = (
+    "history-events",
+    "semantic-review-entries",
+    "related-card-entries",
+    "cross-index-entries",
+)
 
 
 def relative_repo_path(repo_root: Path, path: Path) -> str:
@@ -164,6 +169,83 @@ def _semantic_review_restore_entries(apply_payload: dict[str, Any] | None) -> li
     return entries
 
 
+FIELD_RESTORE_SPECS = {
+    "related-cards": {
+        "artifact_id": "related-card-entries",
+        "kind": "related-card-entry-files",
+        "field_name": "related_cards",
+        "previous_field": "previous_related_cards",
+    },
+    "cross-index": {
+        "artifact_id": "cross-index-entries",
+        "kind": "cross-index-entry-files",
+        "field_name": "cross_index",
+        "previous_field": "previous_cross_index",
+    },
+}
+
+
+def _field_restore_entries(apply_payload: dict[str, Any] | None, apply_mode: str) -> list[dict[str, Any]]:
+    if not apply_payload or apply_payload.get("apply_mode") != apply_mode:
+        return []
+    spec = FIELD_RESTORE_SPECS[apply_mode]
+    entries: list[dict[str, Any]] = []
+    for item in apply_payload.get("updated_entries", []):
+        if not isinstance(item, dict):
+            continue
+        entry_path = str(item.get("entry_path", "") or "").strip()
+        previous_entry = item.get("previous_entry")
+        previous_field_value = item.get(spec["previous_field"])
+        if not entry_path:
+            continue
+        if isinstance(previous_entry, dict):
+            entries.append(
+                {
+                    "entry_id": str(item.get("entry_id", "") or "").strip(),
+                    "entry_path": entry_path,
+                    "previous_entry": previous_entry,
+                }
+            )
+        elif isinstance(previous_field_value, list):
+            entries.append(
+                {
+                    "entry_id": str(item.get("entry_id", "") or "").strip(),
+                    "entry_path": entry_path,
+                    "previous_field_value": previous_field_value,
+                }
+            )
+    return entries
+
+
+def _build_field_entries_artifact(
+    repo_root: Path,
+    run_dir: Path,
+    apply_payload: dict[str, Any] | None,
+    apply_mode: str,
+) -> dict[str, Any] | None:
+    entries = _field_restore_entries(apply_payload, apply_mode)
+    if not apply_payload and not (run_dir / APPLY_FILENAME).exists():
+        return None
+    if not entries:
+        return None
+    spec = FIELD_RESTORE_SPECS[apply_mode]
+    return {
+        "artifact_id": spec["artifact_id"],
+        "kind": spec["kind"],
+        "path": "<multiple-entry-files>",
+        "exists": True,
+        "low_risk": True,
+        "restorable": True,
+        "restore_strategy": "rewrite-entry-files-from-apply-previous-entry-payloads",
+        "source_path": relative_repo_path(repo_root, run_dir / APPLY_FILENAME),
+        "details": {
+            "entry_count": len(entries),
+            "entry_ids": [entry["entry_id"] for entry in entries if entry.get("entry_id")],
+            "field_name": spec["field_name"],
+        },
+    }
+
+
 def _build_semantic_review_entries_artifact(
     repo_root: Path,
     run_dir: Path,
@@ -213,6 +295,10 @@ def build_rollback_manifest(repo_root: Path, run_dir: Path) -> dict[str, Any]:
     semantic_review_artifact = _build_semantic_review_entries_artifact(repo_root, run_dir, apply_payload)
     if semantic_review_artifact:
         artifacts.append(semantic_review_artifact)
+    for apply_mode in ("related-cards", "cross-index"):
+        field_artifact = _build_field_entries_artifact(repo_root, run_dir, apply_payload, apply_mode)
+        if field_artifact:
+            artifacts.append(field_artifact)
     restorable_ids = [artifact["artifact_id"] for artifact in artifacts if artifact["restorable"]]
 
     return {
@@ -261,6 +347,8 @@ def restore_artifact(
 
     if artifact_id == "semantic-review-entries":
         return restore_semantic_review_entries(repo_root, manifest, artifact, dry_run=dry_run)
+    if artifact_id in {"related-card-entries", "cross-index-entries"}:
+        return restore_field_update_entries(repo_root, manifest, artifact, dry_run=dry_run)
 
     source_path = resolve_repo_path(repo_root, str(artifact.get("source_path", "") or ""))
     snapshot_payload = load_json_object(source_path)
@@ -341,6 +429,67 @@ def restore_semantic_review_entries(
     return {
         "run_id": str(manifest.get("run_id", "") or ""),
         "artifact_id": "semantic-review-entries",
+        "source_path": relative_repo_path(repo_root, source_path),
+        "entry_count": len(entries),
+        "restored_entries": restored_entries,
+        "dry_run": dry_run,
+        "restored": not dry_run,
+    }
+
+
+def _apply_mode_for_field_artifact(artifact_id: str) -> str:
+    for apply_mode, spec in FIELD_RESTORE_SPECS.items():
+        if spec["artifact_id"] == artifact_id:
+            return apply_mode
+    raise ValueError(f"Unsupported field restore artifact_id: {artifact_id}")
+
+
+def restore_field_update_entries(
+    repo_root: Path,
+    manifest: dict[str, Any],
+    artifact: dict[str, Any],
+    *,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    artifact_id = str(artifact.get("artifact_id", "") or "")
+    apply_mode = _apply_mode_for_field_artifact(artifact_id)
+    spec = FIELD_RESTORE_SPECS[apply_mode]
+    source_path = resolve_repo_path(repo_root, str(artifact.get("source_path", "") or ""))
+    apply_payload = load_json_object(source_path)
+    if not apply_payload:
+        raise ValueError(f"Missing apply payload for {artifact_id} restore: {source_path}")
+    entries = _field_restore_entries(apply_payload, apply_mode)
+    if not entries:
+        raise ValueError(f"Apply payload does not contain {artifact_id} restore entries: {source_path}")
+
+    restored_entries: list[dict[str, Any]] = []
+    for entry in entries:
+        entry_path = resolve_repo_path(repo_root, str(entry["entry_path"]))
+        if not _path_within_repo(repo_root, entry_path):
+            raise ValueError(f"Refusing to restore outside repository: {entry_path}")
+        restored_entries.append(
+            {
+                "entry_id": str(entry.get("entry_id", "") or ""),
+                "entry_path": relative_repo_path(repo_root, entry_path),
+            }
+        )
+        if dry_run:
+            continue
+        if "previous_entry" in entry:
+            write_yaml_file(entry_path, entry["previous_entry"])
+            continue
+        payload = load_yaml_file(entry_path)
+        previous_field_value = list(entry.get("previous_field_value", []))
+        field_name = str(spec["field_name"])
+        if previous_field_value:
+            payload[field_name] = previous_field_value
+        else:
+            payload.pop(field_name, None)
+        write_yaml_file(entry_path, payload)
+
+    return {
+        "run_id": str(manifest.get("run_id", "") or ""),
+        "artifact_id": artifact_id,
         "source_path": relative_repo_path(repo_root, source_path),
         "entry_count": len(entries),
         "restored_entries": restored_entries,

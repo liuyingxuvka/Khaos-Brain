@@ -123,7 +123,8 @@ def build_proposal_payload(
 
 
 def action_stub_filename(action_key: str, index: int) -> str:
-    base_name = slugify(action_key.replace("::", "-"))[:72] or f"action-{index + 1}"
+    # Keep stub paths usable under long Windows workspace roots.
+    base_name = slugify(action_key.replace("::", "-"))[:32] or f"action-{index + 1}"
     action_hash = hashlib.sha1(action_key.encode("utf-8")).hexdigest()[:8]
     return f"{index + 1:03d}-{base_name}-{action_hash}.json"
 
@@ -158,6 +159,8 @@ def build_action_stub_payload(
         payload["timeline_summary"] = dict(action["timeline_summary"])
     if action.get("predictive_evidence_summary"):
         payload["predictive_evidence_summary"] = dict(action["predictive_evidence_summary"])
+    if action.get("dream_validation_summary"):
+        payload["dream_validation_summary"] = dict(action["dream_validation_summary"])
     if action.get("candidate_scaffold_preview"):
         payload["candidate_scaffold_preview"] = dict(action["candidate_scaffold_preview"])
     if action.get("suggested_confidence_change"):
@@ -366,6 +369,84 @@ def build_empty_apply_summary(apply_mode: str) -> dict[str, Any]:
     }
 
 
+def _normalize_selected_action_keys(values: list[str] | None) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for value in values or []:
+        for item in str(value or "").split(","):
+            key = item.strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            normalized.append(key)
+    return normalized
+
+
+def _action_apply_brief(action: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "action_key": str(action.get("action_key", "") or ""),
+        "action_type": str(action.get("action_type", "") or ""),
+        "target": dict(action.get("target", {})) if isinstance(action.get("target"), dict) else {},
+        "apply_eligibility": dict(action.get("apply_eligibility", {}))
+        if isinstance(action.get("apply_eligibility"), dict)
+        else {},
+    }
+
+
+def _select_actions_for_apply(
+    actions: list[dict[str, Any]],
+    selected_action_keys: list[str] | None,
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    normalized_keys = _normalize_selected_action_keys(selected_action_keys)
+    if not normalized_keys:
+        return actions, None
+
+    selected_key_set = set(normalized_keys)
+    selected_actions = [
+        action for action in actions if str(action.get("action_key", "") or "") in selected_key_set
+    ]
+    matched_keys = {str(action.get("action_key", "") or "") for action in selected_actions}
+    missing_keys = [key for key in normalized_keys if key not in matched_keys]
+    unselected_actions = [
+        action for action in actions if str(action.get("action_key", "") or "") not in selected_key_set
+    ]
+    unselected_apply_eligible_actions = [
+        action
+        for action in unselected_actions
+        if bool(
+            (action.get("apply_eligibility", {}) if isinstance(action.get("apply_eligibility"), dict) else {}).get(
+                "eligible",
+                False,
+            )
+        )
+    ]
+    return selected_actions, {
+        "enabled": True,
+        "selected_action_keys": normalized_keys,
+        "matched_action_count": len(selected_actions),
+        "missing_action_keys": missing_keys,
+        "unselected_action_count": len(unselected_actions),
+        "unselected_apply_eligible_action_count": len(unselected_apply_eligible_actions),
+        "selected_actions": [_action_apply_brief(action) for action in selected_actions],
+        "unselected_apply_eligible_actions": [
+            _action_apply_brief(action) for action in unselected_apply_eligible_actions[:25]
+        ],
+        "unselected_apply_eligible_truncated": len(unselected_apply_eligible_actions) > 25,
+        "all_actions_preserved_in_proposal": True,
+    }
+
+
+def _attach_action_selection_summary(
+    apply_summary: dict[str, Any],
+    action_selection: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if not action_selection:
+        return apply_summary
+    updated = dict(apply_summary)
+    updated["action_selection"] = action_selection
+    return updated
+
+
 def _normalize_ordered_text_list(value: Any) -> list[str]:
     normalized: list[str] = []
     seen: set[str] = set()
@@ -570,7 +651,8 @@ def _apply_single_related_card_action(
     run_id: str,
     updated_at: str,
 ) -> dict[str, Any]:
-    payload = dict(update_context["payload"])
+    previous_entry = dict(update_context["payload"])
+    payload = dict(previous_entry)
     current_related_cards = list(update_context["current_related_cards"])
     suggested_related_cards = list(update_context["suggested_related_cards"])
     target_path = update_context["target_path"]
@@ -614,6 +696,7 @@ def _apply_single_related_card_action(
         "action_key": action["action_key"],
         "entry_id": entry_id,
         "entry_path": relative_target_path,
+        "previous_entry": previous_entry,
         "previous_related_cards": current_related_cards,
         "updated_related_cards": suggested_related_cards,
         "event_ids": list(action.get("event_ids", [])),
@@ -658,7 +741,8 @@ def _apply_single_cross_index_action(
     run_id: str,
     updated_at: str,
 ) -> dict[str, Any]:
-    payload = dict(update_context["payload"])
+    previous_entry = dict(update_context["payload"])
+    payload = dict(previous_entry)
     current_cross_index = list(update_context["current_cross_index"])
     suggested_cross_index = list(update_context["suggested_cross_index"])
     target_path = update_context["target_path"]
@@ -699,6 +783,7 @@ def _apply_single_cross_index_action(
         "action_key": action["action_key"],
         "entry_id": entry_id,
         "entry_path": relative_target_path,
+        "previous_entry": previous_entry,
         "previous_cross_index": current_cross_index,
         "updated_cross_index": suggested_cross_index,
         "event_ids": list(action.get("event_ids", [])),
@@ -1585,10 +1670,12 @@ def _run_apply_phase(
     artifact_paths: dict[str, Any],
     i18n_plan_path: Path | None = None,
     semantic_review_plan_path: Path | None = None,
+    selected_action_keys: list[str] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    selected_actions, action_selection = _select_actions_for_apply(actions, selected_action_keys)
     apply_summary = _apply_actions_for_mode(
         repo_root=repo_root,
-        actions=actions,
+        actions=selected_actions,
         events=events,
         run_id=run_id,
         generated_at=generated_at,
@@ -1596,6 +1683,7 @@ def _run_apply_phase(
         i18n_plan_path=i18n_plan_path,
         semantic_review_plan_path=semantic_review_plan_path,
     )
+    apply_summary = _attach_action_selection_summary(apply_summary, action_selection)
     apply_path = _maybe_emit_apply_report(
         repo_root=repo_root,
         run_id=run_id,
@@ -1619,6 +1707,7 @@ def consolidate_history(
     apply_mode: str = APPLY_MODE_NONE,
     i18n_plan_path: Path | None = None,
     semantic_review_plan_path: Path | None = None,
+    selected_action_keys: list[str] | None = None,
 ) -> dict[str, Any]:
     context = _prepare_consolidation_context(
         repo_root=repo_root,
@@ -1663,6 +1752,7 @@ def consolidate_history(
         artifact_paths=artifact_paths,
         i18n_plan_path=i18n_plan_path,
         semantic_review_plan_path=semantic_review_plan_path,
+        selected_action_keys=selected_action_keys,
     )
 
     return {

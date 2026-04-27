@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from local_kb.adoption import ADOPTION_KEY, adoption_content_hash
+from local_kb.adoption import ADOPTION_KEY, adoption_content_hash, card_exchange_hash, record_exchange_hash
 from local_kb.org_outbox import build_organization_outbox
 from local_kb.store import load_yaml_file, write_yaml_file
 
@@ -94,7 +94,7 @@ class OrganizationOutboxTests(unittest.TestCase):
             root = Path(tmp)
             org = root / "org"
             write_yaml_file(root / "kb" / "public" / "model.yaml", self._card("share-model"))
-            write_yaml_file(org / "kb" / "trusted" / "existing.yaml", self._card("existing-org"))
+            write_yaml_file(org / "kb" / "main" / "existing.yaml", self._card("existing-org"))
             write_yaml_file(org / "kb" / "imports" / "alice" / "existing-import.yaml", self._card("existing-import"))
             local_duplicate = self._card("local-duplicate")
             local_duplicate["title"] = "existing-org title"
@@ -105,6 +105,14 @@ class OrganizationOutboxTests(unittest.TestCase):
             sources = [{"path": str(org), "organization_id": "sandbox"}]
 
             first = build_organization_outbox(root, organization_id="sandbox", organization_sources=sources)
+            record_exchange_hash(
+                root,
+                first["created"][0]["content_hash"],
+                direction="uploaded",
+                organization_id="sandbox",
+                source_path=first["created"][0]["source_path"],
+                entry_id=first["created"][0]["entry_id"],
+            )
             second = build_organization_outbox(root, organization_id="sandbox", organization_sources=sources)
 
         self.assertEqual([item["entry_id"] for item in first["created"]], ["share-model"])
@@ -113,7 +121,27 @@ class OrganizationOutboxTests(unittest.TestCase):
         self.assertIn("content hash already exists in organization repository", first_skipped["import-duplicate"])
         self.assertEqual(second["created_count"], 0)
         second_skipped = {item["entry_id"]: item["reasons"] for item in second["skipped"]}
-        self.assertIn("content hash was already exported from this installation", second_skipped["share-model"])
+        self.assertIn("content hash was already exchanged with organization", second_skipped["share-model"])
+
+    def test_outbox_skips_hashes_previously_downloaded_from_organization(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            downloaded = self._card("previously-downloaded")
+            write_yaml_file(root / "kb" / "public" / "downloaded.yaml", downloaded)
+            record_exchange_hash(
+                root,
+                card_exchange_hash(downloaded),
+                direction="downloaded",
+                organization_id="sandbox",
+                source_path="kb/trusted/previously-downloaded.yaml",
+                entry_id="previously-downloaded",
+            )
+
+            result = build_organization_outbox(root, organization_id="sandbox")
+
+        self.assertEqual(result["created_count"], 0)
+        skipped = {item["entry_id"]: item["reasons"] for item in result["skipped"]}
+        self.assertIn("content hash was already exchanged with organization", skipped["previously-downloaded"])
 
 
 if __name__ == "__main__":

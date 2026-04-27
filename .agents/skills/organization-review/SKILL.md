@@ -1,18 +1,19 @@
 ---
 name: organization-review
-description: Review Khaos Brain organization KB maintenance proposals, including card-and-Skill bundles, shared Skill safety, evidence quality, privacy boundaries, and GitHub auto-merge readiness. Use before approving, rejecting, merging, splitting, or promoting organization KB candidates or organization Skill registry changes.
+description: Review Khaos Brain organization KB maintenance proposals, including card-and-Skill bundles, shared Skill safety, evidence quality, privacy boundaries, and GitHub auto-merge readiness. Use as a review lens for approving, rejecting, merging, splitting, or promoting organization KB candidates or organization Skill registry changes.
 ---
 
 # Organization Review
 
 Use this Skill when reviewing organization KB changes or running full
-organization maintenance automation.
+organization maintenance automation. It is guidance for judgment, not a hard
+apply gate for ordinary organization Sleep maintenance.
 
 ## Review Contract
 
 Treat the review unit as a bundle, not a standalone file:
 
-- candidate card or trusted-card change;
+- import candidate, `main` card change, or Skill-linked card bundle;
 - declared Skill dependency or Skill registry change;
 - task evidence and provenance;
 - privacy and sharing policy impact;
@@ -21,6 +22,13 @@ Treat the review unit as a bundle, not a standalone file:
 Do not approve a Skill only because it exists. A Skill becomes organization
 knowledge only when cards explain when it is useful, what outcome it predicts,
 what fallback exists, and what evidence supports it.
+
+Treat the organization KB as a shared exchange layer, not as a central truth
+layer. Organization `main` cards may be maintained with the same
+editorial posture as local Sleep: keep, reject, watch, merge, split, rewrite,
+promote, demote, deprecate, or cross-link when evidence supports the decision.
+Do not reject a card-content change merely because the target is already in `main` or already trusted;
+instead review the evidence, privacy boundary, usefulness, and rollback story.
 
 ## Required Checks
 
@@ -42,8 +50,9 @@ what fallback exists, and what evidence supports it.
    content hash.
 9. Do not auto-install or recommend auto-install for `candidate`, `rejected`,
    unknown, or unpinned Skills.
-10. Prefer import/candidate paths for automatic merge. Treat trusted-card,
-   registry, policy, and organization-review Skill changes as higher risk.
+10. Treat `main` card content maintenance as in scope for organization Sleep
+    when evidence supports it. Keep privacy, registry, policy, organization-review
+    Skill changes, and executable Skill changes under stricter review.
 11. Record rejection reasons when a bundle is weak, unsafe, private, too local,
    duplicated, or missing evidence.
 12. Keep the output reviewable: summarize accepted changes, rejected changes,

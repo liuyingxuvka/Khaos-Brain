@@ -6,9 +6,21 @@ import unittest
 from pathlib import Path
 
 from local_kb.consolidate import consolidate_history
+from local_kb.consolidate_apply import action_stub_filename
 
 
 class ConsolidateActionStubTests(unittest.TestCase):
+    def test_action_stub_filename_stays_windows_path_friendly(self) -> None:
+        long_action_key = (
+            "review-cross-index::entry::"
+            "cand-2026-04-20-codex-runtime-kb-postflight-with-extra-route-detail"
+        )
+
+        filename = action_stub_filename(long_action_key, 2)
+
+        self.assertLessEqual(len(filename), 50)
+        self.assertRegex(filename, r"^003-[a-z0-9-]+-[a-f0-9]{8}\.json$")
+
     def test_emit_files_writes_one_action_stub_per_grouped_action(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)
@@ -188,6 +200,133 @@ class ConsolidateActionStubTests(unittest.TestCase):
             self.assertIn("future utility", candidate_stub["apply_eligibility"]["reason"])
             self.assertEqual(candidate_stub["suggested_artifact_kind"], "candidate-entry-proposal")
             self.assertEqual(evidence_stub["disposition_suggestion"]["recommendation"], "rewrite-or-split-observations")
+
+    def test_dream_validation_handoff_surfaces_on_candidate_review_action(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            history_path = repo_root / "kb" / "history" / "events.jsonl"
+            history_path.parent.mkdir(parents=True, exist_ok=True)
+
+            event = {
+                "event_id": "dream-validated-1",
+                "event_type": "observation",
+                "created_at": "2026-04-24T08:00:00+00:00",
+                "source": {"kind": "dream-maintenance", "agent": "kb-dreamer", "thread_ref": "dream-run::a"},
+                "target": {
+                    "kind": "task-observation",
+                    "entry_ids": ["cand-entry-validation"],
+                    "route_hint": ["engineering", "architecture", "refactor"],
+                    "task_summary": "Dream experiment for engineering / architecture / refactor",
+                },
+                "rationale": "Dream mode treated this as read-only evidence for later sleep review.",
+                "context": {
+                    "suggested_action": "update-card",
+                    "hit_quality": "hit",
+                    "predictive_observation": {
+                        "scenario": "A candidate card exists without enough confirmation.",
+                        "action_taken": "Ran a bounded Dream retrieval A/B validation.",
+                        "observed_result": "Validated the existing card with exact route-local retrieval evidence.",
+                        "operational_use": "Sleep should review whether the card should be strengthened or kept watched.",
+                    },
+                    "dream_validation": {
+                        "run_id": "dream-run-a",
+                        "opportunity_kind": "entry-validation",
+                        "classification": "validated",
+                        "evidence_grade": "strong",
+                        "validation_status": "passed",
+                        "sandbox_mode": "retrieval-ab",
+                        "sandbox_path": "kb/history/dream/dream-run-a/sandbox/experiment-001-retrieval-ab.json",
+                        "source_entry_id": "cand-entry-validation",
+                        "entry_status": "candidate",
+                        "entry_confidence": 0.4,
+                        "entry_ids": ["cand-entry-validation"],
+                        "trusted_card_mutation": False,
+                        "sleep_handoff": (
+                            "Sleep should use this strong sandbox evidence when deciding whether the existing "
+                            "candidate should stay watched or be strengthened."
+                        ),
+                        "architect_handoff": "No Architect action from this sandbox result.",
+                        "handoff_action": "update-card",
+                    },
+                },
+            }
+            with history_path.open("w", encoding="utf-8") as handle:
+                handle.write(json.dumps(event) + "\n")
+
+            result = consolidate_history(repo_root=repo_root, run_id="dream-handoff", emit_files=True)
+
+            action = next(action for action in result["actions"] if action["action_type"] == "review-candidate")
+            self.assertEqual(action["target"]["ref"], "cand-entry-validation")
+            self.assertIn("dream_validation_summary", action)
+            self.assertEqual(action["dream_validation_summary"]["evidence_event_count"], 1)
+            self.assertEqual(action["dream_validation_summary"]["strongest_evidence_grade"], "strong")
+            self.assertEqual(action["dream_validation_summary"]["validation_statuses"], {"passed": 1})
+            self.assertEqual(action["dream_validation_summary"]["entry_statuses"], ["candidate"])
+            self.assertIn("Dream sandbox validation", action["recommended_next_step"])
+            self.assertFalse(action["apply_eligibility"]["eligible"])
+            self.assertEqual(action["apply_eligibility"]["supported_mode"], "semantic-review")
+            self.assertNotIn("review-entry-update", [action["action_type"] for action in result["actions"]])
+
+            stub_path = next(
+                Path(repo_root / path)
+                for path in result["artifact_paths"]["action_stub_paths"]
+                if json.loads((repo_root / path).read_text(encoding="utf-8"))["action_type"] == "review-candidate"
+            )
+            stub_payload = json.loads(stub_path.read_text(encoding="utf-8"))
+            self.assertEqual(stub_payload["dream_validation_summary"]["sandbox_paths"], [event["context"]["dream_validation"]["sandbox_path"]])
+
+    def test_dream_validation_handoff_ignores_weak_or_unsafe_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            history_path = repo_root / "kb" / "history" / "events.jsonl"
+            history_path.parent.mkdir(parents=True, exist_ok=True)
+
+            base_event = {
+                "event_type": "observation",
+                "created_at": "2026-04-24T08:00:00+00:00",
+                "source": {"kind": "dream-maintenance", "agent": "kb-dreamer"},
+                "target": {
+                    "kind": "task-observation",
+                    "entry_ids": ["cand-entry-validation"],
+                    "route_hint": ["engineering", "architecture", "refactor"],
+                    "task_summary": "Dream experiment for engineering / architecture / refactor",
+                },
+                "rationale": "Dream sandbox result is not strong enough for candidate review.",
+                "context": {
+                    "suggested_action": "none",
+                    "hit_quality": "hit",
+                    "dream_validation": {
+                        "run_id": "dream-run-a",
+                        "opportunity_kind": "entry-validation",
+                        "classification": "validated",
+                        "evidence_grade": "weak",
+                        "validation_status": "passed",
+                        "sandbox_mode": "retrieval-ab",
+                        "sandbox_path": "kb/history/dream/dream-run-a/sandbox/experiment-001-retrieval-ab.json",
+                        "source_entry_id": "cand-entry-validation",
+                        "entry_status": "candidate",
+                        "entry_confidence": 0.4,
+                        "entry_ids": ["cand-entry-validation"],
+                        "trusted_card_mutation": False,
+                        "sleep_handoff": "Sleep should not strengthen this from weak evidence.",
+                        "handoff_action": "none",
+                    },
+                },
+            }
+            unsafe_event = json.loads(json.dumps(base_event))
+            unsafe_event["event_id"] = "dream-unsafe-1"
+            unsafe_event["context"]["dream_validation"]["evidence_grade"] = "strong"
+            unsafe_event["context"]["dream_validation"]["trusted_card_mutation"] = True
+            weak_event = json.loads(json.dumps(base_event))
+            weak_event["event_id"] = "dream-weak-1"
+            with history_path.open("w", encoding="utf-8") as handle:
+                handle.write(json.dumps(weak_event) + "\n")
+                handle.write(json.dumps(unsafe_event) + "\n")
+
+            result = consolidate_history(repo_root=repo_root, run_id="dream-handoff-negative")
+
+            self.assertNotIn("review-candidate", [action["action_type"] for action in result["actions"]])
+            self.assertNotIn("review-entry-update", [action["action_type"] for action in result["actions"]])
 
     def test_action_stub_surfaces_contrastive_candidate_preview(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

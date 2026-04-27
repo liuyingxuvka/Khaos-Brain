@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import urllib.error
@@ -94,6 +95,104 @@ def _github_json_request(method: str, url: str, token: str, payload: dict[str, A
         return {"ok": False, "status": exc.code, "body": body}
     except OSError as exc:
         return {"ok": False, "status": 0, "body": {"message": str(exc)}}
+
+
+def _token_or_default(token: str) -> str:
+    return str(token or os.environ.get("GITHUB_TOKEN") or github_token_from_git_credential() or "").strip()
+
+
+def create_github_pull_request_for_branch(
+    repo_url: str,
+    *,
+    branch: str,
+    base_branch: str = "main",
+    title: str,
+    body: str = "",
+    labels: list[str] | None = None,
+    token: str = "",
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    owner, repo = parse_github_owner_repo(repo_url)
+    if not owner or not repo:
+        return {"ok": True, "attempted": False, "reason": "repo_url is not a GitHub repository URL", "steps": []}
+    resolved_token = _token_or_default(token)
+    label_values = [label for label in (labels or []) if str(label or "").strip()]
+    steps = [
+        {
+            "name": "create-pr",
+            "method": "POST",
+            "url": f"https://api.github.com/repos/{owner}/{repo}/pulls",
+            "payload": {
+                "title": title,
+                "head": branch,
+                "base": base_branch,
+                "body": body,
+                "draft": False,
+            },
+        }
+    ]
+    if label_values:
+        steps.append(
+            {
+                "name": "add-labels",
+                "method": "POST",
+                "url": f"https://api.github.com/repos/{owner}/{repo}/issues/{{number}}/labels",
+                "payload": {"labels": label_values},
+            }
+        )
+    if dry_run:
+        return {
+            "ok": True,
+            "attempted": True,
+            "dry_run": True,
+            "owner": owner,
+            "repo": repo,
+            "branch": branch,
+            "base_branch": base_branch,
+            "labels": label_values,
+            "steps": steps,
+            "errors": [],
+        }
+    if not resolved_token:
+        return {"ok": False, "attempted": True, "errors": ["GitHub token is required"], "steps": steps}
+
+    pr_step = steps[0]
+    pr_result = _github_json_request(pr_step["method"], pr_step["url"], resolved_token, pr_step["payload"])
+    results: list[dict[str, Any]] = [{"name": "create-pr", **pr_result}]
+    errors: list[str] = []
+    if not pr_result.get("ok"):
+        body_payload = pr_result.get("body")
+        message = body_payload.get("message") if isinstance(body_payload, dict) else body_payload
+        errors.append(f"create-pr failed: {message or pr_result.get('status')}")
+        return {"ok": False, "attempted": True, "steps": results, "errors": errors}
+
+    pr_body = pr_result.get("body") if isinstance(pr_result.get("body"), dict) else {}
+    number = pr_body.get("number")
+    html_url = str(pr_body.get("html_url") or "")
+    if label_values and number:
+        label_step = steps[1]
+        label_url = str(label_step["url"]).replace("{number}", str(number))
+        label_result = _github_json_request(label_step["method"], label_url, resolved_token, label_step["payload"])
+        results.append({"name": "add-labels", **label_result})
+        if not label_result.get("ok"):
+            body_payload = label_result.get("body")
+            message = body_payload.get("message") if isinstance(body_payload, dict) else body_payload
+            errors.append(f"add-labels failed: {message or label_result.get('status')}")
+
+    return {
+        "ok": not errors,
+        "attempted": True,
+        "dry_run": False,
+        "owner": owner,
+        "repo": repo,
+        "branch": branch,
+        "base_branch": base_branch,
+        "number": number,
+        "url": html_url,
+        "labels": label_values,
+        "steps": results,
+        "errors": errors,
+    }
 
 
 def configure_github_org_kb_repository(
