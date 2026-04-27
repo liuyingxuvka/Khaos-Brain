@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from local_kb.config import install_state_path
 from local_kb.install import (
     AUTOMATION_MODEL_ENV_VAR,
     AUTOMATION_REASONING_EFFORT_ENV_VAR,
@@ -659,6 +660,43 @@ class CodexInstallTests(unittest.TestCase):
             self.assertTrue(
                 any("Codex shell rg binary is missing" in issue for issue in check["issues"]),
                 check["issues"],
+            )
+
+    def test_check_skips_windows_shell_tools_for_non_windows_partial_install(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            codex_home = Path(tmp_dir) / ".codex"
+            shell_bin_dir = Path(tmp_dir) / "shell-bin"
+            git_real = Path(tmp_dir) / "tool-src" / "git-real.cmd"
+            rg_source = Path(tmp_dir) / "tool-src" / "rg-source.exe"
+            write_cmd(git_real, "echo git version test")
+            rg_source.parent.mkdir(parents=True, exist_ok=True)
+            rg_source.write_bytes(b"rg-binary")
+
+            install_codex_integration(
+                repo_root=repo_root,
+                codex_home=codex_home,
+                shell_bin_dir=shell_bin_dir,
+                git_executable=git_real,
+                rg_source=rg_source,
+                persist_user_shell_path=False,
+            )
+
+            (shell_bin_dir / "rg.exe").unlink()
+            manifest_path = install_state_path(codex_home)
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["shell_tools"]["rg_installed"] = False
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with mock.patch("local_kb.install.platform.system", return_value="Linux"):
+                check = build_installation_check(repo_root=repo_root, codex_home=codex_home)
+
+            checklist = {item["id"]: item for item in check["checklist"]}
+            self.assertTrue(check["ok"], check["issues"])
+            self.assertTrue(checklist["codex_shell_tools"]["ok"])
+            self.assertTrue(
+                any("shell git/rg shim check skipped" in warning for warning in check["warnings"]),
+                check["warnings"],
             )
 
     def test_check_fails_when_managed_global_agents_block_is_missing(self) -> None:

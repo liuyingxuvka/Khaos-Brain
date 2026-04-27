@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import platform
 import re
 import shutil
 import time
@@ -1090,15 +1091,28 @@ def build_installation_check(
     rg_path = Path(
         str(shell_tools_manifest.get("rg_path", "") or (shell_bin / "rg.exe"))
     ).expanduser()
-    if not git_shim_path.exists():
-        issues.append(
-            f"Codex shell Git shim is missing: {git_shim_path}. "
-            "Re-run the installer to restore stable Git command resolution."
+    shell_tools_required = (
+        platform.system().lower() == "windows"
+        or (
+            bool(shell_tools_manifest.get("git_shim_installed"))
+            and bool(shell_tools_manifest.get("rg_installed"))
         )
-    if not rg_path.exists():
-        issues.append(
-            f"Codex shell rg binary is missing: {rg_path}. "
-            "Re-run the installer to restore stable ripgrep command resolution."
+    )
+    if shell_tools_required:
+        if not git_shim_path.exists():
+            issues.append(
+                f"Codex shell Git shim is missing: {git_shim_path}. "
+                "Re-run the installer to restore stable Git command resolution."
+            )
+        if not rg_path.exists():
+            issues.append(
+                f"Codex shell rg binary is missing: {rg_path}. "
+                "Re-run the installer to restore stable ripgrep command resolution."
+            )
+    else:
+        warnings.append(
+            "Codex shell git/rg shim check skipped because this non-Windows install "
+            "did not create Windows shell shim files."
         )
 
     expected_repo_root = repo_root or (Path(manifest_root_raw) if manifest_root_raw else Path("."))
@@ -1474,7 +1488,7 @@ def build_installation_check(
     kb_org_contribute_ok = not automation_issue_map.get("kb-org-contribute")
     kb_org_maintenance_ok = not automation_issue_map.get("kb-org-maintenance")
     automation_check_map = {item["id"]: item for item in automation_checks}
-    codex_shell_tools_ok = git_shim_path.exists() and rg_path.exists()
+    codex_shell_tools_ok = not shell_tools_required or (git_shim_path.exists() and rg_path.exists())
     strong_defaults_ok = (
         global_skill_implicit
         and global_skill_postflight
@@ -1616,7 +1630,10 @@ def build_installation_check(
             "codex_shell_tools",
             "Codex shell git/rg tools are installed in a stable user-level bin",
             codex_shell_tools_ok,
-            f"shell_bin={shell_bin}; git_shim={git_shim_path}; rg_path={rg_path}",
+            (
+                f"shell_bin={shell_bin}; git_shim={git_shim_path}; rg_path={rg_path}; "
+                f"required={shell_tools_required}"
+            ),
         ),
         _checklist_item(
             "strong_session_defaults",
@@ -1644,6 +1661,7 @@ def build_installation_check(
             "shell_bin_dir": str(shell_bin),
             "git_shim_path": str(git_shim_path),
             "rg_path": str(rg_path),
+            "required": shell_tools_required,
         },
         "automation_runtime": automation_runtime,
         "checklist": checklist,

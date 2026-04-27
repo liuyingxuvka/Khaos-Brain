@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.3 - 2026-04-27
+
+- Fixed installer health checks on non-Windows CI runners so Windows-only Codex shell shims are not required when the installer did not create them.
+- Added regression coverage for non-Windows partial shell-tool installs while preserving the stricter Windows local-machine check.
+
 ## v0.4.2 - 2026-04-27
 
 - Fixed GitHub Actions coverage so retrieval, taxonomy, and desktop UI tests use deterministic fixture KB data instead of depending on ignored local candidate cards.
