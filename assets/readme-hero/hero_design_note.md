@@ -14,7 +14,7 @@ Agents often restart from blank context, forget which routes worked, and cannot 
 
 ## Core workflow
 
-Retrieve relevant cards before work, write observations afterward, then let Sleep, Dream, Architect, and organization maintenance refine reusable experience.
+Retrieve relevant cards before work, write observations afterward, and let maintenance rhythms consolidate reusable experience.
 
 ## Hero tagline
 
@@ -22,20 +22,22 @@ A local predictive memory system that helps AI agents reuse experience across ta
 
 ## Visual concept
 
-An AI agent connects to a local card library, maintenance rhythms, and optional organization exchange without exposing private history.
+A local memory vault for AI agents, with path-first retrieval, inspectable model cards, file-based storage, Git history, private/public boundaries, and maintenance cycles.
 
 ## Image keywords
 
-Recall, Cards, Maintenance
+predictive model cards, path-first retrieval, local file vault, Git history, maintenance rhythm
+
+## Generation method
+
+Direct project-specific text-to-image generation. This hero is not a reused SVG, HTML, Canvas, Pillow, or card-grid template.
 
 ## File paths
 
 - `assets/readme-hero/hero.png`
-- `assets/readme-hero/hero.svg`
-- `assets/readme-hero/hero-background.png`
 - `assets/readme-hero/hero_prompt.md`
 - `assets/readme-hero/hero_design_note.md`
 
 ## README insertion position
 
-Updated the existing README HERO block.
+Updated the existing README HERO block after the first H1 heading.

@@ -1,21 +1,3 @@
 # README Hero Prompt
 
-Use case: productivity-visual
-Asset type: GitHub README concept hero image
-Project: Khaos Brain
-Hero tagline: A local predictive memory system that helps AI agents reuse experience across tasks.
-
-Primary request:
-Create a professional, modern, clean, visually strong, slightly cinematic concept hero image for a GitHub README. The image should make the project understandable within three seconds.
-
-Project-specific visual subject:
-An AI agent connects to a local card library, maintenance rhythms, and optional organization exchange without exposing private history.
-
-Composition:
-Wide 1600 x 840 banner with a deterministic text layer, project name on the left, minimal workflow labels on the right, semi-realistic software panels, glass surfaces, subtle depth, and clear data/workflow connections.
-
-Text constraints:
-Use only this exact English text: project name, hero tagline, and the workflow labels Retrieve, Work, Record, Maintain. Keep text minimal and deterministic.
-
-Avoid:
-Generic technology wallpaper, childish illustration, heavy cartoon style, anime-only style, memes, unreadably dark output, visual clutter, fake UI paragraphs, garbled text, Chinese text, watermarks, or decorative-only backgrounds.
+Create a wide GitHub README concept hero image for Khaos Brain, a local predictive memory system for AI agents. Direct text-to-image generation, no SVG template, no card-grid reuse. Visual subject: a semi-realistic AI agent workspace where a local file-based knowledge library appears as a luminous memory vault of structured model cards. Show an agent terminal on one side, a path-first retrieval map, inspectable YAML-like cards floating as physical transparent tiles, and a maintenance rhythm represented by four distinct zones: recall before work, task execution, observation write-back, and overnight maintenance cycles. Include a local Git repository visual, private/public separation, and optional organization source as a distant clean shared shelf. The image should communicate reusable experience, predictive cards, auditable local files, and maintenance cycles. Style: professional technology product hero, cinematic but readable, clean CG/semi-realistic, deep navy with electric blue, soft orange and white accents, premium software infrastructure visual. Composition: wide README banner, unique memory-library scene, not a generic neural network, not a simple dashboard, not similar to a validation pipeline. Constraints: no readable long text, no Chinese text, no gibberish labels, no watermark, no logo, not cartoon, not anime, not childish, avoid scary brain imagery.
