@@ -190,3 +190,390 @@
 ### Next Actions
 - Implement the plan in small batches: Sleep final cleanup first, then Architect rollup, then content-boundary/install-sync hardening.
 - Keep the new plan model as a regression guard while implementing the production changes.
+
+
+## kb-architect-20260501-lock-aware-maintenance-pass - Run KB Architect maintenance with lock-aware runner recovery and queue hygiene
+
+- Project: Khaos-Brain
+- Trigger reason: KB Architect is a stateful maintenance lane with shared locks, update gates, proposal queue state, and system rollup side effects.
+- Status: completed
+- Skill decision: used_flowguard
+- Started: 2026-05-01T12:44:08+00:00
+- Ended: 2026-05-01T12:44:08+00:00
+- Duration seconds: 0.000
+- Commands OK: True
+
+### Model Files
+- .flowguard/run_khaos_brain_conformance.py
+
+### Commands
+- OK (0.000s): `python -c "import flowguard; print(flowguard.SCHEMA_VERSION)"`
+- OK (0.000s): `python .flowguard\run_khaos_brain_conformance.py`
+- OK (0.000s): `python -m unittest tests.test_kb_architect`
+- OK (0.000s): `python -m unittest tests.test_maintenance_lanes`
+
+### Findings
+- The live runner initially self-blocked because an outer lock used a different run id than kb_architect.py; rerunning with the same run id made lock acquisition reentrant.
+- The maintained queue had no sandbox-ready ready-for-apply packet; seven medium-safety proposals remain ready-for-patch.
+
+### Counterexamples
+- outer lock run_id A -> runner generated run_id B -> same-lane lock wait loop until timeout
+
+### Friction Points
+- none recorded
+
+### Skipped Steps
+- No new FlowGuard model was created because the existing conformance replay covers lane mutual exclusion and update-gate expectations for this maintenance pass.
+
+### Next Actions
+- Architect automation should pass the acquired lock run id to the runner or let the runner own lock acquisition to avoid self-lock stalls.
+
+
+## kb-architect-20260502-lock-aware-maintenance-pass - Run KB Architect maintenance with lock-aware runner ownership, queue hygiene, and rollup validation
+
+- Project: Khaos-Brain
+- Trigger reason: KB Architect is a stateful maintenance lane with shared locks, update gates, proposal queue state, postflight observations, and system rollup side effects.
+- Status: attention-needed
+- Skill decision: used_flowguard
+- Started: 2026-05-02T12:02:47+00:00
+- Ended: 2026-05-02T12:05:02+00:00
+- Duration seconds: 0.000
+- Commands OK: False
+
+### Model Files
+- .flowguard/run_khaos_brain_conformance.py
+
+### Commands
+- OK (0.000s): `python -c "import flowguard; print(flowguard.SCHEMA_VERSION)"` - flowguard schema version 1.0 is importable.
+- OK (0.000s): `python .flowguard\run_khaos_brain_conformance.py` - Conformance replay passed local-lane mutual exclusion, organization-lane independence, organization download boundary, update apply gate, and failed-update no-auto-retry expectations.
+- OK (0.000s): `python -m unittest tests.test_kb_architect` - 10 Architect tests passed.
+- OK (0.000s): `python -m unittest tests.test_maintenance_lanes` - 7 maintenance-lane tests passed.
+- FAIL (0.000s): `python scripts/install_codex_kb.py --check --json` - Install check failed because kb-org-contribute and kb-org-maintenance automations are not active/policy-complete.
+
+### Findings
+- The Architect runner owned the local-maintenance lock directly, avoiding the prior same-lane self-lock mismatch.
+- No sandbox-ready ready-for-apply packet was available; nine medium-safety proposals remain ready-for-patch.
+- The system rollup contains the required source reports but remains attention-needed because content-boundary review is required and install_sync_ok is false for organization automations.
+
+### Counterexamples
+- none recorded
+
+### Friction Points
+- The installer check exposes organization automation spec drift, but this Architect pass had no selected apply packet and should leave the fix as patch-plan work.
+
+### Skipped Steps
+- No new FlowGuard model was created because the existing conformance replay still covers the lock and update-gate risks exercised by this pass.
+- No production mechanism files were edited and no sandbox trial was selected.
+
+### Next Actions
+- Address organization automation install-sync drift through the existing ready-for-patch organization automation lane rather than ad-hoc direct edits.
+
+
+## kb-architect-20260504-lock-aware-maintenance-pass - Run KB Architect mechanism maintenance with update gate, queue hygiene, rollup validation, and no sandbox trial
+
+- Project: Khaos-Brain
+- Trigger reason: KB Architect is a stateful maintenance lane with shared locks, update gates, proposal queue state, sandbox closure, postflight observations, and system rollup side effects.
+- Status: attention-needed
+- Skill decision: used_flowguard
+- Started: 2026-05-04T12:04:40Z
+- Ended: 2026-05-04T12:08:53Z
+- Commands OK: False
+
+### Model Files
+- .flowguard/run_khaos_brain_conformance.py
+
+### Commands
+- OK: `python -c "import flowguard; print(flowguard.SCHEMA_VERSION)"` - flowguard schema version 1.0 is importable.
+- OK: `python .flowguard\run_khaos_brain_conformance.py` - local-lane locks, organization independence, organization download boundary, update apply gate, and failed-update no-auto-retry expectations passed.
+- OK: `python -m unittest tests.test_kb_architect tests.test_maintenance_lanes` - 17 focused tests passed after queue and rollup updates.
+- FAIL: `python scripts\install_codex_kb.py --check --json` - automation TOML policy metadata is still missing for core and organization automations.
+
+### Findings
+- The Architect runner acquired and released the shared local-maintenance lock directly; Sleep and Dream were completed.
+- Software update gate returned `no-update` with `apply_ready=false`.
+- Queue hygiene maintained 37 proposals: 2 applied, 11 ready-for-patch, 8 superseded, 8 watching, and 8 rejected.
+- No ready-for-apply or sandbox-ready packet was selected.
+- The rollup includes Sleep, Dream, Architect, FlowGuard, organization, content-boundary, and install-sync sources, but remains attention-needed because content-boundary review is required and install_sync_ok=false.
+
+### Counterexamples
+- none recorded
+
+### Friction Points
+- Installer check now flags policy metadata drift across core and organization automation specs; this pass left it as patch-plan/watch work because no selected apply packet authorized direct automation edits.
+
+### Skipped Steps
+- No new FlowGuard model was created because the existing conformance replay covers this pass's lock and update-gate risks.
+- No sandbox trial was run because `sandbox_trial_selection.json` reported no sandbox-ready ready-for-apply packet.
+- `git diff --check` was run separately and reported only existing CRLF normalization warnings.
+
+### Next Actions
+- Address automation policy metadata drift through the existing ready-for-patch install/automation lanes instead of ad-hoc direct edits.
+- Continue leaving broad Skill and automation mechanism work as patch-plan until a packet becomes sandbox-ready with explicit write boundaries.
+
+## kb-org-maintenance-20260504-lane-status-completion-fix - Run organization KB maintenance and fix stale organization lane status
+
+- Project: Khaos-Brain
+- Trigger reason: Organization maintenance is a stateful automation lane; post-run validation found stale running status despite lock release.
+- Status: completed
+- Skill decision: used_flowguard
+- Started: 2026-05-04T13:37:06Z
+- Ended: 2026-05-04T13:43:39Z
+
+### Model Files
+- .flowguard/khaos_brain_function_flow.py
+- .flowguard/run_khaos_brain_conformance.py
+
+### Commands
+- OK: `python -c "import flowguard; print(flowguard.SCHEMA_VERSION)"` - flowguard schema version 1.0 is importable.
+- OK: `python .flowguard\run_khaos_brain_conformance.py` - conformance replay passed lane, organization-download, and update-gate expectations.
+- OK: `python .flowguard\khaos_brain_function_flow.py` - correct model passed 55,770 traces with released-lock status invariant; broken duplicate-upload variant failed.
+- OK: `python -m unittest tests.test_org_automation tests.test_org_sources tests.test_maintenance_lanes` - focused org/lane tests passed.
+- OK: `python scripts\kb_org_maintainer.py --automation` - rerun completed, selected no actions, recorded postflight, released lock, and left lane status completed.
+- OK: `python -m unittest discover -s tests` - 220 tests passed.
+- OK: `git diff --check` - no whitespace errors; CRLF normalization warnings only.
+- OK: `python scripts\kb_org_check.py --org-root .local\organization_sources\khaos-org-kb-sandbox` - organization checker passed with no errors or warnings.
+
+### Findings
+- Successful organization contribution and maintenance paths wrote `running` status but did not write `completed` before returning.
+- The fix writes `completed` or `failed` before lock release on non-exception organization automation paths.
+- The stateful model now checks that released locks do not leave `running` status.
+- The older model metadata now reports the installed flowguard schema version while keeping its project-local explorer.
+
+### Counterexamples
+- `successful organization maintenance -> lock released -> lane status remains running` was observed in the first live pass and resolved by the patch.
+
+### Skipped Steps
+- No maintenance branch or PR was created because the organization Sleep decision set selected no apply actions.
+
+### Next Actions
+- Keep lane-status checks in future maintenance finalization alongside lock-release checks.
+- Consider a later migration of `.flowguard/khaos_brain_function_flow.py` to the real flowguard Workflow/Explorer API.
+
+
+## kb-architect-20260505-lock-aware-maintenance-pass - Run KB Architect mechanism maintenance with update gate, queue hygiene, rollup validation, and no sandbox trial
+
+- Project: Khaos-Brain
+- Trigger reason: KB Architect is a stateful maintenance lane with shared locks, update gates, proposal queue state, sandbox closure, postflight observations, and system rollup side effects.
+- Status: completed
+- Skill decision: used_flowguard
+- Started: 2026-05-05T12:08:06+00:00
+- Ended: 2026-05-05T12:08:06+00:00
+- Duration seconds: 0.000
+- Commands OK: False
+
+### Model Files
+- .flowguard/run_khaos_brain_conformance.py
+
+### Commands
+- OK (0.000s): `python -c "import flowguard; print(flowguard.SCHEMA_VERSION)"`
+- OK (0.000s): `python .flowguard\run_khaos_brain_conformance.py`
+- OK (0.000s): `python -m unittest tests.test_kb_architect`
+- FAIL (0.000s): `python scripts\install_codex_kb.py --check --json`
+
+### Findings
+- The Architect runner acquired and released the shared local-maintenance lock directly; Sleep and Dream were completed and no blocking lane was active.
+- Software update gate returned no-update with apply_ready=false.
+- Queue hygiene maintained 37 proposals with 0 ready-for-apply and 0 sandbox-ready packets; 11 medium-safety proposals remain ready-for-patch.
+- The maintenance rollup contains Sleep, Dream, Architect, FlowGuard, organization, content-boundary, and install-sync sources, but stays attention-needed because content-boundary review is required and install_sync_ok=false.
+
+### Counterexamples
+- none recorded
+
+### Friction Points
+- Installer check still flags automation policy metadata drift; Architect left it as patch-plan work because no selected apply packet authorized direct automation edits.
+
+### Skipped Steps
+- No new FlowGuard model was created because existing conformance replay covers the lock and update-gate risks for this pass.
+- No sandbox trial was run because sandbox_trial_selection.json reported no sandbox-ready ready-for-apply packet.
+
+### Next Actions
+- Address automation policy metadata drift through existing ready-for-patch install/automation lanes instead of ad-hoc direct edits.
+
+
+## kb-architect-20260506-lock-aware-maintenance-pass - Run KB Architect mechanism maintenance with update gate, queue hygiene, rollup validation, and no sandbox trial
+
+- Project: Khaos-Brain
+- Trigger reason: KB Architect is a stateful maintenance lane with shared locks, update gates, proposal queue state, sandbox closure, postflight observations, and system rollup side effects.
+- Status: attention-needed
+- Skill decision: used_flowguard
+- Started: 2026-05-06T14:04:26+02:00
+- Ended: 2026-05-06T14:07:58+02:00
+- Commands OK: False
+
+### Model Files
+- .flowguard/run_khaos_brain_conformance.py
+
+### Commands
+- OK: `python -c "import flowguard; print(flowguard.SCHEMA_VERSION)"` - flowguard schema version 1.0 is importable.
+- OK: `python .flowguard\run_khaos_brain_conformance.py` - conformance replay passed lane, organization-download, and update-gate expectations.
+- OK: `python -m unittest tests.test_kb_architect` - 10 focused Architect tests passed.
+- FAIL: `python scripts\install_codex_kb.py --check --json` - install sync remains attention-needed because automation metadata/policy checks fail.
+- OK: `git diff --check` - no whitespace errors; CRLF normalization warnings only on already-dirty tracked files.
+- OK: `python -m unittest tests.test_codex_install` - 9 installer tests passed.
+
+### Findings
+- The Architect runner acquired and released the shared local-maintenance lock; Sleep and Dream were completed and no blocking lane was active.
+- Software update gate returned no-update with `apply_ready=false` and no UI process running.
+- Queue hygiene maintained 38 proposals: 2 applied, 12 ready-for-patch, 8 superseded, 8 watching, and 8 rejected.
+- No ready-for-apply or sandbox-ready packet was selected, so no source mechanism patch or sandbox merge was applied.
+- The maintenance rollup contains Sleep, Dream, Architect, FlowGuard, organization, content-boundary, and install-sync surfaces, but stays attention-needed because content-boundary review is required, `install_sync_ok=false`, and organization contribute remains running.
+
+### Counterexamples
+- none recorded
+
+### Friction Points
+- Installer check still flags automation policy metadata drift and inactive organization automations; Architect kept this in ready-for-patch/watch lanes because no sandbox-ready apply packet authorized direct automation edits.
+
+### Skipped Steps
+- No new FlowGuard model was created because existing conformance replay covers the lock and update-gate risks for this pass.
+- No sandbox trial was run because `sandbox_trial_selection.json` reported no sandbox-ready ready-for-apply packet.
+- No source mechanism patch was applied because the current run selected no sandbox-ready ready-for-apply packet.
+
+### Next Actions
+- Address automation policy metadata drift through existing ready-for-patch install/automation lanes instead of ad-hoc direct edits.
+- Resolve stale organization contribute lane status through the appropriate organization maintenance mechanism.
+
+
+## khaos-brain-governance-minimal-fix-20260507 - Apply minimal governance closure fixes after FlowGuard simulation
+
+- Project: Khaos-Brain
+- Trigger reason: The user requested that the upgraded governance FlowGuard model and all existing models accept the minimal fix before code changes, then asked to update the local install, local Git state, and GitHub state.
+- Status: completed
+- Skill decision: used_flowguard
+- Started: 2026-05-07T17:22:40+02:00
+- Ended: 2026-05-07T17:55:12+02:00
+- Commands OK: True
+
+### Model Files
+- .flowguard/khaos_brain_governance_flow.py
+- .flowguard/khaos_brain_function_flow.py
+- .flowguard/card_i18n_flow.py
+- .flowguard/card_visual_merge_flow.py
+- .flowguard/khaos_brain_planned_maintenance_flow.py
+- .flowguard/run_khaos_brain_conformance.py
+
+### Commands
+- OK: `python -c "import flowguard; print(flowguard.SCHEMA_VERSION)"` - flowguard schema version 1.0 is importable.
+- OK: `python .flowguard\khaos_brain_governance_flow.py --live` - abstract governance checks pass and live projection reports finding_count 0 after the fixes.
+- OK: `python .flowguard\card_i18n_flow.py`
+- OK: `python .flowguard\card_visual_merge_flow.py`
+- OK: `python .flowguard\khaos_brain_function_flow.py`
+- OK: `python .flowguard\khaos_brain_planned_maintenance_flow.py`
+- OK: `python .flowguard\run_khaos_brain_conformance.py`
+- OK: `python scripts\install_codex_kb.py --json`
+- OK: `python scripts\install_codex_kb.py --check --json`
+- OK: `python -m unittest tests.test_kb_architect tests.test_codex_install tests.test_maintenance_lanes tests.test_software_update tests.test_org_automation tests.test_org_sources tests.test_kb_i18n tests.test_kb_maintenance_decisions tests.test_kb_taxonomy_worker1`
+- OK: `python scripts\kb_desktop.py --repo-root . --check`
+- OK: `python scripts\kb_desktop.py --repo-root . --language zh-CN --check`
+- OK: `python -m unittest discover -s tests` - 224 tests passed.
+- OK: `git diff --check`
+
+### Findings
+- Sleep now scans the full action surface but exposes a bounded immediate review batch with deferred counts, so observations are not dropped when review throughput is limited.
+- Dream scenario-replay handoffs are eligible for Sleep review, closing the strong/moderate Dream-to-Sleep handoff gap.
+- Architect ready-for-patch debt is considered closed only when there is an explicit execution outlet, such as a patch packet/application, not by silently deleting the work.
+- Route parsing now normalizes known aliases and dotted route families before governance review and card/event routing.
+- Installer checks now distinguish user-paused organization automations from real automation drift.
+- Stale lane statuses without live locks are reconciled into explicit stale status instead of remaining as misleading running lanes.
+
+### Counterexamples
+- The governance model still rejects unreviewed candidate backlog, trusted promotion without review, dropped/unreviewed Dream handoffs, weak Dream promotion, Architect patch debt without outlet, route drift before card creation, real install drift, unexpected organization pause, and stale running lanes.
+
+### Friction Points
+- The full test run exposed one compatibility expectation still using the old `predictive-kb` route; the test was updated to assert the canonical `system/knowledge-library` route.
+
+### Skipped Steps
+- No KOSpring production code was changed; this repair stayed inside Khaos Brain / FlowGuard / install maintenance mechanisms.
+
+### Next Actions
+- Use the live governance projection as the release gate for future KB maintenance mechanism changes.
+
+
+## khaos-brain-governance-flowguard-model - Add governance closure model for mature KB maintenance risks
+
+- Project: Khaos-Brain
+- Trigger reason: The existing models covered lane/update/i18n mechanics, but not candidate backlog closure, Dream/Sleep handoff closure, Architect ready-for-patch execution outlets, route drift, or manual-pause health semantics.
+- Status: completed-with-live-findings
+- Skill decision: used_flowguard
+- Started: 2026-05-07T17:22:40+02:00
+- Ended: 2026-05-07T17:22:40+02:00
+- Commands OK: False, because the live projection intentionally exits non-zero when current repository reports contain model findings.
+
+### Model Files
+- .flowguard/khaos_brain_governance_flow.py
+
+### Commands
+- OK: `python -c "import flowguard; print(flowguard.SCHEMA_VERSION)"` - flowguard schema version 1.0 is importable.
+- OK: `python -m py_compile .flowguard\khaos_brain_governance_flow.py`
+- OK: `python .flowguard\khaos_brain_governance_flow.py --abstract-only` - accepted and user-paused organization sequences pass; all modeled bad paths are rejected.
+- FINDINGS: `python .flowguard\khaos_brain_governance_flow.py --live` - abstract scenarios pass, but live repository projection reports governance issues.
+
+### Findings
+- candidate_backlog_pressure: 183 candidate cards versus 2 public and 1 private cards.
+- sleep_review_pressure: latest Sleep run `kb-sleep-20260507T100105Z` produced 1446 candidate actions and 480 apply-eligible actions.
+- dream_sleep_handoff_open: latest Dream run `kb-dream-20260507T110225Z` has 4 handoffs, 3 review-ready handoffs, and 3 strong/moderate handoffs.
+- architect_execution_outlet_gap: 12 ready-for-patch proposals exist, with 0 ready-for-apply and 0 sandbox-ready packets.
+- route_drift_pressure: 478 blank-route history events, 12 root-direct cards, 5 dotted card routes, and undeclared families such as `job-hunter`, `flowpilot`, `product`, and `predictive-kb`.
+- install_policy_metadata_drift: maintenance rollup install report still has 19 issues.
+- stale_running_lane_without_lock: `kb-org-contribute` lane status says running without the corresponding lock.
+
+### Allowed Notes
+- User-paused organization automations are explicitly modeled as allowed local operating mode, not as a failure by themselves: `kb-org-contribute` and `kb-org-maintenance`.
+
+### Counterexamples
+- Abstract counterexamples are the intended bad-path scenarios: unreviewed candidate backlog, promotion without review, unreviewed or dropped Dream handoffs, weak Dream promotion, Architect ready-for-patch without outlet, route drift before card creation or finalization, release readiness with real health drift, unexpected org pause, and stale lane readiness.
+
+### Friction Points
+- FlowGuard invariants are evaluated over intermediate states, so governance-debt invariants needed an explicit terminal state (`finalize_governance` or `mark_release_ready`) to avoid treating normal in-progress debt as failure.
+
+### Skipped Steps
+- No Khaos Brain/KOSpring production code was changed.
+- Existing older FlowGuard models were not refactored; the new model was added as an isolated governance projection.
+
+### Next Actions
+- Use the new governance model as the preflight gate before changing Khaos Brain maintenance mechanics.
+- Address model findings through explicit future changes rather than treating live projection failure as a model failure.
+
+
+## kb-architect-20260507-lock-aware-maintenance-pass - Run KB Architect mechanism maintenance with update gate, queue hygiene, rollup validation, and no sandbox trial
+
+- Project: Khaos-Brain
+- Trigger reason: KB Architect is a stateful maintenance lane with shared locks, update gates, proposal queue state, sandbox closure, postflight observations, and system rollup side effects.
+- Status: completed
+- Skill decision: used_flowguard
+- Started: 2026-05-07T12:07:17+00:00
+- Ended: 2026-05-07T12:07:17+00:00
+- Duration seconds: 0.000
+- Commands OK: False
+
+### Model Files
+- .flowguard/run_khaos_brain_conformance.py
+
+### Commands
+- OK (0.000s): `python -c "import flowguard; print(flowguard.SCHEMA_VERSION)"`
+- OK (0.000s): `python .flowguard\run_khaos_brain_conformance.py`
+- OK (0.000s): `python -m unittest tests.test_kb_architect`
+- OK (0.000s): `python -m unittest tests.test_codex_install`
+- OK (0.000s): `git diff --check`
+- FAIL (0.000s): `python scripts\install_codex_kb.py --check --json`
+
+### Findings
+- Architect runner acquired and released the shared local-maintenance lock; Sleep and Dream were completed and no blocking lane was active.
+- Software update gate returned no-update with apply_ready=false and UI process count 0.
+- Queue hygiene maintained 38 proposals: 2 applied, 12 ready-for-patch, 8 rejected, 8 superseded, and 8 watching; no ready-for-apply or sandbox-ready packet was selected.
+- Maintenance rollup contains Sleep, Dream, Architect, FlowGuard, organization, content-boundary, and install-sync surfaces, but remains attention-needed because content-boundary review is required, install_sync_ok=false, and organization contribute remains running.
+
+### Counterexamples
+- none recorded
+
+### Friction Points
+- Install check still flags automation policy metadata drift and inactive organization automations; Architect kept this in ready-for-patch/watch lanes because no sandbox-ready apply packet authorized direct automation edits.
+
+### Skipped Steps
+- No new FlowGuard model was created because existing conformance replay covers the lock and update-gate risks for this pass.
+- No sandbox trial was run because sandbox_trial_selection.json reported no sandbox-ready ready-for-apply packet.
+- No source mechanism patch was applied because the current run selected no sandbox-ready ready-for-apply packet.
+
+### Next Actions
+- Address automation policy metadata drift through existing ready-for-patch install/automation lanes instead of ad-hoc direct edits.
+- Resolve stale organization contribute lane status through the appropriate organization maintenance mechanism.

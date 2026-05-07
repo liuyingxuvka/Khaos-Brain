@@ -161,7 +161,7 @@ SKILL_MAINTENANCE_ROUTE_PREFIXES = (
 )
 
 DREAM_VALIDATION_EVIDENCE_GRADES_FOR_REVIEW = {"strong", "moderate"}
-DREAM_VALIDATION_SANDBOX_MODE = "retrieval-ab"
+DREAM_VALIDATION_SANDBOX_MODES_FOR_REVIEW = {"retrieval-ab", "scenario-replay"}
 
 
 def utc_now_compact() -> str:
@@ -509,7 +509,7 @@ def dream_validation_review_seeds(event: dict[str, Any], *, route_ref: str) -> l
         return []
     if str(validation.get("validation_status", "") or "").strip() != "passed":
         return []
-    if str(validation.get("sandbox_mode", "") or "").strip() != DREAM_VALIDATION_SANDBOX_MODE:
+    if str(validation.get("sandbox_mode", "") or "").strip() not in DREAM_VALIDATION_SANDBOX_MODES_FOR_REVIEW:
         return []
     if bool(validation.get("trusted_card_mutation", False)):
         return []

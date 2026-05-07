@@ -13,6 +13,7 @@ from local_kb.taxonomy import (
     derive_route_counts,
     load_taxonomy,
 )
+from local_kb.common import parse_route_segments
 from tests.kb_fixtures import write_sample_kb_repo
 
 
@@ -94,6 +95,20 @@ class KbTaxonomyTests(unittest.TestCase):
         language_gap = next(item for item in report["gaps"] if item["route_label"] == "language")
         self.assertEqual(language_gap["recommended_action"], "review-taxonomy-add")
         self.assertIn("language / professional / english", language_gap["example_observed_routes"])
+
+    def test_route_parser_normalizes_aliases_and_dotted_route_families(self) -> None:
+        self.assertEqual(
+            parse_route_segments("predictive-kb/maintenance"),
+            ["system", "knowledge-library", "maintenance"],
+        )
+        self.assertEqual(
+            parse_route_segments(["flowpilot.automation.supervisor"]),
+            ["codex", "workflow", "flowpilot", "automation", "supervisor"],
+        )
+        self.assertEqual(
+            parse_route_segments(["desktop_app", "search"]),
+            ["engineering", "desktop-app", "search"],
+        )
 
     def test_cli_json_smoke(self) -> None:
         result = subprocess.run(

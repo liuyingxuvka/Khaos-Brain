@@ -31,6 +31,24 @@ STOP_WORDS = {
     "when",
 }
 
+ROUTE_ALIASES: dict[str, tuple[str, ...]] = {
+    "automation": ("system", "automation"),
+    "career": ("work", "career"),
+    "desktop_app": ("engineering", "desktop-app"),
+    "desktop-app": ("engineering", "desktop-app"),
+    "flowguard": ("engineering", "architecture", "flowguard"),
+    "flowpilot": ("codex", "workflow", "flowpilot"),
+    "job-hunter": ("work", "career", "job-hunter"),
+    "personal": ("work", "personal"),
+    "predictive-kb": ("system", "knowledge-library"),
+    "predictive-kb-preflight": ("system", "knowledge-library", "preflight"),
+    "product": ("work", "product"),
+    "project": ("repository", "project"),
+    "repo": ("repository",),
+    "search": ("system", "search"),
+    "software": ("engineering", "software"),
+}
+
 
 def tokenize(text: str) -> list[str]:
     if not text:
@@ -82,7 +100,25 @@ def parse_route_segments(value: Any) -> list[str]:
             segment = part.strip().lower()
             if segment:
                 segments.append(segment)
-    return segments
+    return canonicalize_route_segments(segments)
+
+
+def canonicalize_route_segments(value: Any) -> list[str]:
+    segments = [str(item).strip().lower() for item in normalize_string_list(value) if str(item).strip()]
+    if not segments:
+        return []
+    first, rest = segments[0], segments[1:]
+    if "." in first:
+        dotted = [part for part in first.split(".") if part]
+        if dotted:
+            first, rest = dotted[0], dotted[1:] + rest
+    alias = ROUTE_ALIASES.get(first)
+    if not alias:
+        return segments
+    alias_segments = list(alias)
+    if rest and rest[: len(alias_segments) - 1] == alias_segments[1:]:
+        return alias_segments + rest[len(alias_segments) - 1 :]
+    return alias_segments + rest
 
 
 def safe_float(value: Any, default: float) -> float:
@@ -100,4 +136,3 @@ def slugify(text: str) -> str:
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-

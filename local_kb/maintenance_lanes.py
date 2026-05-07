@@ -228,6 +228,33 @@ def write_lane_status(
     return payload
 
 
+def reconcile_stale_lane_statuses(
+    repo_root: Path,
+    *,
+    lanes: tuple[str, ...] | None = None,
+) -> list[dict[str, Any]]:
+    reconciled: list[dict[str, Any]] = []
+    active_lanes = lanes or tuple(lane for group_lanes in MAINTENANCE_LOCK_GROUPS.values() for lane in group_lanes)
+    for lane in active_lanes:
+        payload = read_lane_status(repo_root, lane)
+        if str(payload.get("status", "") or "").lower() != "running":
+            continue
+        group = lane_lock_group(lane)
+        lock = read_lane_lock(repo_root, group)
+        if lock and lock.get("lane") == lane and not _lock_is_stale(lock, stale_after_seconds=DEFAULT_STALE_AFTER_SECONDS):
+            continue
+        reconciled.append(
+            write_lane_status(
+                repo_root,
+                lane,
+                "stale",
+                run_id=str(payload.get("run_id", "") or ""),
+                note="Reconciled running status without an active lane lock.",
+            )
+        )
+    return reconciled
+
+
 def lane_is_running(repo_root: Path, lane: str) -> bool:
     status = str(read_lane_status(repo_root, lane).get("status", "") or "").lower()
     return status == "running"
@@ -242,6 +269,7 @@ def build_lane_guard(
     statuses: dict[str, dict[str, Any]] = {}
     blockers: list[str] = []
     legacy_running_without_lock: list[str] = []
+    reconcile_stale_lane_statuses(repo_root, lanes=lanes)
     group = lane_lock_group(lane)
     lock = read_lane_lock(repo_root, group)
     if lock and not _lock_is_stale(lock, stale_after_seconds=DEFAULT_STALE_AFTER_SECONDS):

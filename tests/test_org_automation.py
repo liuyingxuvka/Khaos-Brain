@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from local_kb.adoption import card_exchange_hash
+from local_kb.maintenance_lanes import read_lane_status
 from local_kb.org_automation import run_organization_contribution, run_organization_maintenance
 from local_kb.org_sources import _run_git
 from local_kb.settings import ORGANIZATION_MODE, save_desktop_settings
@@ -140,6 +141,7 @@ class OrganizationAutomationTests(unittest.TestCase):
             self._save_organization_settings(repo, org)
 
             result = run_organization_contribution(repo, dry_run=True, record_postflight=False)
+            lane_status = read_lane_status(repo, "kb-org-contribute")
 
         self.assertTrue(result["ok"], result)
         self.assertFalse(result["skipped"], result)
@@ -149,6 +151,7 @@ class OrganizationAutomationTests(unittest.TestCase):
         self.assertEqual(result["outbox"]["skipped_count"], 0)
         self.assertFalse((repo / "kb" / "outbox").exists())
         self.assertFalse(result["postflight_recorded"])
+        self.assertEqual(lane_status["status"], "completed")
 
     def test_contribution_syncs_and_uploads_created_outbox_to_import_branch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -295,6 +298,7 @@ class OrganizationAutomationTests(unittest.TestCase):
             )
 
             result = run_organization_maintenance(repo, record_postflight=False)
+            lane_status = read_lane_status(repo, "kb-org-maintenance")
             branches = _run_git(["branch", "--list", "maintenance/*"], cwd=remote)
             current_branch = _run_git(["branch", "--show-current"], cwd=org).stdout.strip()
 
@@ -306,6 +310,7 @@ class OrganizationAutomationTests(unittest.TestCase):
         self.assertEqual(current_branch, "main")
         self.assertEqual(0, branches.returncode, branches.stderr)
         self.assertIn("maintenance/", branches.stdout)
+        self.assertEqual(lane_status["status"], "completed")
 
     def test_maintenance_applies_cleanup_without_organization_review_skill_gate(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -320,12 +325,14 @@ class OrganizationAutomationTests(unittest.TestCase):
             self._save_organization_settings(repo, org, maintenance_requested=True)
 
             result = run_organization_maintenance(repo, record_postflight=False)
+            lane_status = read_lane_status(repo, "kb-org-maintenance")
 
         self.assertTrue(result["ok"], result)
         self.assertEqual(result["report"]["cleanup"]["review"]["selected_count"], 1)
         self.assertGreater(result["report"]["cleanup"]["apply"]["applied_count"], 0, result)
         self.assertFalse(result["maintenance_branch"]["attempted"], result)
         self.assertEqual(result["maintenance_branch"]["reason"], "organization mirror is not a git checkout")
+        self.assertEqual(lane_status["status"], "completed")
 
     def test_maintenance_noops_until_participation_is_requested(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -336,6 +343,7 @@ class OrganizationAutomationTests(unittest.TestCase):
             self._save_organization_settings(repo, org, maintenance_requested=False)
 
             result = run_organization_maintenance(repo, record_postflight=False)
+            lane_status = read_lane_status(repo, "kb-org-maintenance")
 
         self.assertTrue(result["ok"], result)
         self.assertTrue(result["skipped"], result)
@@ -357,12 +365,14 @@ class OrganizationAutomationTests(unittest.TestCase):
             )
 
             result = run_organization_maintenance(repo, record_postflight=False)
+            lane_status = read_lane_status(repo, "kb-org-maintenance")
 
         self.assertTrue(result["ok"], result)
         self.assertFalse(result["skipped"], result)
         self.assertTrue(result["settings_gate"]["available"])
         self.assertTrue(result["participation"]["available"])
         self.assertEqual(result["organization_id"], "sandbox")
+        self.assertEqual(lane_status["status"], "completed")
         self.assertEqual(result["report"]["maintenance_model"]["role"], "organization-exchange-sleep")
         self.assertEqual(result["lane_policy"]["incoming_lane"], "kb/imports")
         self.assertEqual(result["lane_policy"]["exchange_surface"], "kb/main")

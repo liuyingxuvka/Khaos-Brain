@@ -531,6 +531,48 @@ class CodexInstallTests(unittest.TestCase):
 
         self.assertTrue(staggered)
 
+    def test_installer_preserves_user_paused_organization_automations(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            codex_home = Path(tmp_dir) / ".codex"
+            shell_bin_dir = Path(tmp_dir) / "shell-bin"
+            git_real = Path(tmp_dir) / "tool-src" / "git-real.cmd"
+            rg_source = Path(tmp_dir) / "tool-src" / "rg-source.exe"
+            write_cmd(git_real, "echo git version test")
+            rg_source.parent.mkdir(parents=True, exist_ok=True)
+            rg_source.write_bytes(b"rg-binary")
+
+            install_codex_integration(
+                repo_root=repo_root,
+                codex_home=codex_home,
+                shell_bin_dir=shell_bin_dir,
+                git_executable=git_real,
+                rg_source=rg_source,
+                persist_user_shell_path=False,
+            )
+            for automation_id in ("kb-org-contribute", "kb-org-maintenance"):
+                path = codex_home / "automations" / automation_id / "automation.toml"
+                text = path.read_text(encoding="utf-8")
+                path.write_text(text.replace('status = "ACTIVE"', 'status = "PAUSED"'), encoding="utf-8")
+
+            install_codex_integration(
+                repo_root=repo_root,
+                codex_home=codex_home,
+                shell_bin_dir=shell_bin_dir,
+                git_executable=git_real,
+                rg_source=rg_source,
+                persist_user_shell_path=False,
+            )
+
+            for automation_id in ("kb-org-contribute", "kb-org-maintenance"):
+                text = (codex_home / "automations" / automation_id / "automation.toml").read_text(encoding="utf-8")
+                self.assertIn('status = "PAUSED"', text)
+                self.assertIn("user_paused = true", text)
+                self.assertIn('model_policy = "strongest-available"', text)
+                self.assertIn('reasoning_effort_policy = "deepest"', text)
+            check = build_installation_check(repo_root=repo_root, codex_home=codex_home)
+            self.assertTrue(check["ok"], check["issues"])
+
     def test_automation_runtime_prefers_newest_full_gpt_model_with_deepest_reasoning(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             codex_home = Path(tmp_dir) / ".codex"

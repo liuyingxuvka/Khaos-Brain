@@ -386,6 +386,7 @@ def run_organization_contribution(
         write_lane_status(repo_root, "kb-org-contribute", "running", run_id=resolved_run_id)
         source, sources, settings, sync_result = _sync_first_organization_source(repo_root, settings, base_branch=base_branch)
         if not sync_result.get("ok"):
+            write_lane_status(repo_root, "kb-org-contribute", "failed", run_id=resolved_run_id, note="organization source sync failed")
             result = {
                 "ok": False,
                 "skipped": False,
@@ -504,6 +505,7 @@ def run_organization_contribution(
                         )
 
         ok = bool(outbox.get("ok")) and bool(branch_result.get("ok", True))
+        write_lane_status(repo_root, "kb-org-contribute", "completed" if ok else "failed", run_id=resolved_run_id)
         postflight_path = ""
         if record_postflight and not dry_run:
             postflight_path = _record_postflight(
@@ -591,6 +593,7 @@ def run_organization_maintenance(
         write_lane_status(repo_root, "kb-org-maintenance", "running", run_id=resolved_run_id)
         source, sources, settings, sync_result = _sync_first_organization_source(repo_root, settings, base_branch=base_branch)
         if not sync_result.get("ok"):
+            write_lane_status(repo_root, "kb-org-maintenance", "failed", run_id=resolved_run_id, note="organization source sync failed")
             result = {
                 "ok": False,
                 "skipped": False,
@@ -667,8 +670,10 @@ def run_organization_maintenance(
         post_apply_ok = True
         if post_apply_check:
             post_apply_ok = bool(post_apply_check.get("ok"))
+        final_ok = bool(report.get("ok")) and apply_ok and post_apply_ok and bool(maintenance_branch.get("ok", True))
+        write_lane_status(repo_root, "kb-org-maintenance", "completed" if final_ok else "failed", run_id=resolved_run_id)
         result = {
-            "ok": bool(report.get("ok")) and apply_ok and post_apply_ok and bool(maintenance_branch.get("ok", True)),
+            "ok": final_ok,
             "skipped": False,
             "settings_gate": {
                 "available": True,

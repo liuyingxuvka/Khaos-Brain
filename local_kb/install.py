@@ -774,16 +774,20 @@ def _automation_spec_payload(
     spec: dict[str, Any],
     repo_root: Path,
     codex_home: Path | None = None,
+    existing: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     runtime = resolve_automation_runtime(codex_home)
     schedule_window = automation_time_window_label(spec)
+    existing_status = str((existing or {}).get("status", "") or "").upper()
+    user_paused = spec["id"] in {"kb-org-contribute", "kb-org-maintenance"} and existing_status == "PAUSED"
     return {
         "version": 1,
         "id": spec["id"],
         "kind": spec["kind"],
         "name": spec["name"],
         "prompt": spec["prompt"],
-        "status": spec["status"],
+        "status": "PAUSED" if user_paused else spec["status"],
+        "user_paused": user_paused,
         "rrule": automation_rrule_for_spec(spec, repo_root),
         "schedule_policy": "stable-jitter" if schedule_window else "fixed",
         "schedule_window": schedule_window,
@@ -819,6 +823,7 @@ def _write_automation_toml(path: Path, payload: dict[str, Any]) -> None:
         f"name = {json.dumps(payload['name'], ensure_ascii=False)}",
         f"prompt = {json.dumps(payload['prompt'], ensure_ascii=False)}",
         f"status = {json.dumps(payload['status'], ensure_ascii=False)}",
+        f"user_paused = {json.dumps(bool(payload.get('user_paused', False)), ensure_ascii=False).lower()}",
         f"rrule = {json.dumps(payload['rrule'], ensure_ascii=False)}",
         f"schedule_policy = {json.dumps(payload.get('schedule_policy', 'fixed'), ensure_ascii=False)}",
         f"schedule_window = {json.dumps(payload.get('schedule_window', ''), ensure_ascii=False)}",
@@ -874,7 +879,7 @@ def install_repo_automations(repo_root: Path, codex_home: Path | None = None) ->
     for spec in REPO_AUTOMATION_SPECS:
         path = automation_toml_path(spec["id"], home)
         existing = _load_automation_toml(path)
-        payload = _automation_spec_payload(spec, repo_root, codex_home=home)
+        payload = _automation_spec_payload(spec, repo_root, codex_home=home, existing=existing)
         payload["created_at"] = int(existing.get("created_at") or now_ms)
         payload["updated_at"] = now_ms
         _write_automation_toml(path, payload)
@@ -1214,7 +1219,10 @@ def build_installation_check(
                 issues_for_automation.append(
                     f"Automation {expected['id']} should be named {expected['name']}."
                 )
-            if str(payload.get("status", "") or "") != expected["status"]:
+            payload_status = str(payload.get("status", "") or "")
+            user_paused = bool(payload.get("user_paused")) and payload_status == "PAUSED"
+            manual_org_pause_allowed = spec["id"] in {"kb-org-contribute", "kb-org-maintenance"} and user_paused
+            if payload_status != expected["status"] and not manual_org_pause_allowed:
                 issues_for_automation.append(
                     f"Automation {expected['id']} should be status={expected['status']}."
                 )

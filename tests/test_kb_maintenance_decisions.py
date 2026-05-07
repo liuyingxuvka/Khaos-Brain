@@ -292,6 +292,49 @@ class MaintenanceDecisionHistoryTests(unittest.TestCase):
             self.assertEqual(second["candidate_action_count"], 0)
             self.assertFalse(second["actions"])
 
+    def test_consolidation_reports_bounded_review_batch_for_large_candidate_surface(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            history_path = repo_root / "kb" / "history" / "events.jsonl"
+            events = []
+            for index in range(36):
+                events.append(
+                    {
+                        "event_id": f"candidate-{index}",
+                        "event_type": "observation",
+                        "created_at": f"2026-04-20T10:{index:02d}:00+00:00",
+                        "source": {"kind": "task", "agent": "worker"},
+                        "target": {
+                            "kind": "task-observation",
+                            "route_hint": ["predictive-kb", "maintenance", f"topic-{index}"],
+                            "task_summary": f"Maintenance topic {index}",
+                        },
+                        "rationale": "next=new-candidate",
+                        "context": {
+                            "suggested_action": "new-candidate",
+                            "predictive_observation": {
+                                "scenario": f"Scenario {index}",
+                                "action_taken": "Use a bounded maintenance review.",
+                                "observed_result": "Review stays small.",
+                                "operational_use": "Prefer bounded Sleep review batches for maintenance candidate intake.",
+                                "reuse_judgment": "Reusable for candidate backlog control.",
+                            },
+                        },
+                    }
+                )
+            append_events(history_path, events)
+
+            result = consolidate_history(repo_root=repo_root, run_id="bounded-review")
+            review_batch = result["review_batch"]
+
+        self.assertEqual(result["candidate_action_count"], 36)
+        self.assertEqual(review_batch["status"], "bounded")
+        self.assertEqual(review_batch["max_selected_actions"], 30)
+        self.assertEqual(review_batch["selected_action_count"], 30)
+        self.assertEqual(review_batch["deferred_action_count"], 6)
+        self.assertEqual(review_batch["apply_eligible_action_count"], 36)
+        self.assertEqual(review_batch["selected_apply_eligible_action_count"], 30)
+
     def test_confidence_review_suppresses_resolved_signal_but_resurfaces_with_new_events(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)

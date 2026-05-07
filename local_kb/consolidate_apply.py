@@ -69,6 +69,10 @@ from local_kb.semantic_review import (
     semantic_review_updated_fields,
 )
 from local_kb.store import candidate_dir, write_yaml_file
+from local_kb.taxonomy import build_taxonomy_gap_report
+
+
+SLEEP_REVIEW_BATCH_LIMIT = 30
 
 
 def consolidation_run_dir(repo_root: Path, run_id: str) -> Path:
@@ -119,12 +123,132 @@ def build_proposal_payload(
         "history_path": relative_repo_path(repo_root, history_events_path(repo_root)),
         "event_count": event_count,
         "candidate_action_count": len(actions),
+        "review_batch": build_review_batch_payload(actions),
+        "dream_handoff_review": build_dream_handoff_review_payload(repo_root, actions),
+        "route_governance": build_route_governance_payload(repo_root),
         "actions": actions,
         "notes": CONSOLIDATION_NOTES,
     }
     if max_events is not None:
         payload["max_events"] = max_events
     return payload
+
+
+def _action_review_priority(action: dict[str, Any]) -> tuple[int, int, str]:
+    action_type = str(action.get("action_type", "") or "")
+    apply_eligibility = action.get("apply_eligibility", {})
+    apply_eligible = bool(apply_eligibility.get("eligible")) if isinstance(apply_eligibility, dict) else False
+    dream_summary = action.get("dream_validation_summary", {})
+    has_dream_handoff = isinstance(dream_summary, dict) and bool(dream_summary)
+    priority = 0
+    if has_dream_handoff:
+        priority += 1000
+    if action_type in {"review-candidate", "review-entry-update", "semantic-review"}:
+        priority += 200
+    if apply_eligible:
+        priority += 100
+    priority += int(action.get("priority_score", 0) or 0)
+    return (-priority, -int(action.get("event_count", 0) or 0), str(action.get("action_key", "") or ""))
+
+
+def build_review_batch_payload(
+    actions: list[dict[str, Any]],
+    *,
+    max_selected_actions: int = SLEEP_REVIEW_BATCH_LIMIT,
+) -> dict[str, Any]:
+    selected = sorted(actions, key=_action_review_priority)[:max_selected_actions]
+    selected_keys = [str(action.get("action_key", "") or "") for action in selected]
+    apply_eligible_actions = [
+        action
+        for action in actions
+        if isinstance(action.get("apply_eligibility"), dict) and action["apply_eligibility"].get("eligible") is True
+    ]
+    selected_apply_eligible = [
+        action
+        for action in selected
+        if isinstance(action.get("apply_eligibility"), dict) and action["apply_eligibility"].get("eligible") is True
+    ]
+    dream_handoff_actions = [
+        action for action in actions if isinstance(action.get("dream_validation_summary"), dict)
+    ]
+    selected_dream_handoff_actions = [
+        action for action in selected if isinstance(action.get("dream_validation_summary"), dict)
+    ]
+    return {
+        "status": "bounded",
+        "policy": (
+            "Sleep may inspect the full proposal surface, but only this selected batch is an immediate "
+            "review agenda; deferred actions remain watch/defer debt for later bounded passes."
+        ),
+        "max_selected_actions": max_selected_actions,
+        "selected_action_count": len(selected),
+        "deferred_action_count": max(0, len(actions) - len(selected)),
+        "selected_action_keys": selected_keys,
+        "apply_eligible_action_count": len(apply_eligible_actions),
+        "selected_apply_eligible_action_count": len(selected_apply_eligible),
+        "dream_handoff_action_count": len(dream_handoff_actions),
+        "selected_dream_handoff_action_count": len(selected_dream_handoff_actions),
+    }
+
+
+def _latest_report(root: Path, pattern: str) -> dict[str, Any]:
+    matches = [path for path in root.glob(pattern) if path.is_file()]
+    if not matches:
+        return {}
+    path = max(matches, key=lambda item: item.stat().st_mtime)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    payload["_relative_path"] = relative_repo_path(root, path)
+    return payload
+
+
+def build_dream_handoff_review_payload(repo_root: Path, actions: list[dict[str, Any]]) -> dict[str, Any]:
+    latest_dream = _latest_report(repo_root, "kb/history/dream/*/report.json")
+    experiments = latest_dream.get("experiments", []) if isinstance(latest_dream, dict) else []
+    if not isinstance(experiments, list):
+        experiments = []
+    review_ready = []
+    strong_or_moderate = []
+    for experiment in experiments:
+        if not isinstance(experiment, dict):
+            continue
+        detail = experiment.get("sleep_handoff_detail", {})
+        if isinstance(detail, dict) and detail.get("sleep_review_ready") is True:
+            review_ready.append(experiment)
+        if str(experiment.get("evidence_grade", "") or "").lower() in {"strong", "moderate"}:
+            strong_or_moderate.append(experiment)
+
+    dream_handoff_actions = [
+        action for action in actions if isinstance(action.get("dream_validation_summary"), dict)
+    ]
+    return {
+        "status": "reviewed" if not review_ready or dream_handoff_actions else "open",
+        "latest_dream_run": str(latest_dream.get("run_id", "") or ""),
+        "latest_dream_report": str(latest_dream.get("_relative_path", "") or ""),
+        "handoff_count": sum(1 for item in experiments if isinstance(item, dict) and item.get("sleep_handoff")),
+        "review_ready_count": len(review_ready),
+        "strong_or_moderate_count": len(strong_or_moderate),
+        "sleep_action_count": len(dream_handoff_actions),
+        "sleep_action_keys": [str(action.get("action_key", "") or "") for action in dream_handoff_actions],
+    }
+
+
+def build_route_governance_payload(repo_root: Path) -> dict[str, Any]:
+    gap_report = build_taxonomy_gap_report(repo_root)
+    gaps = gap_report.get("gaps", []) if isinstance(gap_report, dict) else []
+    if not isinstance(gaps, list):
+        gaps = []
+    return {
+        "status": "reviewed",
+        "route_normalizer": "local_kb.common.parse_route_segments",
+        "taxonomy_gap_count": len(gaps),
+        "top_taxonomy_gaps": gaps[:10],
+        "policy": "Canonical route parsing normalizes aliases and dotted route families before proposal review.",
+    }
 
 
 def action_stub_filename(action_key: str, index: int) -> str:

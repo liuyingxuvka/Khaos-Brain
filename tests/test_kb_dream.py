@@ -394,7 +394,7 @@ class DreamMaintenanceTests(unittest.TestCase):
             self.assertEqual(history_events[-1]["event_id"], result["run_observation_event_id"])
             self.assertEqual(
                 history_events[-1]["target"]["route_hint"],
-                ["predictive-kb", "agent-lifecycle", "exploration"],
+                ["system", "knowledge-library", "agent-lifecycle", "exploration"],
             )
 
     def test_dream_selection_uses_bounded_route_deduped_batch(self) -> None:

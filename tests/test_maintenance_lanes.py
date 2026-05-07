@@ -11,7 +11,9 @@ from local_kb.maintenance_lanes import (
     lane_lock_group,
     read_lane_lock,
     read_lane_status,
+    reconcile_stale_lane_statuses,
     release_lane_lock,
+    write_lane_status,
 )
 
 
@@ -67,6 +69,19 @@ class MaintenanceLaneLockTests(unittest.TestCase):
 
             self.assertTrue(recovered["acquired"])
             self.assertEqual(recovered["lane"], "kb-dream")
+
+    def test_running_status_without_lock_is_reconciled_as_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            write_lane_status(repo_root, "kb-org-contribute", "running", run_id="old-org-run")
+
+            reconciled = reconcile_stale_lane_statuses(repo_root, lanes=("kb-org-contribute",))
+            status = read_lane_status(repo_root, "kb-org-contribute")
+
+        self.assertEqual(len(reconciled), 1)
+        self.assertEqual(status["status"], "stale")
+        self.assertEqual(status["run_id"], "old-org-run")
+        self.assertIn("without an active lane lock", status["note"])
 
     def test_dream_releases_lock_and_marks_failed_on_exception(self) -> None:
         from local_kb.dream import run_dream_maintenance

@@ -1,9 +1,9 @@
 """Executable model-first review for Khaos Brain stateful workflows.
 
 This is a project-local model used by the model-first-function-flow skill.
-The external flowguard package is not installed in this workspace, so this
-file keeps the same finite-state discipline with a small standard-library
-explorer and records that limitation in the adoption log.
+It keeps the finite-state discipline in a small standard-library explorer;
+migrating this older model to the real flowguard Workflow/Explorer API remains
+future work.
 """
 
 from __future__ import annotations
@@ -12,6 +12,11 @@ from dataclasses import dataclass, replace
 from itertools import product
 import json
 from typing import Callable, Iterable
+
+try:
+    import flowguard as _flowguard
+except Exception:  # pragma: no cover - model remains runnable without the package.
+    _flowguard = None
 
 
 LOCAL_LANES = ("kb-sleep", "kb-dream", "kb-architect")
@@ -36,6 +41,8 @@ class Output:
 class State:
     local_lock: str = ""
     org_lock: str = ""
+    local_status: str = ""
+    org_status: str = ""
     org_imports: tuple[str, ...] = ()
     org_main: tuple[str, ...] = ()
     local_known: tuple[str, ...] = ()
@@ -83,9 +90,9 @@ class MaintenanceLaneBlock:
     """Input x State -> Set(Output x State) for local and organization locks."""
 
     name = "MaintenanceLaneBlock"
-    reads = ("local_lock", "org_lock")
-    writes = ("local_lock", "org_lock")
-    idempotency = "Repeated start for the same lane heartbeats; different lane in the same group waits. Failure releases the owned lock."
+    reads = ("local_lock", "org_lock", "local_status", "org_status")
+    writes = ("local_lock", "org_lock", "local_status", "org_status")
+    idempotency = "Repeated start for the same lane heartbeats; different lane in the same group waits. Finish/failure releases the owned lock and clears running status."
 
     def apply(self, event: Input, state: State) -> Iterable[tuple[Output, State]]:
         if event.kind not in {"start_lane", "finish_lane", "fail_lane"}:
@@ -95,17 +102,22 @@ class MaintenanceLaneBlock:
             yield Output("unknown_lane", event.lane), state
             return
         lock_field = "local_lock" if lanes == LOCAL_LANES else "org_lock"
+        status_field = "local_status" if lanes == LOCAL_LANES else "org_status"
         held = getattr(state, lock_field)
         group = "local" if lock_field == "local_lock" else "org"
         if event.kind == "start_lane":
             if held in {"", event.lane}:
-                yield Output(f"{group}_lane_acquired", event.lane), replace(state, **{lock_field: event.lane})
+                yield Output(f"{group}_lane_acquired", event.lane), replace(
+                    state,
+                    **{lock_field: event.lane, status_field: "running"},
+                )
             else:
                 yield Output(f"{group}_lane_wait", f"{event.lane} waits for {held}"), state
             return
         if held == event.lane:
             label = f"{group}_lane_failed_release" if event.kind == "fail_lane" else f"{group}_lane_released"
-            yield Output(label, event.lane), replace(state, **{lock_field: ""})
+            status = "failed" if event.kind == "fail_lane" else "completed"
+            yield Output(label, event.lane), replace(state, **{lock_field: "", status_field: status})
         else:
             yield Output(f"{group}_lane_release_ignored", event.lane), state
 
@@ -328,6 +340,15 @@ def invariant_lock_groups_are_exclusive(trace: Trace) -> CheckResult:
     return CheckResult("lock_groups_are_exclusive", True)
 
 
+def invariant_released_locks_do_not_leave_running_status(trace: Trace) -> CheckResult:
+    state = trace.final_state
+    if not state.local_lock and state.local_status == "running":
+        return CheckResult("local_status_completed_after_release", False, "local lock released but status stayed running", trace)
+    if not state.org_lock and state.org_status == "running":
+        return CheckResult("org_status_completed_after_release", False, "organization lock released but status stayed running", trace)
+    return CheckResult("released_locks_do_not_leave_running_status", True)
+
+
 def invariant_update_apply_gate(trace: Trace) -> CheckResult:
     for step in trace.steps:
         if step.output.label != "apply_update":
@@ -342,6 +363,7 @@ INVARIANTS: tuple[Callable[[Trace], CheckResult], ...] = (
     invariant_no_duplicate_side_effects,
     invariant_download_only_from_main,
     invariant_lock_groups_are_exclusive,
+    invariant_released_locks_do_not_leave_running_status,
     invariant_update_apply_gate,
 )
 
@@ -401,8 +423,9 @@ def explore(*, max_sequence_length: int = 3, broken: bool = False) -> dict[str, 
             "repeated_inputs": "covered by repeated sequence exploration up to length 3",
             "human_expectation": (
                 "maintenance lanes wait inside their group, org imports are not downloaded, "
-                "duplicate hashes do not create duplicate exchange side effects, and software "
-                "updates apply only after user preparation with the UI closed"
+                "duplicate hashes do not create duplicate exchange side effects, released lanes "
+                "do not leave running statuses, and software updates apply only after user "
+                "preparation with the UI closed"
             ),
         },
         "loop_stuck_review": {
@@ -436,7 +459,9 @@ def main() -> int:
     broken = explore(broken=True)
     report = {
         "model": "khaos_brain_function_flow",
-        "flowguard_package_available": False,
+        "flowguard_package_available": _flowguard is not None,
+        "flowguard_schema_version": getattr(_flowguard, "SCHEMA_VERSION", "") if _flowguard is not None else "",
+        "model_engine": "project_local_standard_library_explorer",
         "correct_model": expected,
         "broken_variant": broken,
         "broken_variant_expected_to_fail": True,

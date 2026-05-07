@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.4.7 - 2026-05-07
+
+- Added a governance FlowGuard model for mature KB maintenance risks: candidate backlog closure, Dream-to-Sleep handoff review, Architect execution outlets, route drift, install drift, and manual organization pauses.
+- Updated Sleep proposal output so it scans the full action surface while exposing a bounded immediate review batch with selected/deferred counts instead of hiding excess observations.
+- Allowed strong/moderate Dream scenario-replay handoffs to be reviewed by Sleep, closing the previous handoff blind spot.
+- Normalized known route aliases and dotted route families before governance review, retrieval hints, and maintenance history routing.
+- Included the current AI-authored zh-CN route segment display labels used by the desktop card browser.
+- Preserved user-paused organization automations during install refresh and health checks, while still flagging unexpected automation drift.
+- Reconciled stale running lane statuses without live locks into explicit stale status and added regression coverage for organization lane completion.
+
 ## v0.4.6 - 2026-04-30
 
 - Made KB Sleep's Chinese display cleanup a single final AI-authored completion checkpoint that covers both card fields and route/path display labels.

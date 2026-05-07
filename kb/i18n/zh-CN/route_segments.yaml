@@ -1,0 +1,35 @@
+language: zh-CN
+route_segment_labels:
+  ai-screening: AI 筛选
+  automations: 自动化
+  child-skill-gates: 子 Skill 门禁
+  coding: 编码
+  coding.release.skills: 编码发布 Skill
+  data-sources: 数据源
+  desktop-qa: 桌面 QA
+  evolutionary-direct-job-discovery: 演进式直连职位发现
+  flowpilot: FlowPilot
+  flowpilot.automation.supervisor: FlowPilot 自动化主管
+  geodata: 地理数据
+  github-preflight: GitHub 预检
+  idempotency: 幂等性
+  inspection: 检查
+  install-status: 安装状态
+  install-sync: 安装同步
+  installation: 安装
+  kb-checkpoints: KB 检查点
+  packet-runtime: Packet 运行时
+  process-control: 流程控制
+  product-principles: 产品原则
+  release-smoke: 发布烟测
+  reviewer: Reviewer
+  reviewer-audit: Reviewer 审计
+  router-events: Router 事件
+  search-quality: 搜索质量
+  startup-gate: 启动门禁
+  state-machines: 状态机
+  supervisor: 主管
+  waermecheck: WaermeCheck
+  watchdog: 看护
+  wms: WMS
+updated_at: '2026-05-06'
