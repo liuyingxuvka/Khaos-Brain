@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.8 - 2026-05-14
+
+- Prioritized Codex mistakes, weak paths, missed instructions, failed validations, tool/skill misuse, user corrections, and later correction episodes as the highest-value KB postflight observation evidence.
+- Updated the installed predictive-KB prompt, managed global `AGENTS.md` defaults, installer health checklist, and regression coverage so other machines inherit and verify the same mistake-first postflight priority.
+- Added an OpenSpec change package and executable FlowGuard model for the KB postflight priority path, including preservation of successful reusable patterns as lower-priority but still valid observations.
+- Clarified organization-maintenance desktop status so local maintenance participation is displayed separately from GitHub merge authority and stale permission messages do not make valid maintenance participation look disabled.
+
 ## v0.4.7 - 2026-05-07
 
 - Added a governance FlowGuard model for mature KB maintenance risks: candidate backlog closure, Dream-to-Sleep handoff review, Architect execution outlets, route drift, install drift, and manual organization pauses.
