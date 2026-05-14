@@ -60,6 +60,12 @@ def _normalize_validation_status(value: Any) -> str:
     return "not_configured"
 
 
+def _normalize_organization_maintenance_message(payload: dict[str, Any], maintenance_status: str) -> str:
+    if maintenance_status == "valid":
+        return ""
+    return _normalize_text(payload.get("organization_maintenance_message", payload.get("maintainer_validation_message")))
+
+
 def _normalize_organization_settings(value: Any) -> dict[str, Any]:
     payload = value if isinstance(value, dict) else {}
     validation_status = _normalize_validation_status(payload.get("validation_status"))
@@ -87,9 +93,7 @@ def _normalize_organization_settings(value: Any) -> dict[str, Any]:
         "organization_maintenance_requested": maintenance_requested,
         "organization_maintenance_validated": maintenance_validated,
         "organization_maintenance_status": maintenance_status,
-        "organization_maintenance_message": _normalize_text(
-            payload.get("organization_maintenance_message", payload.get("maintainer_validation_message"))
-        ),
+        "organization_maintenance_message": _normalize_organization_maintenance_message(payload, maintenance_status),
         "maintainer_mode_requested": maintenance_requested,
         "maintainer_validated": maintainer_validated,
         "maintainer_validation_status": "valid" if maintainer_validated else maintainer_validation_status,

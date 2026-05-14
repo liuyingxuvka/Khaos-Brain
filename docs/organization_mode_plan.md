@@ -1506,6 +1506,10 @@ the read-only and local-feedback foundations in place:
 - the local organization maintenance switch is now represented as
   "participate in organization maintenance"; it enables local maintenance
   proposal automation without granting GitHub merge authority;
+- user-facing status should keep that switch separate from GitHub merge or
+  maintainer authority: `organization_maintenance_*` reports local
+  participation, while legacy `maintainer_*` fields are compatibility metadata
+  and must not make enabled organization maintenance look disabled;
 - local maintainer and contribution helpers can inspect an organization mirror
   and prepare a local import branch under `kb/imports/<contributor>/`.
 - a private sandbox organization repository exists and has been seeded with

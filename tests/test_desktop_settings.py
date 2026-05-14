@@ -125,6 +125,37 @@ class DesktopSettingsTests(unittest.TestCase):
         self.assertTrue(status["available"])
         self.assertIn("enabled", status["reason"])
 
+    def test_organization_maintenance_valid_state_clears_stale_permission_message(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            save_desktop_settings(
+                root,
+                {
+                    "mode": ORGANIZATION_MODE,
+                    "organization": {
+                        "repo_url": "https://github.com/example/khaos-org-kb-sandbox.git",
+                        "local_mirror_path": "C:/mirror/sandbox",
+                        "organization_id": "sandbox",
+                        "validated": True,
+                        "validation_status": "valid",
+                        "organization_maintenance_requested": True,
+                        "organization_maintenance_status": "pending",
+                        "organization_maintenance_message": "GitHub cloud checks have not validated a maintenance proposal yet",
+                        "maintainer_validated": False,
+                        "maintainer_validation_status": "not_configured",
+                    },
+                },
+            )
+
+            settings = load_desktop_settings(root)
+
+        organization = settings["organization"]
+        self.assertTrue(organization["organization_maintenance_validated"])
+        self.assertEqual(organization["organization_maintenance_status"], "valid")
+        self.assertEqual(organization["organization_maintenance_message"], "")
+        self.assertFalse(organization["maintainer_validated"])
+        self.assertEqual(organization["maintainer_validation_status"], "not_configured")
+
     def test_legacy_maintainer_mode_setting_maps_to_maintenance_participation(self) -> None:
         settings = {
             "mode": ORGANIZATION_MODE,

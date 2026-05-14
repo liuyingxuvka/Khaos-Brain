@@ -9,6 +9,7 @@ from local_kb.desktop_app import (
     _detail_paragraphs,
     _maintenance_display,
     _maintenance_from_display,
+    _maintenance_status_label,
     _mode_display,
     _mode_from_display,
     _skill_badge_label,
@@ -192,6 +193,8 @@ class KbDesktopUiDataTests(unittest.TestCase):
         self.assertEqual(_maintenance_display(False), "Do not participate")
         self.assertTrue(_maintenance_from_display("Participate"))
         self.assertFalse(_maintenance_from_display("不参与组织维护", ZH_CN))
+        self.assertEqual(_maintenance_status_label({"available": True}, ZH_CN), "已启用")
+        self.assertEqual(_maintenance_status_label({"requested": False}), "Not requested")
 
     def test_mousewheel_units_allow_faster_main_card_scrolling(self) -> None:
         self.assertEqual(_wheel_scroll_units(120), -1)

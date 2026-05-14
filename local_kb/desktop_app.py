@@ -249,6 +249,12 @@ UI_TEXT = {
         "organization_source_count": "Organization sources",
         "organization_skills": "Organization Skills",
         "maintenance": "Maintenance",
+        "maintenance_participation": "Maintenance participation",
+        "maintenance_enabled": "Enabled",
+        "maintenance_not_requested": "Not requested",
+        "maintenance_unavailable": "Unavailable",
+        "github_merge_authority": "GitHub merge authority",
+        "github_merge_authority_repo_rules": "Controlled by repository rules",
         "recommendations": "Recommendations",
         "read_only": "Read-only",
         "recent_history": "Recent history",
@@ -332,6 +338,12 @@ UI_TEXT = {
         "organization_source_count": "组织来源",
         "organization_skills": "组织 Skill",
         "maintenance": "维护",
+        "maintenance_participation": "组织维护参与",
+        "maintenance_enabled": "已启用",
+        "maintenance_not_requested": "未请求",
+        "maintenance_unavailable": "不可用",
+        "github_merge_authority": "GitHub 合并权限",
+        "github_merge_authority_repo_rules": "由仓库规则决定",
         "recommendations": "建议",
         "read_only": "只读",
         "recent_history": "最近历史",
@@ -537,6 +549,14 @@ def _route_to_string(route: Any) -> str:
 def _ui_text(language: str, key: str) -> str:
     normalized = normalize_language(language)
     return UI_TEXT.get(normalized, UI_TEXT[DEFAULT_LANGUAGE]).get(key, UI_TEXT[DEFAULT_LANGUAGE].get(key, key))
+
+
+def _maintenance_status_label(status: dict[str, Any], language: str = DEFAULT_LANGUAGE) -> str:
+    if status.get("available"):
+        return _ui_text(language, "maintenance_enabled")
+    if not status.get("requested"):
+        return _ui_text(language, "maintenance_not_requested")
+    return str(status.get("reason") or _ui_text(language, "maintenance_unavailable"))
 
 
 def _route_label(route: Any, language: str = DEFAULT_LANGUAGE, repo_root: Path | None = None) -> str:
@@ -947,6 +967,9 @@ class KbDesktopApp(tk.Tk):
 
     def _text(self, key: str) -> str:
         return _ui_text(self.language, key)
+
+    def _maintenance_status_label(self, status: dict[str, Any]) -> str:
+        return _maintenance_status_label(status, self.language)
 
     def _active_organization_sources(self) -> list[dict[str, Any]]:
         self.organization_sources = organization_sources_from_settings(self.settings)
@@ -2565,7 +2588,8 @@ class KbDesktopApp(tk.Tk):
             f"{registry.get('counts', {}).get('approved', 0)} approved, "
             f"{registry.get('counts', {}).get('candidate', 0)} candidate, "
             f"{registry.get('counts', {}).get('rejected', 0)} rejected",
-            f"{self._text('maintenance')}: {maintenance_status.get('reason')}",
+            f"{self._text('maintenance_participation')}: {self._maintenance_status_label(maintenance_status)}",
+            f"{self._text('github_merge_authority')}: {self._text('github_merge_authority_repo_rules')}",
             "",
         ]
 
