@@ -138,6 +138,9 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn("Subagent and delegation usage lessons count as reusable signals", skill_text)
             self.assertIn("phase-change KB checkpoints", skill_text)
             self.assertIn("repeated same-type subtask", skill_text)
+            self.assertIn("mistake-first priority", skill_text)
+            self.assertIn("highest-priority observation evidence", skill_text)
+            self.assertIn("Successful reusable patterns may still be recorded", skill_text)
 
             openai_text = (
                 codex_home / "skills" / "predictive-kb-preflight" / "agents" / "openai.yaml"
@@ -148,6 +151,9 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn("skill/plugin usage lesson", openai_text)
             self.assertIn("subagent/delegation usage lesson", openai_text)
             self.assertIn("phase-change KB checkpoints", openai_text)
+            self.assertIn("mistake-first priority", openai_text)
+            self.assertIn("highest-priority observation evidence", openai_text)
+            self.assertIn("successful reusable patterns", openai_text)
 
             global_agents_text = global_agents_path(codex_home).read_text(encoding="utf-8")
             self.assertIn("BEGIN MANAGED PREDICTIVE KB DEFAULTS", global_agents_text)
@@ -156,6 +162,9 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn("skill/plugin usage", global_agents_text)
             self.assertIn("subagent/delegation usage", global_agents_text)
             self.assertIn("phase-change KB checkpoints", global_agents_text)
+            self.assertIn("mistake-first priority", global_agents_text)
+            self.assertIn("highest-priority observation evidence", global_agents_text)
+            self.assertIn("Successful reusable patterns may still be recorded", global_agents_text)
 
             sleep_skill_text = (codex_home / "skills" / "kb-sleep-maintenance" / "SKILL.md").read_text(
                 encoding="utf-8"
@@ -485,9 +494,11 @@ class CodexInstallTests(unittest.TestCase):
             self.assertTrue(checklist["global_skill_skill_usage"]["ok"])
             self.assertTrue(checklist["global_skill_subagent_usage"]["ok"])
             self.assertTrue(checklist["global_skill_phase_checkpoints"]["ok"])
+            self.assertTrue(checklist["global_skill_mistake_priority"]["ok"])
             self.assertTrue(checklist["global_agents_skill_usage"]["ok"])
             self.assertTrue(checklist["global_agents_subagent_usage"]["ok"])
             self.assertTrue(checklist["global_agents_phase_checkpoints"]["ok"])
+            self.assertTrue(checklist["global_agents_mistake_priority"]["ok"])
 
     def test_organization_automation_times_are_stable_and_windowed(self) -> None:
         specs = {str(spec["id"]): spec for spec in REPO_AUTOMATION_SPECS}
@@ -750,6 +761,45 @@ class CodexInstallTests(unittest.TestCase):
             self.assertTrue(
                 any("shell git/rg shim check skipped" in warning for warning in check["warnings"]),
                 check["warnings"],
+            )
+
+    def test_check_fails_when_mistake_priority_wording_is_missing(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            codex_home = Path(tmp_dir) / ".codex"
+            shell_bin_dir = Path(tmp_dir) / "shell-bin"
+            git_real = Path(tmp_dir) / "tool-src" / "git-real.cmd"
+            rg_source = Path(tmp_dir) / "tool-src" / "rg-source.exe"
+            write_cmd(git_real, "echo git version test")
+            rg_source.parent.mkdir(parents=True, exist_ok=True)
+            rg_source.write_bytes(b"rg-binary")
+
+            install_codex_integration(
+                repo_root=repo_root,
+                codex_home=codex_home,
+                shell_bin_dir=shell_bin_dir,
+                git_executable=git_real,
+                rg_source=rg_source,
+                persist_user_shell_path=False,
+            )
+
+            openai_path = codex_home / "skills" / "predictive-kb-preflight" / "agents" / "openai.yaml"
+            openai_text = openai_path.read_text(encoding="utf-8")
+            openai_path.write_text(openai_text.replace("mistake-first priority", "postflight priority"), encoding="utf-8")
+
+            agents_path = global_agents_path(codex_home)
+            agents_text = agents_path.read_text(encoding="utf-8")
+            agents_path.write_text(agents_text.replace("mistake-first priority", "postflight priority"), encoding="utf-8")
+
+            check = build_installation_check(repo_root=repo_root, codex_home=codex_home)
+            self.assertFalse(check["ok"])
+            checklist = {item["id"]: item for item in check["checklist"]}
+            self.assertFalse(checklist["global_skill_mistake_priority"]["ok"])
+            self.assertFalse(checklist["global_agents_mistake_priority"]["ok"])
+            self.assertFalse(checklist["strong_session_defaults"]["ok"])
+            self.assertTrue(
+                any("mistake-first highest-priority" in issue for issue in check["issues"]),
+                check["issues"],
             )
 
     def test_check_fails_when_managed_global_agents_block_is_missing(self) -> None:

@@ -43,6 +43,14 @@ REASONING_EFFORT_ORDER = ("none", "minimal", "low", "medium", "high", "xhigh")
 AUTOMATION_DAILY_BYDAY = "SU,MO,TU,WE,TH,FR,SA"
 ORG_CONTRIBUTE_WINDOW = (10 * 60, 13 * 60 + 59)
 ORG_MAINTENANCE_WINDOW = (14 * 60, 16 * 60)
+MISTAKE_PRIORITY_MARKERS = (
+    "mistake-first priority",
+    "weak path",
+    "correction",
+    "highest-priority",
+    "successful reusable",
+    "contrastive fields",
+)
 MAINTENANCE_SKILL_SPECS = (
     {
         "name": "kb-sleep-maintenance",
@@ -76,6 +84,11 @@ MAINTENANCE_SKILL_SPECS = (
     },
 )
 MAINTENANCE_SKILL_NAMES = tuple(item["name"] for item in MAINTENANCE_SKILL_SPECS)
+
+
+def _has_mistake_priority_wording(text: str) -> bool:
+    normalized = text.lower()
+    return all(marker in normalized for marker in MISTAKE_PRIORITY_MARKERS)
 
 SLEEP_AUTOMATION_PROMPT = (
     "Use $kb-sleep-maintenance to run the repository's local KB sleep-maintenance pass for this workspace. "
@@ -1046,6 +1059,11 @@ def build_installation_check(
             "Global skill default_prompt does not mention phase-change KB checkpoints for long mixed tasks. "
             "Re-run the installer to refresh the installed prompt."
         )
+    if openai_text and not _has_mistake_priority_wording(openai_text):
+        issues.append(
+            "Global skill default_prompt does not contain the expected mistake-first highest-priority KB postflight wording. "
+            "Re-run the installer to refresh the installed prompt."
+        )
     if not global_agents.exists():
         issues.append(
             f"Global AGENTS defaults file is missing: {global_agents}. "
@@ -1087,6 +1105,11 @@ def build_installation_check(
     if global_agents_text and "phase-change KB checkpoints" not in global_agents_text:
         issues.append(
             "Global AGENTS defaults do not mention phase-change KB checkpoints for long mixed tasks. "
+            "Re-run the installer to refresh the session-wide defaults."
+        )
+    if global_agents_text and not _has_mistake_priority_wording(global_agents_text):
+        issues.append(
+            "Global AGENTS defaults do not contain the expected mistake-first highest-priority KB postflight wording. "
             "Re-run the installer to refresh the session-wide defaults."
         )
 
@@ -1488,6 +1511,7 @@ def build_installation_check(
     global_skill_skill_usage = bool(openai_text and "skill/plugin usage lesson" in openai_text)
     global_skill_subagent_usage = bool(openai_text and "subagent/delegation usage lesson" in openai_text)
     global_skill_phase_checkpoints = bool(openai_text and "phase-change KB checkpoints" in openai_text)
+    global_skill_mistake_priority = bool(openai_text and _has_mistake_priority_wording(openai_text))
     global_agents_present = global_agents.exists()
     global_agents_managed = bool(
         global_agents_text
@@ -1499,6 +1523,7 @@ def build_installation_check(
     global_agents_skill_usage = bool(global_agents_text and "skill/plugin usage" in global_agents_text)
     global_agents_subagent_usage = bool(global_agents_text and "subagent/delegation usage" in global_agents_text)
     global_agents_phase_checkpoints = bool(global_agents_text and "phase-change KB checkpoints" in global_agents_text)
+    global_agents_mistake_priority = bool(global_agents_text and _has_mistake_priority_wording(global_agents_text))
     kb_sleep_ok = not automation_issue_map.get("kb-sleep")
     kb_dream_ok = not automation_issue_map.get("kb-dream")
     kb_architect_ok = not automation_issue_map.get("kb-architect")
@@ -1518,6 +1543,8 @@ def build_installation_check(
         and global_agents_subagent_usage
         and global_skill_phase_checkpoints
         and global_agents_phase_checkpoints
+        and global_skill_mistake_priority
+        and global_agents_mistake_priority
         and maintenance_skill_ok
     )
     checklist = [
@@ -1555,6 +1582,12 @@ def build_installation_check(
             "global_skill_phase_checkpoints",
             "Global predictive KB prompt requires phase-change KB checkpoints for long mixed tasks",
             global_skill_phase_checkpoints,
+            f"openai_path={openai_path}",
+        ),
+        _checklist_item(
+            "global_skill_mistake_priority",
+            "Global predictive KB prompt treats mistakes, weak paths, and corrections as highest-priority postflight evidence",
+            global_skill_mistake_priority,
             f"openai_path={openai_path}",
         ),
         _checklist_item(
@@ -1597,6 +1630,12 @@ def build_installation_check(
             "global_agents_phase_checkpoints",
             "Global AGENTS defaults require phase-change KB checkpoints for long mixed tasks",
             global_agents_phase_checkpoints,
+            f"global_agents_path={global_agents}",
+        ),
+        _checklist_item(
+            "global_agents_mistake_priority",
+            "Global AGENTS defaults treat mistakes, weak paths, and corrections as highest-priority postflight evidence",
+            global_agents_mistake_priority,
             f"global_agents_path={global_agents}",
         ),
         _checklist_item(

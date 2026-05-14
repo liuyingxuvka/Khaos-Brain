@@ -77,10 +77,12 @@ Guardrails:
 
 - wait on the shared local maintenance lock if Sleep or Architect is currently running; recheck every 5 minutes and do not skip merely because another core lane is active
 - retrieve prior Dream-process experience before selecting experiments
+- before stateful Dream work, make the completion plan visible with checkpoint statuses for preflight, opportunity scan, experiment selection, validation or no-op, experiment observation, run-level observation, and report writing; keep each checkpoint completed, skipped with reason, or blocked with a concrete blocker
 - after the experiments, write one run-level Dream-process observation when the run exposed a reusable process lesson, separately from route-specific evidence
 - do not select an item just because it is interesting; select it only if it can clarify a future retrieval, routing, card-use, or Sleep-consolidation decision
 - if no grounded value gap exists, report a no-op rather than manufacturing an experiment or candidate
 - select a small, route-deduped batch of genuinely valuable executable experiments that clear the value gate; do not impose a fixed one-experiment cap, but also do not turn a large backlog into a huge validation sweep
+- use a one-experiment cap only when the current user or automation prompt explicitly requires it, or when only one executable item clears the value gate
 - list the selected experiments in execution order before validating them sequentially
 - require a clear experiment design, validation plan, safety tier, rollback plan, and success/failure/inconclusive criteria for every selected experiment
 - for local sandbox experiments, record `evidence_grade`, `sandbox_path`, `allowed_writes`, `validation_result`, `sleep_handoff`, and `architect_handoff`

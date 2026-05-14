@@ -577,3 +577,85 @@
 ### Next Actions
 - Address automation policy metadata drift through existing ready-for-patch install/automation lanes instead of ad-hoc direct edits.
 - Resolve stale organization contribute lane status through the appropriate organization maintenance mechanism.
+
+## kb-architect-20260513-lock-aware-maintenance-pass - Run KB Architect mechanism maintenance with update gate, queue hygiene, rollup validation, and no sandbox trial
+
+- Project: Khaos-Brain
+- Trigger reason: KB Architect is a stateful maintenance lane with shared locks, update gates, proposal queue state, sandbox closure, postflight observations, and system rollup side effects.
+- Status: attention-needed
+- Skill decision: used_flowguard
+- Started: 2026-05-13T12:05:02Z
+- Ended: 2026-05-13T12:09:56Z
+- Commands OK: False, because the governance live projection intentionally reported one open Sleep handoff finding.
+
+### Model Files
+- .flowguard/run_khaos_brain_conformance.py
+- .flowguard/khaos_brain_governance_flow.py
+
+### Commands
+- OK: `python -c "import flowguard; print(flowguard.SCHEMA_VERSION)"` - flowguard schema version 1.0 is importable.
+- OK: `python .flowguard\run_khaos_brain_conformance.py` - conformance replay passed lane lock, organization download boundary, update gate, and failed-update no-auto-retry expectations.
+- FINDINGS: `python .flowguard\khaos_brain_governance_flow.py --live` - abstract governance checks passed, but live projection reported one open Dream-to-Sleep handoff finding.
+- OK: `python -m unittest tests.test_kb_architect tests.test_maintenance_lanes` - 18 focused tests passed.
+- OK: `python scripts\install_codex_kb.py --check --json` - install health checklist passed.
+- OK: `git diff --check` - no whitespace errors; Git reported an existing CRLF normalization warning for `DREAM_PROMPT.md`.
+
+### Findings
+- The Architect runner acquired and released the shared local-maintenance lock; Sleep and Dream were completed and no blocking lane was active.
+- Software update gate returned no-update with `apply_ready=false`, current/latest version `0.4.7`, and UI process count 0.
+- Queue hygiene maintained 41 proposals: 3 applied, 12 ready-for-patch, 10 rejected, 8 superseded, and 8 watching; no ready-for-apply or sandbox-ready packet was selected.
+- The maintenance rollup contains Sleep, Dream, Architect, FlowGuard, organization, content-boundary, and install-sync surfaces, but remains attention-needed because content-boundary review is required.
+- Install sync is now healthy in the rollup; public-release readiness is still blocked by content-boundary review scopes.
+
+### Counterexamples
+- none recorded by this Architect pass.
+
+### Friction Points
+- Governance live projection still reports open strong/moderate Dream handoffs from `kb-dream-20260513T110320Z`; this is a Sleep-review queue signal, not an Architect mechanism patch authorization.
+
+### Skipped Steps
+- No new FlowGuard model was created because existing conformance replay covers lock and update-gate risks for this pass.
+- No sandbox trial was run because `sandbox_trial_selection.json` reported no sandbox-ready ready-for-apply packet.
+- No source mechanism patch was applied because the current run selected no sandbox-ready packet.
+
+### Next Actions
+- Let Sleep review or explicitly watch the three strong/moderate Dream handoffs from the latest Dream run.
+- Keep the 12 medium-safety Architect items as patch-plan work until a packet has a narrow execution outlet.
+
+
+## kb-postflight-priority-20260514 - Prioritize Codex mistakes and corrections in predictive KB postflight prompts
+
+- Project: Khaos-Brain
+- Trigger reason: The KB postflight workflow changes prompt and installer behavior; FlowGuard modeled the decision rule so mistake/correction evidence outranks success evidence while success observations remain allowed.
+- Status: completed
+- Skill decision: used_flowguard
+- Started: 2026-05-14T08:25:06+00:00
+- Ended: 2026-05-14T08:25:06+00:00
+- Duration seconds: 0.000
+- Commands OK: True
+
+### Model Files
+- .flowguard\kb_postflight_priority_flow.py
+
+### Commands
+- OK (0.000s): `python .flowguard\kb_postflight_priority_flow.py`
+- OK (0.000s): `python -m py_compile .flowguard\kb_postflight_priority_flow.py local_kb\install.py`
+- OK (0.000s): `python -m unittest tests.test_codex_install`
+- OK (0.000s): `python scripts\install_codex_kb.py --json`
+- OK (0.000s): `python scripts\install_codex_kb.py --check --json`
+
+### Findings
+- Mistake, weak-path, missed-instruction, failed-validation, tool/skill-misuse, user-correction, and correction episode evidence is now explicit highest-priority KB postflight evidence.
+- Successful reusable observations remain allowed and are not suppressed by mistake-first priority.
+
+### Counterexamples
+- none recorded
+
+### Friction Points
+- none recorded
+
+### Skipped Steps
+- none recorded
+
+### Next Actions
+- Keep the mistake-priority install checklist as part of strong_session_defaults for future machine setup.
