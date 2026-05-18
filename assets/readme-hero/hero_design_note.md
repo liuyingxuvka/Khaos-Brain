@@ -18,7 +18,7 @@ Retrieve relevant cards before work, write observations afterward, and let maint
 
 ## Hero tagline
 
-A local predictive memory system that helps AI agents reuse experience across tasks.
+A local predictive memory system that helps AI agents reuse structured experience across tasks.
 
 ## Visual concept
 
