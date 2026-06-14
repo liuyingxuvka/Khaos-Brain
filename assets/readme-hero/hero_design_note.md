@@ -2,7 +2,7 @@
 
 ## Project summary
 
-Khaos Brain stores task experience, predictive model cards, skills, and maintenance rhythms in a local, auditable, Git-versionable knowledge system.
+Khaos Brain is a local predictive experience layer where AI agents store task experience, model cards, skills, and maintenance rhythms in an auditable, Git-versionable knowledge system.
 
 ## Target users
 
@@ -18,7 +18,7 @@ Retrieve relevant cards before work, write observations afterward, and let maint
 
 ## Hero tagline
 
-A local predictive memory system that helps AI agents reuse structured experience across tasks.
+A local predictive experience layer where AI agents turn repeated work into inspectable model cards.
 
 ## Visual concept
 

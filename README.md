@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <strong>A local predictive memory system that helps AI agents reuse structured experience across tasks.</strong>
+  <strong>A local predictive experience layer where AI agents turn repeated work into inspectable model cards.</strong>
 </p>
 <!-- README HERO END -->
 
@@ -19,9 +19,16 @@
   <img src="assets/khaos-brain-icon.png" alt="Khaos Brain icon" width="136">
 </p>
 
-`Khaos Brain` is a local-first experience system for AI agents. It turns task experience, predictive models, user preferences, runtime lessons, and shareable skills into visible, maintainable, Git-versioned cards.
+`Khaos Brain` is a local predictive experience layer for AI agents. Instead of saving vague memories, it stores bounded model cards: the situation, the action under consideration, the predicted result, the confidence, the source, the status, and how an agent should use that lesson next time.
 
-The current release is Codex-first: the installer, global skills, repository defaults, and automations are wired for Codex. Conceptually, the project is broader than one host. Any AI agent with preflight retrieval, post-task write-back, local script execution, scheduled maintenance, reusable workflow loading, and Git repository access can adapt the same structure.
+Those cards stay visible files. They can be searched, reviewed, diffed, consolidated, rolled back, and shared through an optional organization repository without exposing a user's private local KB by default. The current release is Codex-first, with installer-managed skills, global defaults, and local maintenance automations already wired for Codex; the design can be adapted to any host agent that supports preflight retrieval, post-task write-back, local scripts, reusable workflows, scheduled maintenance, and Git.
+
+## Why It Is Worth Trying
+
+- It turns "remember this" into a predictive model card with conditions, action, expected outcome, confidence, source, and operational guidance.
+- It keeps agent memory local, file-based, Git-versioned, and inspectable instead of hiding it in an opaque memory service.
+- It gives memory a maintenance rhythm: awake retrieval/write-back, Sleep consolidation, Dream exploration, Architect mechanism review, and optional organization maintenance.
+- It makes Skill sharing more useful by pairing a Skill with the experience card that explains when and why to use it.
 
 ## Product Preview
 
@@ -33,7 +40,7 @@ The current release is Codex-first: the installer, global skills, repository def
 
 ### What Khaos Brain Is
 
-`Khaos Brain` is a brain-like experience layer for AI agents. It does not only store memories. It stores reusable experience models:
+`Khaos Brain` is a local predictive experience system for AI agents. It does not only store memories; it organizes task experience, predictive models, user preferences, runtime lessons, and shareable Skills into visible, maintainable, Git-versioned cards:
 
 - the situation where a lesson applies;
 - the action or route that was taken;
@@ -238,18 +245,16 @@ A good starting order is:
 
 ### Khaos Brain 是什么
 
-`Khaos Brain` 是给 AI agent 使用的本地优先经验层。它不只是保存“记忆”，而是保存可复用的经验模型：
+`Khaos Brain` 是一个给 AI agent 使用的本地预测型经验层。它不只是保存一句“下次记得这样做”，而是把反复出现的工作经验写成有边界的模型卡片：适用情境、考虑中的动作、预测结果、可信度、来源、状态，以及 agent 下次应该怎样使用这条经验。
 
-- 经验适用的条件；
-- 当时采取的 action 或 route；
-- 预测或观察到的结果；
-- 如果有必要，记录失败的旧路线和更稳定的新路线；
-- source、author、status、confidence、review metadata；
-- 当经验依赖某个 skill 或 workflow 时，记录这种依赖关系。
+这些卡片仍然是可见文件，可以搜索、审查、diff、整理、回滚，也可以通过可选的组织仓库共享可复用经验，同时默认不公开用户自己的本地私有 KB。当前版本首先集成 Codex：安装器、全局 Skill、`AGENTS.md` 默认规则和本地维护自动化都已经接好；但只要宿主 agent 能在任务前检索、任务后写回、运行本地脚本、加载可复用工作流、做定期维护并读写 Git 仓库，同样结构也可以迁移。
 
-结果是一个本地优先、可检查、可搜索、可审查、可合并、可回滚、适合 Git 历史管理的卡片库。
+### 为什么值得一试
 
-当前版本是 Codex-first：installer、global skills、repository defaults 和 automations 已经为 Codex 接好。但概念上它不只属于 Codex。只要一个 AI agent 能在任务前检索经验、任务后写回证据、运行本地脚本、执行定时维护、加载 reusable workflow，并安全读写 Git 仓库，就可以适配同一结构。
+- 它把“下次记得这样做”变成预测型模型卡片，写清适用条件、动作、预期结果、可信度、来源和使用方式。
+- 它把 agent 记忆保留为本地、文件化、Git 可追踪、可审查的结构，而不是藏在黑盒记忆服务里。
+- 它让记忆有维护节律：任务前检索和任务后写回，随后由 Sleep、Dream、Architect 和可选组织维护继续整理。
+- 它让 Skill 共享更有上下文：共享的不只是脚本，还有说明“什么时候该用、为什么该用”的经验卡片。
 
 ### 它解决什么问题
 
@@ -257,7 +262,14 @@ A good starting order is:
 
 有用的 agent memory 需要条件、动作、结果、可信度、来源和维护节律。它还应该知道哪些经验是私人的，哪些可以共享，哪些只是候选，哪些重复失败应该沉淀成更强路线。
 
-Khaos Brain 把这些内容做成文件，而不是只放进不透明向量记忆里。人或维护 agent 都可以检查 cards、diffs、candidates、rollback records 和 review outcomes。
+- 在什么条件下
+- 采取什么动作
+- 更可能得到什么结果
+- 哪条路线失败过，哪条路线更稳
+- 这个经验来自谁、哪个来源、是否已经被信任
+- 如果一个 Skill 很关键，它到底在哪类任务里有用
+
+`Khaos Brain` 把这些内容做成卡片。卡片不是黑盒向量，不是散乱笔记，也不是只能靠人手维护的规则列表。它们是文件型、可阅读、可搜索、可审查、可合并、可回滚的经验单元。
 
 ### 为什么它像一个“脑”
 
