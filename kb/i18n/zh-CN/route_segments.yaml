@@ -1,46 +1,304 @@
 language: zh-CN
 route_segment_labels:
+  about: 关于
+  ack: ACK 回执
+  agent: Agent
+  agent-behavior: Agent 行为
+  agent-lifecycle: Agent 生命周期
+  ai-recommendation-quality: AI 推荐质量
   ai-screening: AI 筛选
+  applications: 申请
+  architecture: 架构
+  async: 异步
+  automation: 自动化
+  automation-bootstrap: 自动化引导
   automations: 自动化
+  autonomous-testing: 自主测试
+  background checks: 背景检查
+  bilingual: 双语
+  branding: 品牌
+  breaking-change: 破坏性变更
+  browser-prefill: 浏览器预填
+  browser-state: 浏览器状态
+  business: 业务
+  busy-state: 忙碌状态
+  candidate-directory: 候选目录
+  candidate-identity-visual: 候选身份视觉
+  canonical-interface: 规范机器接口
+  career: 职业
   child-skill-gates: 子 Skill 门禁
+  cleanup-cooldown: 清理冷却
+  cleanup-review: 清理复核
+  closure: 关闭
+  codex: Codex
   coding: 编码
+  coding.flowguard.release: FlowGuard 发布
   coding.release.skills: 编码发布 Skill
+  communication: 沟通
+  companies: 公司
+  companies and search: 公司与搜索
+  companies timeout ownership: 公司超时归属
+  company scheduling: 公司排程
+  company-discovery: 公司发现
+  company-fit: 公司匹配度
+  context-reuse: 上下文复用
+  continuation: 续跑
   control-plane: 控制平面
+  controller: Controller
+  controller-standby: Controller 待命
+  cooldown: 冷却
+  credential-recovery: 凭据恢复
+  current-contract: 当前契约
+  currentness: 当前性
+  daily-opportunity-scan: 每日机会扫描
+  daily-qa: 每日 QA
   data-sources: 数据源
+  debugging: 调试
+  demo seed: 演示种子
+  dependency: 依赖
+  design: 设计
+  desktop: 桌面
+  desktop-app: 桌面应用
   desktop-qa: 桌面 QA
+  desktop-rendering: 桌面渲染
+  desktop-testing: 桌面测试
+  desktop-ui: 桌面 UI
+  desktop_app: 桌面应用
+  direct-job-discovery: 直连职位发现
+  discovery-state: 发现状态
+  done-condition: 完成条件
+  dream: Dream
+  editable install: 可编辑安装
+  email: 邮件
+  engineering: 工程
+  english: 英语
   evolutionary-direct-job-discovery: 演进式直连职位发现
+  exploration: 探索
+  field-retirement: 字段退役
   flowguard: FlowGuard
+  flowguard release: FlowGuard 发布
+  flowguard-model: FlowGuard 模型
+  flowguard-model-test-alignment: FlowGuard 模型测试对齐
+  flowguard-structure-mesh: FlowGuard 结构网格
   flowpilot: FlowPilot
   flowpilot.automation.supervisor: FlowPilot 自动化主管
+  funding: 资助
   geodata: 地理数据
+  github: GitHub
   github-preflight: GitHub 预检
+  github-publishing: GitHub 发布
   github-release: GitHub 发布
+  greenhouse-docx: Greenhouse DOCX
+  greenhouse-form: Greenhouse 表单
+  greenhouse-upload: Greenhouse 上传
+  guard-family: Guard 系列
+  heartbeat: Heartbeat
+  human-ui: 人类 UI
+  hybrid-memory: 混合记忆
+  i18n: 国际化
+  icon: 图标
   idempotency: 幂等性
+  information-flow: 信息流
   inspection: 检查
+  install: 安装
+  install-checks: 安装检查
   install-status: 安装状态
   install-sync: 安装同步
   installation: 安装
+  integration: 集成
+  job-application: 求职申请
+  job-applications: 求职申请
+  job-hunter: Job Hunter
+  job-search: 求职搜索
+  kb: KB
   kb-checkpoints: KB 检查点
+  knowledge-browser: 知识浏览器
+  knowledge-library: 知识库
+  language: 语言
+  large-model: 大模型
+  local-kb-retrieve: 本地 KB 检索
   local-sync: 本地同步
   local-workspace-sync: 本地工作区同步
+  localization: 本地化
+  logicguard: LogicGuard
+  logicguard-writing: LogicGuard 写作
+  machine-interface: 机器接口
+  machine-output: 机器输出
+  maintenance: 维护
+  memory: 记忆
+  migration: 迁移
+  model-miss: 模型漏判
+  model-miss-repair: 模型遗漏修复
+  model-routing: 模型路由
+  model-test-alignment: 模型-测试对齐
   model-upgrade: 模型升级
+  multi-agent: 多智能体
+  multi_agent_validation: 多智能体验证
+  new-only: 仅新状态
+  no-fallback: 无回退
+  open-spec-flowguard: OpenSpec 与 FlowGuard
+  openspec: OpenSpec
+  orchestration: 编排
+  orchestration + bootstrap: 编排与引导
+  organization: 组织
+  organization-detail: 组织详情
+  organization-exchange: 组织交换
+  organization-kb: 组织 KB
+  packet-relay: Packet 转发
   packet-runtime: Packet 运行时
+  parallel agents: 并行智能体
+  peer-agents: 同行智能体
+  persistence: 持久化
+  personal: 个人
+  planning: 规划
+  postflight: 收尾检查
+  pre-release-flowpilot: FlowPilot 发布前维护
+  predictive-kb: 预测 KB
+  preferences: 偏好
+  prefetch: 预取
+  presentation: 展示
+  prior-lessons: 既有经验
+  privacy: 隐私
+  privacy-boundary: 隐私边界
+  process: 流程
   process-control: 流程控制
+  product: 产品
   product-principles: 产品原则
+  product-search-architecture: 产品搜索架构
+  product-search-quality: 产品搜索质量
+  professional: 专业
+  profile-fields: 简历字段
   projects: 项目
+  prompt-boundaries: Prompt 边界
+  prompt-following: Prompt 遵循
   prompt-governance: 提示治理
+  prompt-guidance: Prompt 指南
+  prompt-refresh-control: Prompt 刷新控制
+  prompting: Prompting
+  promptstore: PromptStore
   protocol: 协议
+  public-docs-ui: 公开文档 UI
+  public-project-support: 公开项目支持
+  public-readme: 公开 README
+  publishing: 发布
+  python: Python
+  python desktop app: Python 桌面应用
+  qa: QA
+  qt embedding: Qt 嵌入
+  qt-layout: Qt 布局
+  quality: 质量
+  readme: README
+  readme-presentation: README 展示
+  recovery: 恢复
+  recovery-state: 恢复状态
+  recursive-route: 递归路由
+  refactor: 重构
+  regression: 回归
+  release: 发布
+  release-honesty: 发布诚实性
+  release-hygiene: 发布卫生
+  release-iteration-workflow: 发布迭代流程
+  release-proof: 发布证明
   release-smoke: 发布烟测
+  repair-chain: 修复链
+  repo: 仓库
+  repo-maintenance: 仓库维护
+  reporting: 报告
+  repos: 仓库
+  repos.flowpilot.maintenance.structure: FlowPilot 结构维护
+  repository: 仓库
+  repository-cleanup: 仓库清理
+  repository-workflows: 仓库工作流
+  resume-queue: 恢复队列
+  retrieval: 检索
   reviewer: Reviewer
   reviewer-audit: Reviewer 审计
+  reviewer-boundary: Reviewer 边界
+  role-recovery: 角色恢复
+  root-cause-audit: 根因审计
+  route-mutation: Route 变更
   router-control-plane: 路由控制平面
   router-events: Router 事件
+  router-split: Router 拆分
+  router-wait-reconciliation: Router 等待核对
+  runtime: 运行时
+  runtime-behavior: 运行时行为
+  runtime-contracts: 运行时契约
+  runtime-control: 运行时控制
+  runtime-migration: 运行时迁移
+  runtime-state: 运行时状态
+  screenshots: 截图
+  scroll: 滚动
+  search: 搜索
+  search orchestration: 搜索编排
+  search-architecture: 搜索架构
+  search-core: 搜索核心
+  search-orchestration: 搜索编排
+  search-pipeline: 搜索管线
   search-quality: 搜索质量
+  search-recommendation: 搜索推荐
+  search-results-fix: 搜索结果修复
+  search-runtime: 搜索运行时
+  search-selection: 搜索选择
+  security-external-sources: 外部来源安全
+  session lifecycle: 会话生命周期
+  session-stop-logic: 会话停止逻辑
+  settings: 设置
+  shadow workspace: 影子工作区
+  shadow-workspace: 影子工作区
+  shutdown: 关闭
+  simplification: 简化
+  single-round-cycle: 单轮循环
+  skills: Skills
+  snapshots: 快照
+  software: 软件
+  software-engineering: 软件工程
+  spec-drift: 规格漂移
+  stages and search: 阶段与搜索
   startup-gate: 启动门禁
+  state: 状态
+  state-boundary: 状态边界
   state-machines: 状态机
+  structural-refactor: 结构重构
+  structure: 结构
+  structure-mesh: 结构网格
+  subagents: 子代理
+  submission: 提交
   supervisor: 主管
+  support-copy: 支持文案
+  support-funding: 支持资助
+  system: 系统
+  system-card-ack: 系统卡 ACK
+  tagging: 打标
+  template: 模板
+  testing: 测试
+  testing-and-smoke: 测试与冒烟
+  timeouts: 超时
+  tool-environment: 工具环境
+  tooling: 工具链
   tools: 工具
+  troubleshooting: 故障排查
+  ui: UI
+  ui-state: UI 状态
+  unittest: 单元测试
+  update: 更新
+  usage: 使用
+  user: 用户
+  user-entry: 用户入口
+  validation: 验证
+  verification: 验证
+  version-change: 版本变更
+  versioning: 版本管理
   waermecheck: WaermeCheck
+  wait-audit: 等待审计
   watchdog: 看护
+  windows-console: Windows 控制台
   wms: WMS
-updated_at: '2026-05-13'
+  work: 工作
+  work-packets: 工作包
+  workflow: 工作流
+  workflow-docs-private-profile: 工作流文档私有资料
+  workspace-navigation: 工作区导航
+  writing: 写作
+  writing-depth: 写作深度
+updated_at: '2026-06-14'

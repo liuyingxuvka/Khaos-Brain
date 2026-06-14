@@ -700,3 +700,356 @@
 
 ### Next Actions
 - Run the broader regression suite and install sync before release.
+
+
+## kb-architect-20260525-lock-aware-maintenance-pass - Run KB Architect mechanism maintenance with update gate, queue hygiene, validation, and rollup check
+
+- Project: Khaos-Brain
+- Trigger reason: KB Architect is a stateful maintenance lane with shared locks, update gates, proposal queue state, sandbox closure, postflight observations, and system rollup side effects.
+- Status: completed-attention-needed-rollup
+- Skill decision: used_flowguard-development-process-flow-with-existing-model-preflight
+- Started: 2026-05-25T17:51:14Z
+- Ended: 2026-05-25T17:56:32Z
+- Commands OK: True
+
+### Model Files
+- .flowguard/run_khaos_brain_conformance.py
+- .flowguard/khaos_brain_planned_maintenance_flow.py
+
+### Commands
+- OK: `python -c "import flowguard; print(flowguard.SCHEMA_VERSION)"` - flowguard schema version 1.0 is importable.
+- OK: `python scripts\khaos_brain_update.py --architect-check --json` - update gate healthy but not actionable: update available, user_requested=false, apply_ready=false, UI not running.
+- OK: `python .agents\skills\local-kb-retrieve\scripts\kb_architect.py --json` - Architect run kb-architect-20260525T175132Z completed queue hygiene, postflight, lock release, and rollup write.
+- OK: `python -m unittest tests.test_kb_architect tests.test_maintenance_lanes` - 18 focused Architect and lane tests passed.
+- OK: `python scripts\install_codex_kb.py --check --json` - install health checklist passed with strong session defaults, repo-managed skills, and automations healthy.
+- OK: `python .flowguard\run_khaos_brain_conformance.py` - conformance replay passed lane lock, organization download boundary, update gate, and failed-update no-auto-retry expectations.
+- OK: `python .flowguard\khaos_brain_planned_maintenance_flow.py` - planned-maintenance model passed accepted plan, bad variant rejection, contracts, and loop review.
+- OK: `git diff --check` - no whitespace errors; Git reported a CRLF normalization warning for ARCHITECT_PROMPT.md.
+
+### Findings
+- The Architect runner acquired and released the shared local-maintenance lock; Sleep and Dream were completed and no blocking lane was active.
+- Software update gate was healthy but not actionable because update_available=true, user_requested=false, apply_ready=false, and the UI was not running.
+- Queue hygiene merged 46 incoming mechanism signals into existing lanes and maintained 56 proposals: 4 applied, 19 ready-for-patch, 16 rejected, 9 superseded, and 8 watching; no statuses changed during this pass.
+- No ready-for-apply or sandbox-ready packet was selected; no source mechanism patch or sandbox trial was permitted.
+- Rollup contains Sleep, Dream, Architect, FlowGuard, organization, content-boundary, and install-sync source reports; summary remains attention-needed because content-boundary review is required while install sync is healthy.
+
+### Counterexamples
+- none recorded
+
+### Friction Points
+- none recorded
+
+### Skipped Steps
+- No new FlowGuard model was created because existing conformance and planned-maintenance models cover the lock, update, rollup, and validation risks exercised by this pass.
+- No sandbox trial was run because sandbox_trial_selection.json reported no sandbox-ready ready-for-apply packet.
+- No source mechanism patch was applied because the current run selected no sandbox-ready packet.
+
+### Next Actions
+- Keep content-boundary review as the public-release blocker.
+- Keep the 19 medium-safety Architect items as ready-for-patch until a sandbox-ready execution outlet exists.
+- Keep the 8 watching items under observation, especially the lock-maintenance prompt proposal and the two blocked execution states.
+
+
+## kb-architect-20260526-lock-signal-sandbox-trial - Run KB Architect mechanism maintenance with update gate, queue hygiene, one lock-signal sandbox trial, validation, and rollup check
+
+- Project: Khaos-Brain
+- Trigger reason: KB Architect is a stateful maintenance lane with shared locks, update gates, proposal queue state, sandbox closure, postflight observations, and system rollup side effects.
+- Status: completed-attention-needed-rollup
+- Skill decision: used_flowguard-development-process-flow-with-existing-model-preflight
+- Started: 2026-05-26T18:46:00Z
+- Ended: 2026-05-26T18:59:06Z
+- Commands OK: True
+
+### Model Files
+- .flowguard/run_khaos_brain_conformance.py
+- .flowguard/khaos_brain_planned_maintenance_flow.py
+
+### Commands
+- OK: `python -c "import flowguard; print(flowguard.SCHEMA_VERSION)"` - flowguard schema version 1.0 is importable.
+- OK: `python scripts\khaos_brain_update.py --architect-check --json` - update gate healthy but not actionable: update available, user_requested=false, apply_ready=false, UI not running.
+- OK: `python .agents\skills\local-kb-retrieve\scripts\kb_architect.py --json` - Architect run kb-architect-20260526T184723Z completed queue hygiene, postflight, lock release, and rollup write.
+- OK: `python .agents\skills\local-kb-retrieve\scripts\kb_architect.py --record-trial-result .local/architect/sandbox/arch-exec-arch-prop-9d360ffe92b0/trial_result.json --json` - selected lock-signal sandbox trial was recorded as applied; applied executions increased to 5 and sandbox-ready count dropped to 0.
+- OK: `python -m unittest tests.test_kb_architect tests.test_maintenance_lanes` - 18 focused Architect and lane tests passed.
+- OK: `python scripts\install_codex_kb.py --check --json` - install health checklist passed with strong session defaults, repo-managed skills, and automations healthy.
+- OK: `python .flowguard\run_khaos_brain_conformance.py` - conformance replay passed lane lock, organization download boundary, update gate, and failed-update no-auto-retry expectations.
+- OK: `python .flowguard\khaos_brain_planned_maintenance_flow.py` - planned-maintenance model passed accepted plan, bad variant rejection, contracts, loop review, and no-stuck progress checks.
+- OK: `git diff --check` - no whitespace errors; Git reported CRLF normalization warnings only.
+
+### Findings
+- The Architect runner acquired and released the shared local-maintenance lock; Dream completed and Sleep was reported stale after orphan-lock recovery.
+- Software update gate was healthy but not actionable because update_available=true, user_requested=false, apply_ready=false, and the UI was not running.
+- Queue hygiene merged 46 incoming mechanism signals into existing lanes and initially maintained 56 proposals: 4 applied, 1 ready-for-apply, 19 ready-for-patch, 16 rejected, 9 superseded, and 7 watching.
+- The selected sandbox-ready lock prompt packet arch-prop-9d360ffe92b0 was applied through the recorder after a narrow ARCHITECT_PROMPT.md clarification and validation; final queue counts are 5 applied, 19 ready-for-patch, 16 rejected, 9 superseded, and 7 watching.
+- Rollup contains Sleep, Dream, Architect, FlowGuard, organization, content-boundary, and install-sync source reports; summary remains attention-needed because content-boundary review is required while install sync is healthy.
+
+### Counterexamples
+- none recorded
+
+### Friction Points
+- The first trial-result record attempt omitted run_id and included sandbox artifact paths in touched_paths, which the recorder correctly rejected. The corrected result used only allowed source touched_paths and was recorded successfully.
+
+### Skipped Steps
+- No new FlowGuard model was created because existing conformance and planned-maintenance models cover the lock, update, rollup, validation, and release-gate risks exercised by this pass.
+- No second sandbox trial was run because the pass is limited to at most one selected sandbox-ready packet.
+
+### Next Actions
+- Keep content-boundary review as the public-release blocker.
+- Keep the 19 medium-safety Architect items as ready-for-patch until dedicated patch packets are chosen.
+- Keep the 7 watching items under observation, especially the two blocked execution states and broader skill-maintenance signals.
+
+
+## kb-architect-20260528-lock-aware-maintenance-pass - Run KB Architect mechanism maintenance with update gate, queue hygiene, validation, and rollup check
+
+- Project: Khaos-Brain
+- Trigger reason: KB Architect is a stateful maintenance lane with shared locks, update gates, proposal queue state, sandbox closure, postflight observations, and system rollup side effects.
+- Status: completed-attention-needed-rollup
+- Skill decision: used_flowguard-development-process-flow-with-existing-model-preflight
+- Started: 2026-05-28T12:02:49Z
+- Ended: 2026-05-28T12:07:30Z
+- Commands OK: True
+
+### Model Files
+- .flowguard/run_khaos_brain_conformance.py
+- .flowguard/khaos_brain_planned_maintenance_flow.py
+
+### Commands
+- OK: `python -c "import flowguard; print(flowguard.SCHEMA_VERSION)"` - flowguard schema version 1.0 is importable.
+- OK: `python scripts\khaos_brain_update.py --architect-check --json` - update gate healthy but not actionable: update available, user_requested=false, apply_ready=false, UI not running.
+- OK: `python .agents\skills\local-kb-retrieve\scripts\kb_architect.py --json` - Architect run kb-architect-20260528T120325Z completed queue hygiene, postflight, lock release, and rollup write.
+- OK: `python -m unittest tests.test_kb_architect tests.test_maintenance_lanes` - 18 focused Architect and lane tests passed.
+- OK: `python scripts\install_codex_kb.py --check --json` - install health checklist passed with strong session defaults, repo-managed skills, and automations healthy.
+- OK: `python .flowguard\run_khaos_brain_conformance.py` - conformance replay passed lane lock, organization download boundary, update gate, and failed-update no-auto-retry expectations.
+- OK: `python .flowguard\khaos_brain_planned_maintenance_flow.py` - planned-maintenance model passed accepted plan, bad variant rejection, contracts, loop review, and no-stuck progress checks.
+- OK: `git diff --check` - no whitespace errors; Git reported CRLF normalization warnings only.
+
+### Findings
+- The Architect runner acquired and released the shared local-maintenance lock; Sleep and Dream were completed and no blocking lane was active.
+- Software update gate was healthy but not actionable because update_available=true, user_requested=false, apply_ready=false, and the UI was not running.
+- Queue hygiene merged 44 incoming mechanism signals into existing lanes and maintained 57 proposals: 5 applied, 19 ready-for-patch, 16 rejected, 9 superseded, and 8 watching.
+- No ready-for-apply or sandbox-ready packet was selected; no trial_result.json was needed and no source mechanism patch was applied.
+- Rollup contains Sleep, Dream, Architect, FlowGuard, organization, content-boundary, and install-sync source reports; summary remains attention-needed because content-boundary review is required while install sync is healthy.
+
+### Counterexamples
+- none recorded
+
+### Friction Points
+- none recorded
+
+### Skipped Steps
+- No new FlowGuard model was created because existing conformance and planned-maintenance models cover the lock, update, rollup, validation, and release-gate risks exercised by this pass.
+- No sandbox trial was run because sandbox_trial_selection.json reported no sandbox-ready ready-for-apply packet.
+- No source mechanism patch was applied because the current run selected no sandbox-ready packet.
+
+### Next Actions
+- Keep content-boundary review as the public-release blocker.
+- Keep the 19 medium-safety Architect items as ready-for-patch until dedicated patch packets are chosen.
+- Keep the 8 watching items under observation, especially the two blocked execution states and broader skill-maintenance signals.
+
+## kb-architect-20260604-lock-aware-maintenance-pass - Run KB Architect mechanism maintenance with install-sync repair
+
+- Task: run KB Architect mechanism maintenance with update gate, queue hygiene, validation, install-sync repair, and rollup check.
+- Trigger reason: KB Architect is a stateful maintenance lane with shared locks, update gates, proposal queue state, sandbox closure, postflight observations, install-sync state, and system rollup side effects.
+- Route: used `flowguard-existing-model-preflight` with `flowguard-development-process-flow`; no new FlowGuard model was created because existing conformance and planned-maintenance models cover the lock, update, rollup, validation, install-sync, and release-gate risks exercised by this pass.
+
+### Validation
+
+- OK: `python -c "import flowguard; print(flowguard.SCHEMA_VERSION)"` - flowguard schema version 1.0 is importable.
+- OK: `python .agents\skills\local-kb-retrieve\scripts\kb_architect.py --json` - Architect run `kb-architect-20260604T120532Z` completed queue hygiene, postflight, lock release, and rollup write.
+- OK: `python -m unittest tests.test_kb_architect tests.test_maintenance_lanes tests.test_codex_install` - 29 focused Architect, lane, and install tests passed.
+- REPAIRED: `python scripts\install_codex_kb.py --check --json` initially failed because installed automations lacked schedule/model/reasoning policy metadata; `python scripts\install_codex_kb.py --json` refreshed the installed integration and the rerun check passed.
+- OK: `python .flowguard\run_khaos_brain_conformance.py` - conformance replay passed lane lock, organization download boundary, update gate, and failed-update no-auto-retry expectations.
+- OK: `python .flowguard\khaos_brain_planned_maintenance_flow.py` - planned-maintenance model passed accepted plan, bad variant rejection, contracts, loop review, and no-stuck progress checks.
+- OK: `git diff --check` - no whitespace errors; Git reported CRLF normalization warnings only.
+
+### Findings
+
+- The Architect runner acquired and released the shared local-maintenance lock; Sleep and Dream were completed and no blocking lane was active.
+- Software update gate was healthy but not actionable because `update_available=true`, `user_requested=false`, `apply_ready=false`, and UI was not running.
+- Queue hygiene merged 51 incoming mechanism signals and maintained 65 proposals: 5 applied, 19 ready-for-patch, 21 rejected, 12 superseded, and 8 watching.
+- No ready-for-apply or sandbox-ready packet was selected; no `trial_result.json` was needed and no source mechanism patch was applied.
+- Install-sync validation initially failed due installed automation metadata drift; the idempotent installer repaired it and the refreshed rollup now reports `install_sync_ok=true`.
+- Rollup contains Sleep, Dream, Architect, FlowGuard, organization, content-boundary, and install-sync source reports; summary remains attention-needed because content-boundary review is required.
+
+### Friction Points
+
+- The runner wrote its report before post-validation install-sync repair, so the current run report and rollup needed a same-run refresh after installer repair.
+
+### Next Actions
+
+- Keep content-boundary review as the public-release blocker.
+- Keep the 19 medium-safety Architect items as ready-for-patch until dedicated patch packets are chosen.
+- Keep the 8 watching items under observation, especially the two blocked execution states and broader skill-maintenance signals.
+
+## kb-architect-20260605-lock-aware-maintenance-pass - Run KB Architect mechanism maintenance with validation-only queue hygiene
+
+- Task: run KB Architect mechanism maintenance with update gate, queue hygiene, validation, and rollup check.
+- Trigger reason: KB Architect is a stateful maintenance lane with shared locks, update gates, proposal queue state, sandbox closure, postflight observations, install-sync state, and system rollup side effects.
+- Route: used `flowguard-existing-model-preflight` with `flowguard-development-process-flow`; no new FlowGuard model was created because existing conformance and planned-maintenance models cover the lock, update, rollup, validation, install-sync, and release-gate risks exercised by this pass.
+
+### Validation
+
+- OK: `python -c "import flowguard; print(flowguard.SCHEMA_VERSION)"` - flowguard schema version 1.0 is importable.
+- OK: `python .agents\skills\local-kb-retrieve\scripts\kb_architect.py --json` - Architect run `kb-architect-20260605T120415Z` completed queue hygiene, postflight, lock release, and rollup write.
+- OK: `python -m unittest tests.test_kb_architect tests.test_maintenance_lanes tests.test_codex_install` - 29 focused Architect, lane, and install tests passed.
+- OK: `python scripts\install_codex_kb.py --check --json` - install health checklist passed with strong session defaults, repo-managed skills, automations, organization automations, and shell tools healthy.
+- OK: `python .flowguard\run_khaos_brain_conformance.py` - conformance replay passed lane lock, organization download boundary, update gate, and failed-update no-auto-retry expectations.
+- OK: `python .flowguard\khaos_brain_planned_maintenance_flow.py` - planned-maintenance model passed accepted plan, bad variant rejection, contracts, loop review, and no-stuck progress checks.
+- OK: `git diff --check` - no whitespace errors; Git reported CRLF normalization warnings only.
+
+### Findings
+
+- The Architect runner acquired and released the shared local-maintenance lock; Sleep `kb-sleep-20260605T100159Z` and Dream `kb-dream-20260605T110436Z` were completed, so no wait was needed.
+- Software update gate was healthy but not actionable because `update_available=true`, `user_requested=false`, `apply_ready=false`, and UI was not running.
+- Queue hygiene merged 53 incoming mechanism signals and maintained 66 proposals: 5 applied, 20 ready-for-patch, 21 rejected, 12 superseded, and 8 watching.
+- No ready-for-apply or sandbox-ready packet was selected; no `trial_result.json` was needed and no source mechanism patch was applied.
+- Install-sync validation passed without repair; repository-managed skills, automations, global defaults, organization automations, and shell tools are healthy.
+- Rollup contains Sleep, Dream, Architect, FlowGuard, organization, content-boundary, and install-sync source reports; summary remains attention-needed because content-boundary review is required.
+
+### Friction Points
+
+- The runner-generated rollup preceded the current post-validation FlowGuard adoption record, so the rollup was refreshed after recording current evidence.
+
+### Next Actions
+
+- Keep content-boundary review as the public-release blocker.
+- Keep the 20 medium-safety Architect items as ready-for-patch until dedicated patch packets are chosen.
+- Keep the 8 watching items under observation, especially the two blocked execution states and broader skill-maintenance signals.
+
+## kb-architect-20260606-lock-aware-maintenance-pass - Run KB Architect mechanism maintenance with stable queue
+
+- Task: run KB Architect mechanism maintenance with update gate, queue hygiene, validation, and rollup check.
+- Trigger reason: KB Architect is a stateful maintenance lane with shared locks, update gates, proposal queue state, sandbox closure, postflight observations, install-sync state, and system rollup side effects.
+- Route: used `flowguard-existing-model-preflight` with `flowguard-development-process-flow`; no new FlowGuard model was created because existing conformance and planned-maintenance models cover the lock, update, rollup, validation, install-sync, and release-gate risks exercised by this pass.
+
+### Validation
+
+- OK: `python -c "import flowguard; print(flowguard.SCHEMA_VERSION)"` - flowguard schema version 1.0 is importable.
+- REPAIRED: the first predictive-KB preflight command using `$env:CODEX_HOME` failed because the variable was not set in PowerShell; rerunning with `C:\Users\liu_y\.codex\skills\predictive-kb-preflight\kb_launch.py` retrieved 5 maintenance entries.
+- OK: `python scripts\khaos_brain_update.py --architect-check --json` - update gate was healthy but not actionable.
+- OK: `python .agents\skills\local-kb-retrieve\scripts\kb_architect.py --run-id kb-architect-20260606-manual-20260606140721 --json` - Architect run completed queue hygiene, postflight, lock release, and rollup write.
+- OK: `python -m unittest tests.test_kb_architect tests.test_maintenance_lanes tests.test_codex_install` - 29 focused Architect, lane, and install tests passed.
+- OK: `python scripts\install_codex_kb.py --check --json` - install health checklist passed with strong session defaults, repo-managed skills, automations, organization automations, and shell tools healthy.
+- OK: `python .flowguard\run_khaos_brain_conformance.py` - conformance replay passed lane lock, organization download boundary, update gate, and failed-update no-auto-retry expectations.
+- OK: `python .flowguard\khaos_brain_planned_maintenance_flow.py` - planned-maintenance model passed accepted plan, bad variant rejection, contracts, loop review, and no-stuck progress checks.
+- OK: `git diff --check` - no whitespace errors; Git reported CRLF normalization warnings only.
+
+### Findings
+
+- The Architect runner acquired and released the shared local-maintenance lock with `wait_count=0`; Sleep `kb-sleep-20260606T100318Z` and Dream `kb-dream-20260606T110514Z` were completed, so no wait was needed.
+- Software update gate was healthy but not actionable because `update_available=true`, `user_requested=false`, `apply_ready=false`, and UI was not running.
+- Queue hygiene merged 54 incoming mechanism signals and maintained 66 proposals: 5 applied, 20 ready-for-patch, 21 rejected, 12 superseded, and 8 watching.
+- No ready-for-apply or sandbox-ready packet was selected; no `trial_result.json` was needed and no source mechanism patch was applied.
+- Install-sync validation passed without repair; repository-managed skills, automations, global defaults, organization automations, and shell tools are healthy.
+- Rollup contains Sleep, Dream, Architect, FlowGuard, organization, content-boundary, and install-sync source reports; summary remains attention-needed because content-boundary review is required.
+
+### Friction Points
+
+- `CODEX_HOME` was not set in the PowerShell process, so automation memory and predictive-KB preflight paths needed the resolved `C:\Users\liu_y\.codex` fallback.
+- The runner-generated rollup preceded the current post-validation FlowGuard adoption record, so the rollup should be refreshed or reported with an explicit freshness note after recording current evidence.
+
+### Skipped Steps
+
+- No new FlowGuard model was created because existing conformance and planned-maintenance models cover the lock, update, rollup, validation, install-sync, and release-gate risks exercised by this pass.
+- No software update was applied because `apply_ready=false` and `user_requested=false`.
+- No sandbox trial was run because `sandbox_trial_selection.json` reported `selected=false` and `sandbox_ready_count=0`.
+- No source mechanism patch was applied because the current run selected no sandbox-ready packet.
+
+### Next Actions
+
+- Keep content-boundary review as the public-release blocker.
+- Keep the 20 medium-safety Architect items as ready-for-patch until dedicated patch packets are chosen.
+- Keep the 8 watching items under observation, especially the two blocked execution states and broader skill-maintenance signals.
+- Use the resolved `C:\Users\liu_y\.codex` path when `CODEX_HOME` is absent in automation shell commands.
+
+## kb-architect-20260607-lock-aware-maintenance-pass - Run KB Architect mechanism maintenance with queue hygiene advancement
+
+- Task: run KB Architect mechanism maintenance with update gate, queue hygiene, validation, and rollup check.
+- Trigger reason: KB Architect is a stateful maintenance lane with shared locks, update gates, proposal queue state, sandbox closure, postflight observations, install-sync state, and system rollup side effects.
+- Route: used `flowguard-existing-model-preflight` with `flowguard-development-process-flow`; no new FlowGuard model was created because existing conformance and planned-maintenance models cover the lock, update, rollup, validation, install-sync, and release-gate risks exercised by this pass.
+
+### Validation
+
+- OK: `python -c "import flowguard; print(flowguard.SCHEMA_VERSION)"` - flowguard schema version 1.0 is importable.
+- OK: `python "C:\Users\liu_y\.codex\skills\predictive-kb-preflight\kb_launch.py" search --route-hint system/knowledge-library/maintenance --json` - self-preflight retrieved 5 maintenance/update mechanism entries.
+- OK: `python scripts\khaos_brain_update.py --architect-check --json` - update gate was healthy but not actionable.
+- OK: `python .agents\skills\local-kb-retrieve\scripts\kb_architect.py --json` - Architect run `kb-architect-20260607T120611Z` completed queue hygiene, postflight, lock release, and rollup write.
+- OK: `python -m unittest tests.test_kb_architect tests.test_maintenance_lanes tests.test_codex_install` - 29 focused Architect, lane, and install tests passed.
+- OK: `python scripts\install_codex_kb.py --check --json` - install health checklist passed with strong session defaults, repo-managed skills, automations, organization automations, and shell tools healthy.
+- OK: `python .flowguard
+un_khaos_brain_conformance.py` - conformance replay passed lane lock, organization download boundary, update gate, and failed-update no-auto-retry expectations.
+- OK: `python .flowguard\khaos_brain_planned_maintenance_flow.py` - planned-maintenance model passed accepted plan, bad variant rejection, contracts, loop review, and no-stuck progress checks.
+- OK: `git diff --check` - no whitespace errors; Git reported CRLF normalization warnings only.
+
+### Findings
+
+- The Architect runner acquired and released the shared local-maintenance lock; Sleep `kb-sleep-20260607-100202Z` and Dream `kb-dream-20260607T110524Z` were completed, so no wait was needed.
+- Software update gate was healthy but not actionable because `update_available=true`, `user_requested=false`, `apply_ready=false`, and UI was not running.
+- Queue hygiene merged 55 incoming mechanism signals and maintained 67 proposals: 5 applied, 21 ready-for-patch, 22 rejected, 12 superseded, and 7 watching.
+- Two actual status transitions occurred: `arch-prop-30f2da79a967` moved`new -> rejected` and `arch-prop-8aacb8493935` moved `watching -> ready-for-patch`.
+- No ready-for-apply or sandbox-ready packet was selected; no `trial_result.json` was needed and no source mechanism patch was applied.
+- Install-sync validation passed without repair; repository-managed skills, automations, global defaults, organization automations, and shell tools are healthy.
+- Rollup contains Sleep, Dream, Architect, FlowGuard, organization, content-boundary, and install-sync source reports; summary remains attention-needed because content-boundary review is required.
+
+### Friction Points
+
+- The runner-generated rollup preceded the current post-validation FlowGuard adoption record, so the rollup/report were refreshed after recording current evidence.
+
+### Skipped Steps
+
+- No new FlowGuard model was created because existing conformance and planned-maintenance models cover the lock, update, rollup, validation, install-sync, and release-gate risks exercised by this pass.
+- No software update was applied because `apply_ready=false` and `user_requested=false`.
+- No sandbox trial was run because `sandbox_trial_selection.json` reported `selected=false` and `sandbox_ready_count=0`.
+- No source mechanism patch was applied because the current run selected no sandbox-ready packet.
+
+### Next Actions
+
+- Keep content-boundary review as the public-release blocker.
+- Keep the 21 medium-safety Architect items as ready-for-patch until dedicated patch packets are chosen.
+- Keep the 7 watching items under observation, especially the two blocked execution states and broader skill-maintenance signals.
+
+## kb-architect-20260608-lock-aware-maintenance-pass - Run KB Architect mechanism maintenance with queue hygiene and validation
+
+- Task: run KB Architect mechanism maintenance with update gate, queue hygiene, validation, and rollup check.
+- Trigger reason: KB Architect is a stateful maintenance lane with shared locks, update gates, proposal queue state, sandbox closure, postflight observations, install-sync state, and system rollup side effects.
+- Route: used `flowguard-existing-model-preflight` with `flowguard-development-process-flow`; no new FlowGuard model was created because existing conformance and planned-maintenance models cover the lock, update, rollup, validation, install-sync, and release-gate risks exercised by this pass.
+
+### Validation
+
+- OK: `python -c "import flowguard; print(flowguard.SCHEMA_VERSION)"` - flowguard schema version 1.0 is importable.
+- WARN then OK: initial `$env:CODEX_HOME` preflight path failed because the env var was absent; the resolved `C:\Users\liu_y\.codex` launcher path retrieved 5 maintenance/update mechanism entries.
+- OK: `python scripts\khaos_brain_update.py --architect-check --json` - update gate was healthy but not actionable.
+- OK: `python .agents\skills\local-kb-retrieve\scripts\kb_architect.py --json` - Architect run `kb-architect-20260608T121342Z` completed queue hygiene, postflight, lock release, and rollup write.
+- OK: `python -m unittest tests.test_kb_architect tests.test_maintenance_lanes tests.test_codex_install` - 29 focused Architect, lane, and install tests passed.
+- OK: `python scripts\install_codex_kb.py --check --json` - install health checklist passed with strong session defaults, repo-managed skills, automations, organization automations, and shell tools healthy.
+- OK: `python .flowguard\run_khaos_brain_conformance.py` - conformance replay passed lane lock, organization download boundary, update gate, and failed-update no-auto-retry expectations.
+- OK: `python .flowguard\khaos_brain_planned_maintenance_flow.py` - planned-maintenance model passed accepted plan, bad variant rejection, contracts, loop review, and no-stuck progress checks.
+- OK: `git diff --check` - no whitespace errors; Git reported CRLF normalization warnings only.
+
+### Findings
+
+- The Architect runner acquired and released the shared local-maintenance lock with `wait_count=0`; Sleep `kb-sleep-20260608-100352Z` and Dream `kb-dream-20260608T111055Z` were completed, so no lane blocked the pass.
+- Software update gate was healthy but not actionable because `update_available=true`, `user_requested=false`, `apply_ready=false`, and UI was not running.
+- Queue hygiene merged 55 incoming mechanism signals and maintained 67 proposals: 5 applied, 21 ready-for-patch, 22 rejected, 12 superseded, and 7 watching.
+- No ready-for-apply or sandbox-ready packet was selected; no `trial_result.json` was needed and no source mechanism patch was applied.
+- Runner postflight observation `62720d67-4ddd-4203-944f-d0145e9ee81e` was present; extra observation `781dacb0-9a39-44cd-8319-9843ccd16749` recorded the `CODEX_HOME` shell-path lesson.
+- Install-sync validation passed without repair; repository-managed skills, automations, global defaults, organization automations, and shell tools are healthy.
+- Rollup contains Sleep, Dream, Architect, FlowGuard, organization, content-boundary, and install-sync source reports; summary remains attention-needed because content-boundary review is required.
+
+### Friction Points
+
+- `CODEX_HOME` was not set in the PowerShell process, so automation memory and predictive-KB preflight paths needed the resolved `C:\Users\liu_y\.codex` fallback.
+- The runner-generated rollup preceded the current post-validation FlowGuard adoption record, so the final report carries an explicit freshness note rather than rerunning a second Architect pass.
+
+### Skipped Steps
+
+- No new FlowGuard model was created because existing conformance and planned-maintenance models cover the lock, update, rollup, validation, install-sync, and release-gate risks exercised by this pass.
+- No software update was applied because `apply_ready=false` and `user_requested=false`.
+- No sandbox trial was run because `sandbox_trial_selection.json` reported `selected=false` and `sandbox_ready_count=0`.
+- No source mechanism patch was applied because the current run selected no sandbox-ready packet.
+
+### Next Actions
+
+- Keep content-boundary review as the public-release blocker.
+- Keep the 21 medium-safety Architect items as ready-for-patch until dedicated patch packets are chosen.
+- Keep the 7 watching items under observation, especially the two blocked execution states and broader skill-maintenance signals.
+- Use the resolved `C:\Users\liu_y\.codex` path when `CODEX_HOME` is absent in automation shell commands.
