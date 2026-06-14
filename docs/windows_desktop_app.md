@@ -40,6 +40,8 @@ python scripts/install_desktop_shortcut.py --repo-root . --json
 
 快捷方式会优先指向已经构建好的 `dist/KhaosBrain.exe`。如果 exe 还不存在，可以加 `--prefer-python` 创建 Python 回退入口。默认不传语言参数，让应用沿用 UI 中保存的显示语言；需要固定语言时可以加 `--language en` 或 `--language zh-CN`。
 
+显示语言只影响桌面 UI。`--json` 检查、安装器、维护自动化和 GitHub 自动化输出默认是稳定的机器 JSON，不要求 Windows 控制台先切换到 UTF-8。
+
 ## English
 
 The desktop entry is for human card browsing. It does not replace Codex KB retrieval, feedback, or Sleep/Dream/Architect maintenance.
@@ -79,3 +81,5 @@ python scripts/install_desktop_shortcut.py --repo-root . --json
 ```
 
 The shortcut prefers `dist/KhaosBrain.exe` when it exists. Use `--prefer-python` to create a Python fallback shortcut before building the exe. By default it omits the language argument so the app can use the saved display setting; pass `--language en` or `--language zh-CN` only when a fixed language is needed.
+
+The display language affects the desktop UI only. `--json` checks, installer output, maintenance automation, and GitHub automation output use stable machine JSON and do not require switching the Windows console to UTF-8 first.

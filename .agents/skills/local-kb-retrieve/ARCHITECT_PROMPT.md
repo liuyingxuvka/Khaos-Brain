@@ -35,6 +35,24 @@ Retrieval-route mechanism signals:
 - First check whether the active prompt/runbook/Skill wording already tells agents the correct retrieval parameter names, route-hint/path-hint compatibility, preflight duty, postflight write-back duty, and proposal-only handoff boundary. If the fix is wording-only, keep the packet prompt-scoped; if it requires search, schema, scoring, or persistence behavior, classify it as patch work instead of sandbox-applying it from a prompt packet.
 - Merge repeated retrieval-route signals into one queue lane unless the current evidence shows a different mechanism failure mode, such as search interface mismatch, route navigation/scoring behavior, postflight observation capture, or proposal handoff validation.
 
+Canonical-interface mechanism signals:
+
+- Treat `review-code-change` and `review-observation-evidence` signals for CLI output, installer checks, preflight launcher templates, route display labels, or `i18n.zh-CN` as mechanism evidence about the canonical/display boundary.
+- Before applying a prompt or code packet, verify that the proposal preserves one normal path: canonical English core fields and routes, encoding-stable machine JSON for CLI/automation, UTF-8 durable storage, and localized UI display through `i18n.zh-CN` or route display labels.
+- A prompt-scoped fix is eligible only when it clarifies this boundary. Code packets that touch JSON emitters, installed launcher templates, or install-check health gates must include focused validation under hostile Windows console encodings.
+
+KB postflight tool-use signals:
+
+- Treat `review-observation-evidence` signals under `codex/workflow/kb-postflight/...` as evidence about the observation write-back procedure and tool surface. Before applying a prompt packet, verify the current supported command names in the installed preflight Skill or launcher; the supported observation write-back entry is `feedback`, not a nonexistent `record` subcommand.
+- If the signal is only a one-off CLI version mismatch, keep it as observation/card evidence or `watching` unless a prompt or runbook wording gap would make future agents repeat the same failure.
+- A prompt-scoped fix is eligible only when it makes future agents choose the supported postflight command or records the unsupported-tool fallback. Do not patch search, release, or persistence tooling from this prompt packet.
+
+Maintenance lock signals:
+
+- Treat `review-code-change` and `review-observation-evidence` signals under `system/knowledge-library/maintenance/locks` as mechanism evidence about the lane-status and shared-lock lifecycle. They are not card-content maintenance signals.
+- Before applying a prompt packet, verify whether `PROJECT_SPEC.md`, `docs/architecture_runbook.md`, the active Skill contract, and the runner already require waiting on live Sleep/Dream locks, five-minute rechecks, lock release, and auditable recovery for stale or corrupt lock state. If the mechanism is already covered, close the queue item as already applied or keep it `watching` instead of duplicating wording.
+- A prompt-scoped fix is eligible only when it clarifies the agent decision boundary: wait on a live maintenance owner, recover absent-PID or corrupt lock state with an auditable lane-status record, and avoid reopening terminal lock proposals without a real regression. Changes to lane-status code, lock timeout rules, or PID probing remain patch work unless a separate execution packet authorizes them.
+
 Mandatory execution contract:
 
 1. Before the first stateful command, create a visible plan with every checkpoint below.

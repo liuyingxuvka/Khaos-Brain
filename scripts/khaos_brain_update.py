@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -17,6 +16,7 @@ def _bootstrap_repo_imports() -> Path:
 
 SCRIPT_REPO_ROOT = _bootstrap_repo_imports()
 
+from local_kb.cli_output import print_json, print_text  # noqa: E402
 from local_kb.config import resolve_repo_root  # noqa: E402
 from local_kb.software_update import (  # noqa: E402
     architect_update_check,
@@ -77,10 +77,10 @@ def main() -> int:
         }
 
     if args.json:
-        print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+        print_json(payload, sort_keys=True)
     else:
         state = payload.get("state", {}) if isinstance(payload.get("state"), dict) else payload
-        print(f"Khaos Brain update status: {state.get('status', 'unknown')}")
+        print_text(f"Khaos Brain update status: {state.get('status', 'unknown')}")
     return 0
 
 

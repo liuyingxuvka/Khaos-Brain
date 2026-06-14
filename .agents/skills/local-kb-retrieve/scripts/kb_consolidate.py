@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -13,6 +12,7 @@ SCRIPT_REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(SCRIPT_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPT_REPO_ROOT))
 
+from local_kb.cli_output import print_json, print_text
 from local_kb.consolidate import consolidate_history
 from local_kb.store import resolve_repo_root
 
@@ -68,28 +68,28 @@ def main() -> None:
     )
 
     if args.json:
-        print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+        print_json(result, sort_keys=True)
         return
 
-    print(
+    print_text(
         "Consolidation scaffold analyzed "
         f"{result['event_count']} history events and grouped "
         f"{result['candidate_action_count']} candidate actions."
     )
     if result["apply_mode"] != "none":
-        print(f"Apply mode: {result['apply_mode']}")
-        print(f"Created candidates: {result['apply_summary'].get('created_candidate_count', 0)}")
-        print(f"Updated entries: {result['apply_summary'].get('updated_entry_count', 0)}")
-        print(f"Skipped actions: {result['apply_summary']['skipped_action_count']}")
+        print_text(f"Apply mode: {result['apply_mode']}")
+        print_text(f"Created candidates: {result['apply_summary'].get('created_candidate_count', 0)}")
+        print_text(f"Updated entries: {result['apply_summary'].get('updated_entry_count', 0)}")
+        print_text(f"Skipped actions: {result['apply_summary']['skipped_action_count']}")
         if result["apply_summary"].get("action_selection"):
             selection = result["apply_summary"]["action_selection"]
-            print(f"Selected actions: {selection.get('matched_action_count', 0)}")
-            print(f"Unselected eligible actions: {selection.get('unselected_apply_eligible_action_count', 0)}")
+            print_text(f"Selected actions: {selection.get('matched_action_count', 0)}")
+            print_text(f"Unselected eligible actions: {selection.get('unselected_apply_eligible_action_count', 0)}")
     if result["artifact_paths"]:
-        print(f"Snapshot: {result['artifact_paths']['snapshot_path']}")
-        print(f"Proposal: {result['artifact_paths']['proposal_path']}")
+        print_text(f"Snapshot: {result['artifact_paths']['snapshot_path']}")
+        print_text(f"Proposal: {result['artifact_paths']['proposal_path']}")
         if result["artifact_paths"].get("apply_path"):
-            print(f"Apply report: {result['artifact_paths']['apply_path']}")
+            print_text(f"Apply report: {result['artifact_paths']['apply_path']}")
 
 
 if __name__ == "__main__":

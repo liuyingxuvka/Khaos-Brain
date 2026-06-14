@@ -13,6 +13,7 @@ SCRIPT_REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(SCRIPT_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPT_REPO_ROOT))
 
+from local_kb.cli_output import print_json, print_text
 from local_kb.architect import record_architect_sandbox_trial_result, run_architect_maintenance
 from local_kb.store import resolve_repo_root
 
@@ -35,9 +36,9 @@ def main() -> None:
             payload = json.load(handle)
         result = record_architect_sandbox_trial_result(repo_root=repo_root, trial_result=payload)
         if args.json:
-            print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+            print_json(result, sort_keys=True)
             return
-        print(
+        print_text(
             f"Architect sandbox trial for {result['proposal_id']} recorded "
             f"decision={result['decision']}."
         )
@@ -50,18 +51,18 @@ def main() -> None:
     )
 
     if args.json:
-        print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+        print_json(result, sort_keys=True)
         return
 
-    print(
+    print_text(
         f"Architect run {result['run_id']} finished with status={result['status']} "
         f"and {result.get('proposal_count', 0)} mechanism proposals."
     )
     if result["status"] == "skipped":
-        print(f"Reason: {result['reason']}")
-    print(f"Run dir: {result['artifact_paths']['run_dir']}")
+        print_text(f"Reason: {result['reason']}")
+    print_text(f"Run dir: {result['artifact_paths']['run_dir']}")
     if result.get("history_event_ids"):
-        print(f"History events: {', '.join(result['history_event_ids'])}")
+        print_text(f"History events: {', '.join(result['history_event_ids'])}")
 
 
 if __name__ == "__main__":

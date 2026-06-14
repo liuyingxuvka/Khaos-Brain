@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 from pathlib import Path
@@ -14,6 +13,7 @@ def _bootstrap_repo_imports() -> None:
 
 _bootstrap_repo_imports()
 
+from local_kb.cli_output import print_json  # noqa: E402
 from local_kb.github_repo_config import configure_github_org_kb_repository, github_token_from_git_credential  # noqa: E402
 
 
@@ -42,7 +42,7 @@ def main() -> None:
     )
     safe_result = dict(result)
     safe_result.pop("token", None)
-    print(json.dumps(safe_result, ensure_ascii=False, indent=2))
+    print_json(safe_result)
     if not result.get("ok"):
         raise SystemExit(2)
 

@@ -141,6 +141,9 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn("mistake-first priority", skill_text)
             self.assertIn("highest-priority observation evidence", skill_text)
             self.assertIn("Successful reusable patterns may still be recorded", skill_text)
+            self.assertIn("canonical machine interfaces", skill_text)
+            self.assertIn("localized display projection", skill_text)
+            self.assertIn("encoding-stable JSON", skill_text)
 
             openai_text = (
                 codex_home / "skills" / "predictive-kb-preflight" / "agents" / "openai.yaml"
@@ -154,6 +157,9 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn("mistake-first priority", openai_text)
             self.assertIn("highest-priority observation evidence", openai_text)
             self.assertIn("successful reusable patterns", openai_text)
+            self.assertIn("canonical machine interfaces", openai_text)
+            self.assertIn("localized display projection", openai_text)
+            self.assertIn("encoding-stable JSON", openai_text)
 
             global_agents_text = global_agents_path(codex_home).read_text(encoding="utf-8")
             self.assertIn("BEGIN MANAGED PREDICTIVE KB DEFAULTS", global_agents_text)
@@ -165,6 +171,9 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn("mistake-first priority", global_agents_text)
             self.assertIn("highest-priority observation evidence", global_agents_text)
             self.assertIn("Successful reusable patterns may still be recorded", global_agents_text)
+            self.assertIn("canonical machine interfaces", global_agents_text)
+            self.assertIn("localized display projection", global_agents_text)
+            self.assertIn("encoding-stable JSON", global_agents_text)
 
             sleep_skill_text = (codex_home / "skills" / "kb-sleep-maintenance" / "SKILL.md").read_text(
                 encoding="utf-8"
@@ -181,6 +190,8 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn("Do not skip the merge, split, or Skill bundle consolidation checkpoint itself", sleep_skill_text)
             self.assertIn("mechanical apply eligibility", sleep_skill_text)
             self.assertIn("final AI-authored zh-CN display completion checkpoint", sleep_skill_text)
+            self.assertIn("canonical-interface checkpoint", sleep_skill_text)
+            self.assertIn("CLI machine JSON", sleep_skill_text)
             self.assertIn("route/path display labels", sleep_skill_text)
             self.assertIn("--status completed --run-id <run_id> --json", sleep_skill_text)
             self.assertIn("allow_implicit_invocation: false", sleep_skill_openai)
@@ -290,6 +301,8 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn("selected action keys", sleep_toml)
             self.assertIn("--action-key", sleep_toml)
             self.assertIn("final AI-authored zh-CN", sleep_toml)
+            self.assertIn("canonical-interface checkpoint", sleep_toml)
+            self.assertIn("CLI machine JSON", sleep_toml)
             self.assertIn("route/path display labels", sleep_toml)
             self.assertIn("do not run separate mid-run translation cleanup", sleep_toml)
             self.assertIn("same run id", sleep_toml)
@@ -477,6 +490,7 @@ class CodexInstallTests(unittest.TestCase):
             checklist = {item["id"]: item for item in check["checklist"]}
             self.assertIn("codex_shell_tools", checklist)
             self.assertIn("strong_session_defaults", checklist)
+            self.assertIn("canonical_machine_interfaces", checklist)
             self.assertIn("repo_maintenance_skills", checklist)
             self.assertIn("kb_sleep_automation", checklist)
             self.assertIn("kb_architect_automation", checklist)
@@ -495,10 +509,13 @@ class CodexInstallTests(unittest.TestCase):
             self.assertTrue(checklist["global_skill_subagent_usage"]["ok"])
             self.assertTrue(checklist["global_skill_phase_checkpoints"]["ok"])
             self.assertTrue(checklist["global_skill_mistake_priority"]["ok"])
+            self.assertTrue(checklist["global_skill_canonical_interface"]["ok"])
             self.assertTrue(checklist["global_agents_skill_usage"]["ok"])
             self.assertTrue(checklist["global_agents_subagent_usage"]["ok"])
             self.assertTrue(checklist["global_agents_phase_checkpoints"]["ok"])
             self.assertTrue(checklist["global_agents_mistake_priority"]["ok"])
+            self.assertTrue(checklist["global_agents_canonical_interface"]["ok"])
+            self.assertTrue(checklist["canonical_machine_interfaces"]["ok"])
 
     def test_organization_automation_times_are_stable_and_windowed(self) -> None:
         specs = {str(spec["id"]): spec for spec in REPO_AUTOMATION_SPECS}
@@ -799,6 +816,46 @@ class CodexInstallTests(unittest.TestCase):
             self.assertFalse(checklist["strong_session_defaults"]["ok"])
             self.assertTrue(
                 any("mistake-first highest-priority" in issue for issue in check["issues"]),
+                check["issues"],
+            )
+
+    def test_check_fails_when_canonical_interface_wording_is_missing(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            codex_home = Path(tmp_dir) / ".codex"
+            shell_bin_dir = Path(tmp_dir) / "shell-bin"
+            git_real = Path(tmp_dir) / "tool-src" / "git-real.cmd"
+            rg_source = Path(tmp_dir) / "tool-src" / "rg-source.exe"
+            write_cmd(git_real, "echo git version test")
+            rg_source.parent.mkdir(parents=True, exist_ok=True)
+            rg_source.write_bytes(b"rg-binary")
+
+            install_codex_integration(
+                repo_root=repo_root,
+                codex_home=codex_home,
+                shell_bin_dir=shell_bin_dir,
+                git_executable=git_real,
+                rg_source=rg_source,
+                persist_user_shell_path=False,
+            )
+
+            openai_path = codex_home / "skills" / "predictive-kb-preflight" / "agents" / "openai.yaml"
+            openai_text = openai_path.read_text(encoding="utf-8")
+            openai_path.write_text(openai_text.replace("canonical machine interfaces", "machine interfaces"), encoding="utf-8")
+
+            agents_path = global_agents_path(codex_home)
+            agents_text = agents_path.read_text(encoding="utf-8")
+            agents_path.write_text(agents_text.replace("canonical machine interfaces", "machine interfaces"), encoding="utf-8")
+
+            check = build_installation_check(repo_root=repo_root, codex_home=codex_home)
+            self.assertFalse(check["ok"])
+            checklist = {item["id"]: item for item in check["checklist"]}
+            self.assertFalse(checklist["global_skill_canonical_interface"]["ok"])
+            self.assertFalse(checklist["global_agents_canonical_interface"]["ok"])
+            self.assertFalse(checklist["canonical_machine_interfaces"]["ok"])
+            self.assertFalse(checklist["strong_session_defaults"]["ok"])
+            self.assertTrue(
+                any("canonical machine interface" in issue for issue in check["issues"]),
                 check["issues"],
             )
 

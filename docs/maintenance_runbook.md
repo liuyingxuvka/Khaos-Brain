@@ -71,6 +71,7 @@ The repository installer is expected to provision a repo-managed `KB Sleep` cron
    - after every selected candidate/card creation or semantic-review pass is finished, treat zh-CN display completion as one final checkpoint for that sleep pass, not as repeated mid-run cleanup
    - after any candidate/card creation or review pass, inspect route quality and scope assessment; prefer functional, reusable `domain_path` routes and keep project/repository/product names as provenance or tags unless the card is truly project-specific
    - preserve Skill/plugin/tool-specific scope when the observed lesson depends on that capability
+   - before the final zh-CN display completion checkpoint, confirm the canonical machine interface boundary still holds: top-level card fields, route values, CLI JSON, automation payload keys, and installer checks remain canonical machine surfaces, while `i18n.zh-CN` and route display labels remain UI/display surfaces only
 8. Inspect per-action proposal stubs with `kb_proposals.py`.
    - When a grouped route action includes explicit contrastive evidence, prefer candidate scaffolds whose main `predict.expected_result` reflects the stronger revised path and whose `predict.alternatives` preserves the weaker earlier branch.
    - When a `review-candidate` or `review-entry-update` stub includes `dream_validation_summary`, inspect the cited sandbox path, evidence grade, validation status, and Sleep handoff. Use it as a reason to consider semantic review of that card, not as automatic promotion.
@@ -85,10 +86,11 @@ The repository installer is expected to provision a repo-managed `KB Sleep` cron
 13. If needed, generate a rollback manifest with `kb_rollback.py inspect --write-manifest`.
 14. If the pass produced a bad low-risk apply, restore `history-events` from the snapshot.
 15. Rerun or inspect the relevant validation after any repair or apply lane before advancing the plan.
-16. Run the final AI zh-CN display completion checkpoint once, covering missing card display fields and route/path display labels through one i18n plan when needed.
-17. Run a final sleep postflight check and append one structured maintenance observation when the pass exposed a reusable lesson, miss, process weakness, route gap, card weakness, split signal, translation gap, or apply hazard.
-18. After writing that final maintenance observation, stop the current pass rather than immediately processing the new event.
-19. Leave higher-risk work that is not represented as a supported semantic-review decision as proposal-only for a later AI maintenance pass.
+16. Run the canonical-interface checkpoint: verify that any display-language work stayed in `i18n.zh-CN` or route display labels and did not rename `domain_path`, `cross_index`, taxonomy routes, search hints, CLI machine payloads, or automation payload keys.
+17. Run the final AI zh-CN display completion checkpoint once, covering missing card display fields and route/path display labels through one i18n plan when needed.
+18. Run a final sleep postflight check and append one structured maintenance observation when the pass exposed a reusable lesson, miss, process weakness, route gap, card weakness, split signal, translation gap, interface-boundary gap, or apply hazard.
+19. After writing that final maintenance observation, stop the current pass rather than immediately processing the new event.
+20. Leave higher-risk work that is not represented as a supported semantic-review decision as proposal-only for a later AI maintenance pass.
 
 ## Commands To Run Now
 

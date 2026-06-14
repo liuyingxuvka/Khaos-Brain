@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -13,6 +12,7 @@ def _bootstrap_repo_imports() -> None:
 
 _bootstrap_repo_imports()
 
+from local_kb.cli_output import print_json  # noqa: E402
 from local_kb.org_automation import run_organization_maintenance  # noqa: E402
 from local_kb.org_maintenance import build_organization_maintenance_report  # noqa: E402
 from local_kb.settings import load_desktop_settings, organization_sources_from_settings  # noqa: E402
@@ -37,7 +37,7 @@ def main() -> None:
     repo_root = resolve_repo_root(args.repo_root)
     if args.automation:
         result = run_organization_maintenance(repo_root, record_postflight=not args.no_postflight)
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        print_json(result)
         if not result.get("ok"):
             raise SystemExit(2)
         return
@@ -49,20 +49,14 @@ def main() -> None:
         settings = load_desktop_settings(repo_root)
         sources = organization_sources_from_settings(settings)
         if not sources:
-            print(
-                json.dumps(
-                    {"ok": False, "errors": ["No validated organization source in desktop settings."]},
-                    ensure_ascii=False,
-                    indent=2,
-                )
-            )
+            print_json({"ok": False, "errors": ["No validated organization source in desktop settings."]})
             raise SystemExit(2)
         source = sources[0]
         org_root = Path(str(source["path"]))
         organization_id = str(source.get("organization_id") or "")
 
     report = build_organization_maintenance_report(org_root, repo_root=repo_root, organization_id=organization_id)
-    print(json.dumps(report, ensure_ascii=False, indent=2))
+    print_json(report)
     if not report.get("ok"):
         raise SystemExit(2)
 

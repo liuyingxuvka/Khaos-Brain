@@ -30,6 +30,10 @@ LOCAL_PATH_PATTERNS = (
 RAW_MACHINE_KEYS = {"hardware_id", "hardware_fingerprint", "machine_id", "device_id", "local_installation_id"}
 
 
+def print_machine_json(payload: Any) -> None:
+    print(json.dumps(payload, ensure_ascii=True, indent=2))
+
+
 def normalize_changed_file(value: str) -> str:
     text = str(value or "").strip().replace("\\", "/")
     while text.startswith("./"):
@@ -193,7 +197,7 @@ def main() -> None:
         "auto_merge_blockers": blockers,
         "changed_files": changed_files,
     }
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    print_machine_json(result)
     if errors:
         raise SystemExit(2)
 

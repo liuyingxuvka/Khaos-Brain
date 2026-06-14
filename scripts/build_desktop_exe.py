@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 from pathlib import Path
@@ -15,6 +14,7 @@ SCRIPT_REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(SCRIPT_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPT_REPO_ROOT))
 
+from local_kb.cli_output import print_json, print_text  # noqa: E402
 from local_kb.config import resolve_repo_root  # noqa: E402
 
 
@@ -109,10 +109,10 @@ def main() -> int:
     repo_root = resolve_repo_root(args.repo_root, cwd=SCRIPT_REPO_ROOT)
     payload = build_exe(repo_root)
     if args.json:
-        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        print_json(payload)
     else:
-        print(f"Built Khaos Brain desktop executable: {payload['exe_path']}")
-        print(payload["kb_data_policy"])
+        print_text(f"Built Khaos Brain desktop executable: {payload['exe_path']}")
+        print_text(payload["kb_data_policy"])
     return 0 if payload["ok"] else 1
 
 

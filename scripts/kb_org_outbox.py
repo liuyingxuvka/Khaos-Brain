@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -13,6 +12,7 @@ def _bootstrap_repo_imports() -> None:
 
 _bootstrap_repo_imports()
 
+from local_kb.cli_output import print_json  # noqa: E402
 from local_kb.org_automation import run_organization_contribution  # noqa: E402
 from local_kb.org_outbox import build_organization_outbox  # noqa: E402
 from local_kb.settings import load_desktop_settings, organization_sources_from_settings  # noqa: E402
@@ -59,7 +59,7 @@ def main() -> None:
             base_branch=args.base_branch,
             record_postflight=not args.no_postflight,
         )
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        print_json(result)
         if not result.get("ok"):
             raise SystemExit(2)
         return
@@ -74,7 +74,7 @@ def main() -> None:
         dry_run=args.dry_run,
         organization_sources=organization_sources,
     )
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    print_json(result)
     if not result.get("ok"):
         raise SystemExit(2)
 

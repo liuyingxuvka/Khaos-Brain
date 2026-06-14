@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -13,6 +12,7 @@ SCRIPT_REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(SCRIPT_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPT_REPO_ROOT))
 
+from local_kb.cli_output import print_json, print_text
 from local_kb.search import format_search_output, render_search_payload, search_entries
 from local_kb.store import resolve_repo_root
 
@@ -31,10 +31,10 @@ def main() -> None:
     payload = render_search_payload(entries, repo_root)
 
     if args.json:
-        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        print_json(payload)
         return
 
-    print(format_search_output(payload, path_hint=args.path_hint))
+    print_text(format_search_output(payload, path_hint=args.path_hint))
 
 
 if __name__ == "__main__":

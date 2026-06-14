@@ -143,6 +143,8 @@ The intended reusable mark is the inner stack of three memory cards with a high-
 
 Settings currently owns display language only. English card fields remain the canonical source, while `i18n.zh-CN` is an optional display layer filled by sleep maintenance. The UI should render Chinese when selected and fall back to English for any untranslated field.
 
+Display language is a UI setting, not a command-line interface setting. CLI tools, automation payloads, installer checks, and GitHub automation output should keep canonical machine JSON and encoding-stable console output even when the desktop UI is set to `zh-CN`.
+
 Language controls should stay discoverable in every display language. The sidebar footer should label settings bilingually, and the settings dialog should use a clearly marked `Language / 语言` selector with a globe icon and bilingual options such as `English / 英文` and `中文 / Chinese`, rather than relying on tiny radio indicators.
 
 ## Multi-Route Behavior

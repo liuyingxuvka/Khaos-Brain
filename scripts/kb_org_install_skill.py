@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -13,6 +12,7 @@ def _bootstrap_repo_imports() -> None:
 
 _bootstrap_repo_imports()
 
+from local_kb.cli_output import print_json  # noqa: E402
 from local_kb.skill_sharing import install_approved_organization_skill, load_organization_skill_registry  # noqa: E402
 
 
@@ -46,7 +46,7 @@ def main() -> None:
             local_policy_allows=args.allow_auto_policy,
             replace_existing=args.replace_existing,
         )
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    print_json(result)
     if not result.get("ok"):
         raise SystemExit(2)
 

@@ -40,6 +40,7 @@ Preferred operating pattern:
 - During KB postflight, use mistake-first priority: Codex's own mistakes, weak paths, missed instructions, failed validations, tool or skill misuse, user corrections, and later correction episodes are the highest-priority observation evidence. Preserve them with contrastive fields whenever possible. Successful reusable patterns may still be recorded; do not suppress success just because it succeeded.
 - Skill and plugin usage lessons count as reusable signals when a skill choice, ordering, combination, fallback, or limitation materially changed the result.
 - Subagent and delegation usage lessons count as reusable signals when spawning, avoiding, sequencing, waiting for, or parallelizing subagents materially changed speed, coordination overhead, context isolation, main-thread clarity, verification quality, or task outcome.
+- Keep canonical machine interfaces separate from localized display projection. Repository CLI tools, installed launchers, automation payloads, and install checks should use canonical machine output and encoding-stable JSON; localized display belongs in UI view models, route display labels, and `i18n.zh-CN`.
 - The launcher is subcommand-based: `python "{{LAUNCHER_PATH}}" <command> ...`. The normal preflight entry is `search`.
 - For compatibility, the launcher also treats common search-style calls without the explicit `search` subcommand as a search request.
 - For search, prefer `--route-hint`. The underlying local search script also accepts the older `--path-hint` name.

@@ -51,6 +51,11 @@ MISTAKE_PRIORITY_MARKERS = (
     "successful reusable",
     "contrastive fields",
 )
+CANONICAL_INTERFACE_MARKERS = (
+    "canonical machine interfaces",
+    "localized display projection",
+    "encoding-stable json",
+)
 MAINTENANCE_SKILL_SPECS = (
     {
         "name": "kb-sleep-maintenance",
@@ -90,6 +95,11 @@ def _has_mistake_priority_wording(text: str) -> bool:
     normalized = text.lower()
     return all(marker in normalized for marker in MISTAKE_PRIORITY_MARKERS)
 
+
+def _has_canonical_interface_wording(text: str) -> bool:
+    normalized = text.lower()
+    return all(marker in normalized for marker in CANONICAL_INTERFACE_MARKERS)
+
 SLEEP_AUTOMATION_PROMPT = (
     "Use $kb-sleep-maintenance to run the repository's local KB sleep-maintenance pass for this workspace. "
     "Use PROJECT_SPEC.md, "
@@ -118,6 +128,8 @@ SLEEP_AUTOMATION_PROMPT = (
     "require future utility before auto-creating candidate cards, require semantic-review utility assessments, "
     "limit semantic-review to at most 3 trusted-card modifications per run, run exactly one final AI-authored zh-CN "
     "display completion checkpoint after candidate/card creation, semantic card text changes, and route review are done, "
+    "run a canonical-interface checkpoint before translation apply so CLI machine JSON, automation payload keys, installer checks, "
+    "top-level card fields, and route values remain canonical machine surfaces while Chinese stays in i18n.zh-CN, route display labels, and UI view models, "
     "cover card display fields and route/path display labels in that single checkpoint through one i18n plan, do not "
     "run separate mid-run translation cleanup, keep taxonomy rewrites proposal-only unless current "
     "tooling cleanly supports them, inspect rollback artifacts including history-events, related-card-entries, "
@@ -195,7 +207,7 @@ ARCHITECT_AUTOMATION_PROMPT = (
     "proposal counts by status before and after queue hygiene, duplicate clusters merged or superseded, resolved or "
     "already-applied items closed, ready-for-apply and ready-for-patch items, sandbox-ready packets with planned sandbox path and write boundaries, execution packets by mode, changes "
     "applied, validation bundle run, blocked execution states, postflight observation status, system-readable maintenance rollup status, watching items left "
-    "for long observation, and the system evolution route."
+    "for long observation, canonical-interface mechanism signals, and the system evolution route."
 )
 
 ORG_CONTRIBUTE_AUTOMATION_PROMPT = (
@@ -1064,6 +1076,11 @@ def build_installation_check(
             "Global skill default_prompt does not contain the expected mistake-first highest-priority KB postflight wording. "
             "Re-run the installer to refresh the installed prompt."
         )
+    if openai_text and not _has_canonical_interface_wording(openai_text):
+        issues.append(
+            "Global skill default_prompt does not contain the expected canonical machine interface wording. "
+            "Re-run the installer to refresh the installed prompt."
+        )
     if not global_agents.exists():
         issues.append(
             f"Global AGENTS defaults file is missing: {global_agents}. "
@@ -1112,6 +1129,11 @@ def build_installation_check(
             "Global AGENTS defaults do not contain the expected mistake-first highest-priority KB postflight wording. "
             "Re-run the installer to refresh the session-wide defaults."
         )
+    if global_agents_text and not _has_canonical_interface_wording(global_agents_text):
+        issues.append(
+            "Global AGENTS defaults do not contain the expected canonical machine interface wording. "
+            "Re-run the installer to refresh the session-wide defaults."
+        )
 
     shell_bin = Path(
         str(shell_tools_manifest.get("shell_bin_dir", "") or codex_shell_bin_dir())
@@ -1147,6 +1169,70 @@ def build_installation_check(
         )
 
     expected_repo_root = repo_root or (Path(manifest_root_raw) if manifest_root_raw else Path("."))
+    canonical_interface_checks: list[dict[str, Any]] = []
+
+    def add_canonical_interface_check(check_id: str, path: Path, markers: tuple[str, ...]) -> None:
+        item_issues: list[str] = []
+        if not path.exists():
+            item_issues.append(f"Canonical interface source is missing: {path}")
+            text = ""
+        else:
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError as exc:
+                item_issues.append(f"Canonical interface source could not be read: {exc}")
+                text = ""
+        normalized = text.lower()
+        for marker in markers:
+            if marker.lower() not in normalized:
+                item_issues.append(f"{path} is missing canonical-interface marker: {marker}")
+        if item_issues:
+            issues.extend(item_issues)
+        canonical_interface_checks.append(
+            {
+                "id": check_id,
+                "path": str(path),
+                "ok": not item_issues,
+                "issues": item_issues,
+            }
+        )
+
+    add_canonical_interface_check(
+        "local_kb_skill_prompt",
+        expected_repo_root / ".agents" / "skills" / "local-kb-retrieve" / "SKILL.md",
+        CANONICAL_INTERFACE_MARKERS,
+    )
+    add_canonical_interface_check(
+        "local_kb_maintenance_prompt",
+        expected_repo_root / ".agents" / "skills" / "local-kb-retrieve" / "MAINTENANCE_PROMPT.md",
+        ("canonical-interface checkpoint", "CLI machine JSON", "i18n.zh-CN"),
+    )
+    add_canonical_interface_check(
+        "local_kb_architect_prompt",
+        expected_repo_root / ".agents" / "skills" / "local-kb-retrieve" / "ARCHITECT_PROMPT.md",
+        ("Canonical-interface mechanism signals", "encoding-stable", "localized UI display"),
+    )
+    add_canonical_interface_check(
+        "preflight_skill_template",
+        expected_repo_root / TEMPLATE_ROOT / "SKILL.md.template",
+        CANONICAL_INTERFACE_MARKERS,
+    )
+    add_canonical_interface_check(
+        "preflight_global_agents_template",
+        expected_repo_root / TEMPLATE_ROOT / f"{GLOBAL_AGENTS_FILENAME}.template",
+        CANONICAL_INTERFACE_MARKERS,
+    )
+    add_canonical_interface_check(
+        "preflight_openai_template",
+        expected_repo_root / TEMPLATE_ROOT / "agents" / "openai.yaml",
+        CANONICAL_INTERFACE_MARKERS,
+    )
+    add_canonical_interface_check(
+        "preflight_launcher_template",
+        expected_repo_root / TEMPLATE_ROOT / "kb_launch.py",
+        ("ensure_ascii=True", "print_machine_json", "console_safe_text"),
+    )
+
     maintenance_skill_checks: list[dict[str, Any]] = []
     for spec in MAINTENANCE_SKILL_SPECS:
         skill_name = spec["name"]
@@ -1365,6 +1451,8 @@ def build_installation_check(
                     "selected action keys",
                     "--action-key",
                     "final AI-authored zh-CN",
+                    "canonical-interface checkpoint",
+                    "CLI machine JSON",
                     "route/path display labels",
                     "do not run separate mid-run translation cleanup",
                     "--run-id <run_id>",
@@ -1411,6 +1499,7 @@ def build_installation_check(
                     "system-readable maintenance rollup",
                     "content-boundary",
                     "install-sync status",
+                    "canonical-interface mechanism signals",
                 ):
                     if marker not in prompt_text:
                         issues_for_automation.append(
@@ -1512,6 +1601,7 @@ def build_installation_check(
     global_skill_subagent_usage = bool(openai_text and "subagent/delegation usage lesson" in openai_text)
     global_skill_phase_checkpoints = bool(openai_text and "phase-change KB checkpoints" in openai_text)
     global_skill_mistake_priority = bool(openai_text and _has_mistake_priority_wording(openai_text))
+    global_skill_canonical_interface = bool(openai_text and _has_canonical_interface_wording(openai_text))
     global_agents_present = global_agents.exists()
     global_agents_managed = bool(
         global_agents_text
@@ -1524,6 +1614,12 @@ def build_installation_check(
     global_agents_subagent_usage = bool(global_agents_text and "subagent/delegation usage" in global_agents_text)
     global_agents_phase_checkpoints = bool(global_agents_text and "phase-change KB checkpoints" in global_agents_text)
     global_agents_mistake_priority = bool(global_agents_text and _has_mistake_priority_wording(global_agents_text))
+    global_agents_canonical_interface = bool(global_agents_text and _has_canonical_interface_wording(global_agents_text))
+    canonical_interface_ok = (
+        global_skill_canonical_interface
+        and global_agents_canonical_interface
+        and all(item["ok"] for item in canonical_interface_checks)
+    )
     kb_sleep_ok = not automation_issue_map.get("kb-sleep")
     kb_dream_ok = not automation_issue_map.get("kb-dream")
     kb_architect_ok = not automation_issue_map.get("kb-architect")
@@ -1545,6 +1641,7 @@ def build_installation_check(
         and global_agents_phase_checkpoints
         and global_skill_mistake_priority
         and global_agents_mistake_priority
+        and canonical_interface_ok
         and maintenance_skill_ok
     )
     checklist = [
@@ -1588,6 +1685,12 @@ def build_installation_check(
             "global_skill_mistake_priority",
             "Global predictive KB prompt treats mistakes, weak paths, and corrections as highest-priority postflight evidence",
             global_skill_mistake_priority,
+            f"openai_path={openai_path}",
+        ),
+        _checklist_item(
+            "global_skill_canonical_interface",
+            "Global predictive KB prompt preserves canonical machine interfaces and localized display projection",
+            global_skill_canonical_interface,
             f"openai_path={openai_path}",
         ),
         _checklist_item(
@@ -1637,6 +1740,18 @@ def build_installation_check(
             "Global AGENTS defaults treat mistakes, weak paths, and corrections as highest-priority postflight evidence",
             global_agents_mistake_priority,
             f"global_agents_path={global_agents}",
+        ),
+        _checklist_item(
+            "global_agents_canonical_interface",
+            "Global AGENTS defaults preserve canonical machine interfaces and localized display projection",
+            global_agents_canonical_interface,
+            f"global_agents_path={global_agents}",
+        ),
+        _checklist_item(
+            "canonical_machine_interfaces",
+            "Repository prompts, templates, and launcher preserve canonical machine output and localized display boundaries",
+            canonical_interface_ok,
+            "; ".join(f"{item['id']}={item['path']}" for item in canonical_interface_checks),
         ),
         _checklist_item(
             "repo_maintenance_skills",
@@ -1721,6 +1836,7 @@ def build_installation_check(
         },
         "automation_runtime": automation_runtime,
         "checklist": checklist,
+        "canonical_interface_checks": canonical_interface_checks,
         "maintenance_skill_checks": maintenance_skill_checks,
         "automation_checks": automation_checks,
         "issues": issues,

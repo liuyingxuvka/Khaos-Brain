@@ -41,15 +41,16 @@ Current user instructions still override repository files.
 17. Do not create new candidates merely because the tooling can; use new-candidates only when backlog triage shows the scaffold would improve future retrieval.
 18. If an apply mode contains both approved and unapproved actions, use selected action keys instead of skipping the whole lane: `--action-key <approved-action-key>` may be repeated. Skip only when the approved set cannot be named by exact action key.
 19. Limit semantic-review to at most 3 trusted-card modifications per run.
-20. Run exactly one final AI-authored zh-CN display completion checkpoint after candidate/card creation, semantic text changes, and route review are done. This single checkpoint covers card display fields and route/path display labels, writes missing route labels through the i18n plan, and replaces separate mid-run translation cleanup.
-21. Keep taxonomy rewrites proposal-only unless current tooling cleanly supports the exact change.
-22. Inspect rollback artifacts when needed, including history-events, related-card-entries, cross-index-entries, and semantic-review-entries when present.
-23. Attempt supported low-risk repairs and rerun the relevant validation when a command exposes a fixable issue.
-24. Run a final sleep postflight check.
-25. Append one structured maintenance observation when the pass exposed a reusable lesson, route gap, card weakness, merge signal, split signal, Skill bundle update, or process hazard.
-26. Run `python .agents/skills/local-kb-retrieve/scripts/kb_lane_status.py --lane kb-sleep --status completed --run-id <run_id> --json`.
-27. Stop after that final observation. Do not immediately consolidate the observation just written.
+20. Run a canonical-interface checkpoint before translation apply: top-level card fields, route values, CLI machine JSON, automation payload keys, and installer checks remain canonical machine surfaces; Chinese stays in `i18n.zh-CN`, route display labels, and UI view models.
+21. Run exactly one final AI-authored zh-CN display completion checkpoint after candidate/card creation, semantic text changes, and route review are done. This single checkpoint covers card display fields and route/path display labels, writes missing route labels through the i18n plan, and replaces separate mid-run translation cleanup.
+22. Keep taxonomy rewrites proposal-only unless current tooling cleanly supports the exact change.
+23. Inspect rollback artifacts when needed, including history-events, related-card-entries, cross-index-entries, and semantic-review-entries when present.
+24. Attempt supported low-risk repairs and rerun the relevant validation when a command exposes a fixable issue.
+25. Run a final sleep postflight check.
+26. Append one structured maintenance observation when the pass exposed a reusable lesson, route gap, card weakness, merge signal, split signal, Skill bundle update, interface-boundary gap, or process hazard.
+27. Run `python .agents/skills/local-kb-retrieve/scripts/kb_lane_status.py --lane kb-sleep --status completed --run-id <run_id> --json`.
+28. Stop after that final observation. Do not immediately consolidate the observation just written.
 
 ## Report
 
-Report the run id, checkpoint status, self-preflight entries, what became more accurate, clearer, or easier to retrieve, observation counts reviewed, candidates created or deliberately not created, weak/noisy material rejected or kept history-only, route adjustments or concerns, similar-card merge checkpoint decisions, overloaded-card split checkpoint decisions, organization Skill bundle consolidation decisions, semantic-review decisions applied or skipped, final zh-CN display completion status for cards and routes, translations updated or still missing, validations run, repaired or proposal-only issues, maintenance decisions, postflight observation status, undeclared taxonomy gaps, hub-vs-overloaded card reviews, and next proposal-only targets.
+Report the run id, checkpoint status, self-preflight entries, what became more accurate, clearer, or easier to retrieve, observation counts reviewed, candidates created or deliberately not created, weak/noisy material rejected or kept history-only, route adjustments or concerns, similar-card merge checkpoint decisions, overloaded-card split checkpoint decisions, organization Skill bundle consolidation decisions, semantic-review decisions applied or skipped, canonical-interface checkpoint status, final zh-CN display completion status for cards and routes, translations updated or still missing, validations run, repaired or proposal-only issues, maintenance decisions, postflight observation status, undeclared taxonomy gaps, hub-vs-overloaded card reviews, and next proposal-only targets.

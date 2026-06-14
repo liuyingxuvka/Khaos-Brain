@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -13,6 +12,7 @@ SCRIPT_REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(SCRIPT_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPT_REPO_ROOT))
 
+from local_kb.cli_output import print_json, print_text
 from local_kb.routes import build_route_view, build_selected_views, format_route_view
 from local_kb.store import load_entries, resolve_repo_root
 
@@ -35,19 +35,19 @@ def main() -> None:
             include_cross_index=args.include_cross_index,
         )
         if args.json:
-            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            print_json(payload)
             return
 
-        print("\n\n".join(format_route_view(view) for view in payload))
+        print_text("\n\n".join(format_route_view(view) for view in payload))
         return
 
     entries = load_entries(repo_root)
     view = build_route_view(entries, repo_root, route=args.route, include_cross_index=args.include_cross_index)
     if args.json:
-        print(json.dumps(view, ensure_ascii=False, indent=2))
+        print_json(view)
         return
 
-    print(format_route_view(view))
+    print_text(format_route_view(view))
 
 
 if __name__ == "__main__":

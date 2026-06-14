@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -13,6 +12,7 @@ SCRIPT_REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(SCRIPT_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPT_REPO_ROOT))
 
+from local_kb.cli_output import print_json, print_text
 from local_kb.snapshots import (
     MANIFEST_FILENAME,
     SUPPORTED_RESTORE_ARTIFACTS,
@@ -41,19 +41,19 @@ def inspect_command(args: argparse.Namespace) -> int:
         manifest["manifest_path"] = str((run_dir / MANIFEST_FILENAME).relative_to(repo_root).as_posix())
 
     if args.json:
-        print(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True))
+        print_json(manifest, sort_keys=True)
         return 0
 
-    print(
+    print_text(
         f"Run {manifest['run_id']} contains {manifest['artifact_count']} artifacts; "
         f"{manifest['restorable_artifact_count']} can be restored safely."
     )
     for artifact in manifest["artifacts"]:
         status = "present" if artifact["exists"] else "missing"
         restorable = "restorable" if artifact["restorable"] else "inspect-only"
-        print(f"- {artifact['artifact_id']}: {status}, {restorable}, path={artifact['path']}")
+        print_text(f"- {artifact['artifact_id']}: {status}, {restorable}, path={artifact['path']}")
     if args.write_manifest:
-        print(f"Manifest: {(run_dir / MANIFEST_FILENAME).relative_to(repo_root).as_posix()}")
+        print_text(f"Manifest: {(run_dir / MANIFEST_FILENAME).relative_to(repo_root).as_posix()}")
     return 0
 
 
@@ -69,11 +69,11 @@ def restore_command(args: argparse.Namespace) -> int:
     )
 
     if args.json:
-        print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+        print_json(result, sort_keys=True)
         return 0
 
     verb = "Would restore" if args.dry_run else "Restored"
-    print(
+    print_text(
         f"{verb} {result['artifact_id']} to {result['target_path']} "
         f"from {result['source_path']} ({result['event_count']} events)."
     )

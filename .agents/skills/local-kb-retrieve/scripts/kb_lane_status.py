@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -13,6 +12,7 @@ SCRIPT_REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(SCRIPT_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPT_REPO_ROOT))
 
+from local_kb.cli_output import print_json, print_text
 from local_kb.maintenance_lanes import (
     DEFAULT_LOCK_POLL_SECONDS,
     DEFAULT_STALE_AFTER_SECONDS,
@@ -46,9 +46,9 @@ def main() -> None:
     if args.heartbeat:
         payload = heartbeat_lane_lock(repo_root, args.lane, run_id=args.run_id, note=args.note)
         if args.json:
-            print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+            print_json(payload, sort_keys=True)
             return
-        print(f"{args.lane}: {payload.get('status', 'heartbeat')}")
+        print_text(f"{args.lane}: {payload.get('status', 'heartbeat')}")
         return
 
     lock_payload = {}
@@ -88,9 +88,9 @@ def main() -> None:
         payload = read_lane_status(repo_root, args.lane)
 
     if args.json:
-        print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+        print_json(payload, sort_keys=True)
         return
-    print(f"{args.lane}: {payload.get('status', 'missing')}")
+    print_text(f"{args.lane}: {payload.get('status', 'missing')}")
 
 
 if __name__ == "__main__":

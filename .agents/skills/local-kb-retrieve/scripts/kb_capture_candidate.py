@@ -17,6 +17,7 @@ SCRIPT_REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(SCRIPT_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPT_REPO_ROOT))
 
+from local_kb.cli_output import print_text
 from local_kb.common import csv_to_list, parse_route_segments, slugify
 from local_kb.history import build_history_event, record_history_event
 from local_kb.store import candidate_dir, resolve_repo_root, write_yaml_file
@@ -98,7 +99,7 @@ def main() -> None:
     )
     record_history_event(repo_root, event)
 
-    print(f"Created predictive candidate entry: {path}")
+    print_text(f"Created predictive candidate entry: {path}")
 
 
 if __name__ == "__main__":

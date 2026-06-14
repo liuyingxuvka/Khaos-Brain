@@ -33,6 +33,22 @@ SEARCH_FLAG_MARKERS = {"--query", "--path-hint", "--route-hint", "--top-k"}
 SEARCH_ARG_ALIASES = {"--route-hint": "--path-hint"}
 
 
+def machine_json_text(payload: Any, *, indent: int | None = 2) -> str:
+    return json.dumps(payload, ensure_ascii=True, indent=indent)
+
+
+def print_machine_json(payload: Any) -> None:
+    print(machine_json_text(payload))
+
+
+def console_safe_text(value: Any) -> str:
+    return str(value).encode("ascii", errors="backslashreplace").decode("ascii")
+
+
+def print_text(value: Any = "") -> None:
+    print(console_safe_text(value))
+
+
 def codex_home() -> Path:
     return Path(__file__).resolve().parents[2]
 
@@ -150,7 +166,7 @@ def main() -> int:
     if parsed.command == "check":
         payload = build_check_payload()
         if "--json" in parsed.args:
-            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            print_machine_json(payload)
         else:
             for key in [
                 "ok",
@@ -163,11 +179,11 @@ def main() -> int:
                 "resolved_repo_root",
                 "discovered_workspace_repo_root",
             ]:
-                print(f"{key}: {payload[key]}")
+                print_text(f"{key}: {payload[key]}")
             if payload["issues"]:
-                print("issues:")
+                print_text("issues:")
                 for item in payload["issues"]:
-                    print(f"- {item}")
+                    print_text(f"- {item}")
         return 0 if payload["ok"] else 1
 
     repo_root = resolve_repo_root()

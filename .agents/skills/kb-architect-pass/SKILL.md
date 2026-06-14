@@ -24,7 +24,7 @@ Current user instructions still override repository files.
 
 ## Scope
 
-In scope: Sleep/Dream/Architect prompts, runbooks, automation specs, installer checks, rollback/snapshot/validation workflow, proposal queue governance, and narrow tests for those mechanisms.
+In scope: Sleep/Dream/Architect prompts, runbooks, automation specs, installer checks, CLI machine-output boundaries, canonical/display interface rules, rollback/snapshot/validation workflow, proposal queue governance, and narrow tests for those mechanisms.
 
 Out of scope: trusted-card rewrites, candidate promotion, card content merge/split/deprecation, taxonomy route rewrites, user preference cards, ordinary knowledge-card maintenance, dependency installs, broad refactors, and repo-wide formatting.
 
@@ -57,4 +57,4 @@ Out of scope: trusted-card rewrites, candidate promotion, card content merge/spl
 
 ## Report
 
-Report the run id, checkpoint status for every plan item, preflight entries retrieved, software update gate result, proposal counts by status before and after queue hygiene, duplicate clusters merged or superseded, resolved or already-applied items closed, terminal items intentionally not reopened, ready-for-apply and ready-for-patch items, sandbox-ready packets with planned sandbox path and write boundaries, selected sandbox trial, trial-result decision, execution packets by mode, changes applied, validation bundle run, blocked execution states, postflight observation status, system-readable maintenance rollup status, watching items left for long observation, and the system evolution route.
+Report the run id, checkpoint status for every plan item, preflight entries retrieved, software update gate result, proposal counts by status before and after queue hygiene, duplicate clusters merged or superseded, resolved or already-applied items closed, terminal items intentionally not reopened, ready-for-apply and ready-for-patch items, sandbox-ready packets with planned sandbox path and write boundaries, selected sandbox trial, trial-result decision, execution packets by mode, changes applied, validation bundle run, canonical-interface mechanism signals, blocked execution states, postflight observation status, system-readable maintenance rollup status, watching items left for long observation, and the system evolution route.

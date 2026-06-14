@@ -9,6 +9,7 @@ import yaml
 
 from local_kb.consolidate import consolidate_history
 from local_kb.desktop_app import _cover_title, _language_display, _language_from_display
+from local_kb.models import Entry
 from local_kb.i18n import (
     localized_entry,
     localized_route_label,
@@ -17,6 +18,7 @@ from local_kb.i18n import (
     route_segment_labels_path,
 )
 from local_kb.i18n_maintenance import build_i18n_actions, collect_route_segment_label_gaps
+from local_kb.search import render_entry
 from local_kb.store import write_yaml_file
 from local_kb.ui_data import build_route_view_payload
 
@@ -147,6 +149,18 @@ class KbI18nTests(unittest.TestCase):
         self.assertEqual(localized_route_label(route, "zh-CN"), "系统 / 知识库 / 检索")
         self.assertEqual(localized_route_label(route, "en"), "system / knowledge-library / retrieval")
         self.assertEqual(localized_route_segment("unknown-segment", "zh-CN"), "unknown-segment")
+
+    def test_search_machine_payload_uses_canonical_fields_not_i18n_display(self) -> None:
+        entry = _sample_entry()
+        entry["i18n"] = {"zh-CN": {"title": "仓库任务前先扫描本地 KB"}}
+        model_entry = Entry(path=Path("kb/public/system/model-i18n.yaml"), data=entry)
+        model_entry.score = 12.34
+
+        payload = render_entry(model_entry, Path("."))
+
+        self.assertEqual(payload["title"], "Scan local KB before repository tasks")
+        self.assertEqual(payload["domain_path"], ["system", "knowledge-library", "retrieval"])
+        self.assertNotIn("i18n", payload)
 
     def test_sleep_i18n_reports_missing_route_segment_labels_without_renaming_routes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

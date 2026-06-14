@@ -29,6 +29,7 @@ Rule discipline:
 - Do not let `confidence` or `status` create a hit by themselves. They may rerank plausible matches, but they should not turn unrelated entries into matches.
 - Keep runtime survival separate from KB repair. During active work, skip malformed or unusable entries and continue; leave cleanup and normalization to sleep maintenance.
 - Keep parameters few and fixed. Prefer counts, weights, and thresholds that a human can inspect over adaptive or opaque heuristics.
+- Keep canonical machine interfaces separate from localized display projection. CLI tools, installed launchers, automation payloads, and installer checks should use canonical machine output and encoding-stable JSON; Chinese display belongs in `i18n.zh-CN`, route display labels, and UI view models.
 
 Sleep maintenance lanes:
 

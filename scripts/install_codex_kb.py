@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -13,6 +12,7 @@ SCRIPT_REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(SCRIPT_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPT_REPO_ROOT))
 
+from local_kb.cli_output import print_json, print_text
 from local_kb.config import default_codex_home, resolve_repo_root
 from local_kb.install import build_installation_check, install_codex_integration
 
@@ -31,45 +31,45 @@ def main() -> int:
     if args.check:
         payload = build_installation_check(repo_root=repo_root, codex_home=codex_home)
         if args.json:
-            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            print_json(payload)
         else:
             status = "OK" if payload["ok"] else "FAILED"
-            print(f"Predictive KB install check: {status}")
-            print(f"repo_root: {payload['repo_root']}")
-            print(f"codex_home: {payload['codex_home']}")
-            print(f"skill_path: {payload['skill_path']}")
-            print(f"launcher_path: {payload['launcher_path']}")
-            print(f"global_agents_path: {payload['global_agents_path']}")
-            print(f"install_state_path: {payload['install_state_path']}")
-            print(f"maintenance_skills: {', '.join(payload.get('maintenance_skill_names', []))}")
-            print("checklist:")
+            print_text(f"Predictive KB install check: {status}")
+            print_text(f"repo_root: {payload['repo_root']}")
+            print_text(f"codex_home: {payload['codex_home']}")
+            print_text(f"skill_path: {payload['skill_path']}")
+            print_text(f"launcher_path: {payload['launcher_path']}")
+            print_text(f"global_agents_path: {payload['global_agents_path']}")
+            print_text(f"install_state_path: {payload['install_state_path']}")
+            print_text(f"maintenance_skills: {', '.join(payload.get('maintenance_skill_names', []))}")
+            print_text("checklist:")
             for item in payload.get("checklist", []):
                 marker = "[OK]" if item.get("ok") else "[MISSING]"
-                print(f"- {marker} {item.get('label')}")
+                print_text(f"- {marker} {item.get('label')}")
                 details = str(item.get("details", "") or "").strip()
                 if details:
-                    print(f"  details: {details}")
+                    print_text(f"  details: {details}")
             if payload["warnings"]:
-                print("warnings:")
+                print_text("warnings:")
                 for item in payload["warnings"]:
-                    print(f"- {item}")
+                    print_text(f"- {item}")
             if payload["issues"]:
-                print("issues:")
+                print_text("issues:")
                 for item in payload["issues"]:
-                    print(f"- {item}")
+                    print_text(f"- {item}")
         return 0 if payload["ok"] else 1
 
     payload = install_codex_integration(repo_root=repo_root, codex_home=codex_home)
     if args.json:
-        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        print_json(payload)
     else:
-        print("Installed predictive KB Codex integration.")
-        print(f"repo_root: {payload['repo_root']}")
-        print(f"codex_home: {payload['codex_home']}")
-        print(f"skill_path: {payload['skill_path']}")
-        print(f"launcher_path: {payload['launcher_path']}")
-        print(f"install_state_path: {payload['install_state_path']}")
-        print(f"maintenance_skills: {', '.join(payload.get('maintenance_skill_names', []))}")
+        print_text("Installed predictive KB Codex integration.")
+        print_text(f"repo_root: {payload['repo_root']}")
+        print_text(f"codex_home: {payload['codex_home']}")
+        print_text(f"skill_path: {payload['skill_path']}")
+        print_text(f"launcher_path: {payload['launcher_path']}")
+        print_text(f"install_state_path: {payload['install_state_path']}")
+        print_text(f"maintenance_skills: {', '.join(payload.get('maintenance_skill_names', []))}")
     return 0
 
 

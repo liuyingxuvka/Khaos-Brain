@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -13,6 +12,7 @@ def _bootstrap_repo_imports() -> None:
 
 _bootstrap_repo_imports()
 
+from local_kb.cli_output import print_json, print_text  # noqa: E402
 from local_kb.store import resolve_repo_root  # noqa: E402
 from local_kb.software_update import startup_block_message  # noqa: E402
 from local_kb.ui_data import build_overview_payload, build_route_view_payload  # noqa: E402
@@ -42,7 +42,7 @@ def _show_startup_error(message: str) -> None:
         messagebox.showerror("Khaos Brain", message)
         root.destroy()
     except Exception:
-        print(message, file=sys.stderr)
+        print_text(message, file=sys.stderr)
 
 
 def main() -> None:
@@ -63,21 +63,17 @@ def main() -> None:
         check_language = args.language or "en"
         route_payload = build_route_view_payload(repo_root, route=args.route, language=check_language)
         overview = build_overview_payload(repo_root)
-        print(
-            json.dumps(
-                {
-                    "ok": True,
-                    "entry_count": overview["entry_count"],
-                    "route": route_payload["route_label"],
-                    "deck_count": len(route_payload["deck"]),
-                    "primary_count": len(route_payload["cards"]["primary"]),
-                    "cross_count": len(route_payload["cards"]["cross"]),
-                    "language": check_language,
-                    "first_card_title": route_payload["deck"][0]["title"] if route_payload["deck"] else "",
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
+        print_json(
+            {
+                "ok": True,
+                "entry_count": overview["entry_count"],
+                "route": route_payload["route_label"],
+                "deck_count": len(route_payload["deck"]),
+                "primary_count": len(route_payload["cards"]["primary"]),
+                "cross_count": len(route_payload["cards"]["cross"]),
+                "language": check_language,
+                "first_card_title": route_payload["deck"][0]["title"] if route_payload["deck"] else "",
+            }
         )
         return
 

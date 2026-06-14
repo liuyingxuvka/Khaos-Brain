@@ -766,6 +766,29 @@ segments at runtime and should not rewrite canonical route fields.
 
 The code should not use an external translation service, embedding model, vector database, or hidden remote process. AI provides the translation judgment; the repository tooling only applies and logs the selected text.
 
+#### Canonical machine interfaces
+
+The canonical/display split also applies to command-line and automation
+interfaces. CLI tools, installed launchers, scheduled automation entry points,
+installer checks, and GitHub automation scripts are machine interfaces by
+default. They should emit canonical payload keys, canonical English route
+values, and encoding-stable JSON without requiring a Windows console code-page
+change.
+
+This is not a fallback path. The normal path is:
+
+- storage keeps UTF-8 files with readable human text
+- core card fields and routes remain canonical English source fields
+- UI view models render `i18n.zh-CN` and route display labels for human display
+- CLI and automation JSON use an ASCII-safe machine serialization so any
+  localized values still round-trip through JSON parsers without raw Unicode
+  being written to fragile consoles
+
+Scripts should use the shared CLI output helper for machine JSON rather than
+calling `print(json.dumps(... ensure_ascii=False))` at terminal boundaries.
+This rule does not apply to durable file writes under `kb/`, which should remain
+UTF-8 and human-auditable.
+
 ### 10.9 Observation-first card creation
 
 New cards should not be generated mechanically from every conversation or every project summary.

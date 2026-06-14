@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -13,6 +12,7 @@ SCRIPT_REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(SCRIPT_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPT_REPO_ROOT))
 
+from local_kb.cli_output import print_json, print_text
 from local_kb.maintenance import build_maintenance_decision, record_maintenance_decision
 from local_kb.store import history_events_path, resolve_repo_root
 
@@ -70,19 +70,15 @@ def main() -> None:
     record_maintenance_decision(repo_root, event)
 
     if args.json:
-        print(
-            json.dumps(
-                {
-                    "event": event,
-                    "history_path": str(history_events_path(repo_root)),
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
+        print_json(
+            {
+                "event": event,
+                "history_path": str(history_events_path(repo_root)),
+            }
         )
         return
 
-    print(f"Recorded maintenance decision {event['event_id']} in {history_events_path(repo_root)}")
+    print_text(f"Recorded maintenance decision {event['event_id']} in {history_events_path(repo_root)}")
 
 
 if __name__ == "__main__":

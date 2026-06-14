@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -15,6 +14,7 @@ SCRIPT_REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(SCRIPT_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPT_REPO_ROOT))
 
+from local_kb.cli_output import print_json, print_text  # noqa: E402
 from local_kb.config import resolve_repo_root  # noqa: E402
 from local_kb.software_update import startup_block_message  # noqa: E402
 
@@ -87,12 +87,12 @@ def main() -> int:
     repo_root = resolve_repo_root(args.repo_root, cwd=SCRIPT_REPO_ROOT)
     payload = open_ui(repo_root, prefer_python=args.prefer_python, language=args.language)
     if args.json:
-        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        print_json(payload)
     else:
         if payload.get("ok"):
-            print(f"Opened Khaos Brain desktop UI with {payload['mode']} launcher.")
+            print_text(f"Opened Khaos Brain desktop UI with {payload['mode']} launcher.")
         else:
-            print(payload.get("message") or "Khaos Brain cannot be opened right now.")
+            print_text(payload.get("message") or "Khaos Brain cannot be opened right now.")
     return 0 if payload.get("ok") else 3
 
 
