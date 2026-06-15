@@ -924,7 +924,7 @@
 ### Validation
 
 - OK: `python -c "import flowguard; print(flowguard.SCHEMA_VERSION)"` - flowguard schema version 1.0 is importable.
-- REPAIRED: the first predictive-KB preflight command using `$env:CODEX_HOME` failed because the variable was not set in PowerShell; rerunning with `C:\Users\liu_y\.codex\skills\predictive-kb-preflight\kb_launch.py` retrieved 5 maintenance entries.
+- REPAIRED: the first predictive-KB preflight command using `$env:CODEX_HOME` failed because the variable was not set in PowerShell; rerunning with `%USERPROFILE%\.codex\skills\predictive-kb-preflight\kb_launch.py` retrieved 5 maintenance entries.
 - OK: `python scripts\khaos_brain_update.py --architect-check --json` - update gate was healthy but not actionable.
 - OK: `python .agents\skills\local-kb-retrieve\scripts\kb_architect.py --run-id kb-architect-20260606-manual-20260606140721 --json` - Architect run completed queue hygiene, postflight, lock release, and rollup write.
 - OK: `python -m unittest tests.test_kb_architect tests.test_maintenance_lanes tests.test_codex_install` - 29 focused Architect, lane, and install tests passed.
@@ -944,7 +944,7 @@
 
 ### Friction Points
 
-- `CODEX_HOME` was not set in the PowerShell process, so automation memory and predictive-KB preflight paths needed the resolved `C:\Users\liu_y\.codex` fallback.
+- `CODEX_HOME` was not set in the PowerShell process, so automation memory and predictive-KB preflight paths needed the resolved `%USERPROFILE%\.codex` fallback.
 - The runner-generated rollup preceded the current post-validation FlowGuard adoption record, so the rollup should be refreshed or reported with an explicit freshness note after recording current evidence.
 
 ### Skipped Steps
@@ -959,7 +959,7 @@
 - Keep content-boundary review as the public-release blocker.
 - Keep the 20 medium-safety Architect items as ready-for-patch until dedicated patch packets are chosen.
 - Keep the 8 watching items under observation, especially the two blocked execution states and broader skill-maintenance signals.
-- Use the resolved `C:\Users\liu_y\.codex` path when `CODEX_HOME` is absent in automation shell commands.
+- Use the resolved `%USERPROFILE%\.codex` path when `CODEX_HOME` is absent in automation shell commands.
 
 ## kb-architect-20260607-lock-aware-maintenance-pass - Run KB Architect mechanism maintenance with queue hygiene advancement
 
@@ -970,7 +970,7 @@
 ### Validation
 
 - OK: `python -c "import flowguard; print(flowguard.SCHEMA_VERSION)"` - flowguard schema version 1.0 is importable.
-- OK: `python "C:\Users\liu_y\.codex\skills\predictive-kb-preflight\kb_launch.py" search --route-hint system/knowledge-library/maintenance --json` - self-preflight retrieved 5 maintenance/update mechanism entries.
+- OK: `python "%USERPROFILE%\.codex\skills\predictive-kb-preflight\kb_launch.py" search --route-hint system/knowledge-library/maintenance --json` - self-preflight retrieved 5 maintenance/update mechanism entries.
 - OK: `python scripts\khaos_brain_update.py --architect-check --json` - update gate was healthy but not actionable.
 - OK: `python .agents\skills\local-kb-retrieve\scripts\kb_architect.py --json` - Architect run `kb-architect-20260607T120611Z` completed queue hygiene, postflight, lock release, and rollup write.
 - OK: `python -m unittest tests.test_kb_architect tests.test_maintenance_lanes tests.test_codex_install` - 29 focused Architect, lane, and install tests passed.
@@ -1016,7 +1016,7 @@ un_khaos_brain_conformance.py` - conformance replay passed lane lock, organizati
 ### Validation
 
 - OK: `python -c "import flowguard; print(flowguard.SCHEMA_VERSION)"` - flowguard schema version 1.0 is importable.
-- WARN then OK: initial `$env:CODEX_HOME` preflight path failed because the env var was absent; the resolved `C:\Users\liu_y\.codex` launcher path retrieved 5 maintenance/update mechanism entries.
+- WARN then OK: initial `$env:CODEX_HOME` preflight path failed because the env var was absent; the resolved `%USERPROFILE%\.codex` launcher path retrieved 5 maintenance/update mechanism entries.
 - OK: `python scripts\khaos_brain_update.py --architect-check --json` - update gate was healthy but not actionable.
 - OK: `python .agents\skills\local-kb-retrieve\scripts\kb_architect.py --json` - Architect run `kb-architect-20260608T121342Z` completed queue hygiene, postflight, lock release, and rollup write.
 - OK: `python -m unittest tests.test_kb_architect tests.test_maintenance_lanes tests.test_codex_install` - 29 focused Architect, lane, and install tests passed.
@@ -1037,7 +1037,7 @@ un_khaos_brain_conformance.py` - conformance replay passed lane lock, organizati
 
 ### Friction Points
 
-- `CODEX_HOME` was not set in the PowerShell process, so automation memory and predictive-KB preflight paths needed the resolved `C:\Users\liu_y\.codex` fallback.
+- `CODEX_HOME` was not set in the PowerShell process, so automation memory and predictive-KB preflight paths needed the resolved `%USERPROFILE%\.codex` fallback.
 - The runner-generated rollup preceded the current post-validation FlowGuard adoption record, so the final report carries an explicit freshness note rather than rerunning a second Architect pass.
 
 ### Skipped Steps
@@ -1052,4 +1052,4 @@ un_khaos_brain_conformance.py` - conformance replay passed lane lock, organizati
 - Keep content-boundary review as the public-release blocker.
 - Keep the 21 medium-safety Architect items as ready-for-patch until dedicated patch packets are chosen.
 - Keep the 7 watching items under observation, especially the two blocked execution states and broader skill-maintenance signals.
-- Use the resolved `C:\Users\liu_y\.codex` path when `CODEX_HOME` is absent in automation shell commands.
+- Use the resolved `%USERPROFILE%\.codex` path when `CODEX_HOME` is absent in automation shell commands.

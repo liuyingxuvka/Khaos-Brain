@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.1 - 2026-06-15
+
+- Added a canonical machine/core interface boundary so CLI tools, installers, launchers, automations, and global templates emit encoding-stable machine JSON while Chinese remains in UI display projections and `i18n.zh-CN`.
+- Converted local KB scripts, top-level maintenance scripts, GitHub organization helpers, and installed launcher templates to the shared encoding-stable CLI output path.
+- Added installer health checks, OpenSpec artifacts, FlowGuard coverage, and regression tests for the canonical machine interface and localized display boundary.
+- Refreshed repository-managed skill prompts, automation checks, Windows desktop documentation, and zh-CN route display labels so another machine inherits the same interface split after install.
+- Preserved the latest README positioning update and recorded recent local FlowGuard maintenance evidence before publishing.
+
 ## v0.5.0 - 2026-05-15
 
 - Added explicit Sleep evidence-scope classification for `project-local`, `skill-specific`, `single-project-generalizable`, `cross-project-general`, and `insufficient-evidence` outcomes before candidate scaffolds or semantic card-surface changes.
