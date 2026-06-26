@@ -13,31 +13,31 @@ maintain `main` cards and imported card content when the evidence supports
 the decision. Local machines still decide what to adopt and how strongly to rely
 on organization cards after import.
 
-Use `kb/imports` as the incoming lane and `kb/main` as the organization exchange
-surface. Legacy `kb/trusted` and `kb/candidates` repositories remain readable
+Use kb/imports as the incoming lane and kb/main as the organization exchange
+surface. Legacy kb/trusted and kb/candidates repositories remain readable
 for compatibility, but reports must label that layout as compatibility-only,
 not the target structure. Local download/search reads organization cards from
-`kb/main` (or legacy fallback paths when no main exists), not from `kb/imports`.
+kb/main (or legacy fallback paths when no main exists), not from kb/imports.
 
 ## Authority
 
 Work from the repository root. Treat these files as authoritative before stateful organization maintenance:
 
-- `PROJECT_SPEC.md`
-- `docs/maintenance_agent_worldview.md`
-- `docs/organization_mode_plan.md`
-- `.agents/skills/local-kb-retrieve/SKILL.md`
+- PROJECT_SPEC.md
+- docs/maintenance_agent_worldview.md
+- docs/organization_mode_plan.md
+- .agents/skills/local-kb-retrieve/SKILL.md
 - `organization-review` guidance, when available. This is a judgment aid, not an apply gate.
 
 Current user instructions still override repository files.
 
 ## Execution Contract
 
-1. Use `scripts/kb_org_maintainer.py --automation` as the entry point.
-2. The entry point must first read `.local/khaos_brain_desktop_settings.json`.
+1. Use scripts/kb_org_maintainer.py --automation as the entry point.
+2. The entry point must first read .local/khaos_brain_desktop_settings.json.
 3. If organization mode is not validated or this machine has not opted into organization maintenance, exit successfully with a no-op result.
-4. Run KB preflight against `system/knowledge-library/organization` before inspecting organization candidates.
-5. Validate the organization manifest, expected paths, `kb/imports` incoming lane, `kb/main` exchange surface, legacy compatibility paths when present, Skill registry, and current Git state before proposing changes.
+4. Run KB preflight against system/knowledge-library/organization before inspecting organization candidates.
+5. Validate the organization manifest, expected paths, kb/imports incoming lane, kb/main exchange surface, legacy compatibility paths when present, Skill registry, and current Git state before proposing changes.
 6. Read the shared maintenance-agent worldview and apply the exchange-layer Sleep model: organization `main` cards are maintainable content, not untouchable central truth.
 7. Run the organization card-surface map checkpoint. Summarize `main` trusted/candidate/rejected/deprecated counts plus import counts; low-confidence main trusted cards; duplicate/similar cards; stale rejected/deprecated cards; Skill-linked cards; legacy compatibility counts when applicable; and privacy/Skill risks before applying anything.
 8. Run the organization candidate intake checkpoint. Review new imports for reusable scenario, action, prediction, confidence, route, provenance, and public sharing value; reviewed imports can move into `main` as `candidate` or `trusted`.
@@ -52,7 +52,7 @@ Current user instructions still override repository files.
 17. Build an organization Sleep decision set over the cleanup proposal. Record every action as selected-for-apply or watch with a reason.
 18. Apply only exact action ids that the organization Sleep decision set selected. Do not run broad cleanup just because tooling can apply it; `main` card changes are allowed when they pass the same Sleep-style evidence, usefulness, and rollback review. Missing `organization-review` guidance is not a blocker.
 19. Run the post-apply organization check after selected actions are applied, and keep the audit path for rollback.
-20. Commit and push applied maintenance changes to a maintenance branch, open the PR when the repository is on GitHub, apply `org-kb:auto-merge` only for reviewed `main/imports` changes with audit evidence, then restore the local mirror to the organization base branch so later sync or contribution work does not continue on an old maintenance branch.
+20. Commit and push applied maintenance changes to a maintenance branch, open the PR when the repository is on GitHub, apply `org-kb:auto-merge` only for reviewed main/imports changes with audit evidence, then restore the local mirror to the organization base branch so later sync or contribution work does not continue on an old maintenance branch.
 21. Run the GitHub merge-readiness checkpoint. Confirm changed paths, low-risk import eligibility or reviewed-maintenance eligibility, required checks, rollback story, and whether the PR should be auto-merge eligible or remain review-only.
 22. Do not skip the merge, split, card-decision, Skill-safety, Skill-bundle-version, decision-apply, post-apply, maintenance-branch, or GitHub-readiness checkpoints. It is acceptable to skip applying a change when evidence, safety, tooling, permissions, or scope is insufficient, but the inspection and recorded decision must still happen.
 23. Run KB postflight after a non-skipped maintenance pass and record the result as structured history.
@@ -60,3 +60,47 @@ Current user instructions still override repository files.
 ## Report
 
 Report the settings gate result, participation status, preflight entry ids, organization manifest status, layout policy, legacy compatibility notice when applicable, card-surface map, `main` status counts and import counts, main-card maintenance decisions, content-hash duplicate decisions, organization merge checkpoint decisions, organization split checkpoint decisions, card approval/rejection/rewrite/deprecation decisions, Sleep decision counts, selected action ids, apply result, post-apply check result, maintenance branch, PR, push, and auto-merge-label result, Skill dependency decisions, Skill bundle version decisions, GitHub merge-readiness result, organization-review guidance availability, recommendations, postflight record path, and any errors.
+
+
+<!-- BEGIN SKILLGUARD CONTRACT LAYER -->
+## Purpose
+
+Use this skill for its declared kb workflow while binding each run to a route, evidence, checks, and a bounded completion claim.
+
+## Entrypoint Scope
+
+The entrypoint covers the installed kb-organization-maintenance skill and the local materials explicitly routed by its instructions. It does not expand to unrelated repositories, private files, external services, publication, or release claims unless the user request and skill workflow explicitly include them.
+
+## Local Material Routing
+
+Resolve local materials from the active workspace, this skill directory, user-provided files, or explicitly configured project paths. Treat private machine paths as local-only inputs and keep public-facing instructions portable.
+
+## Entrypoint Acceptance Map
+
+A valid run selects one declared route, follows the phase order, records direct evidence, runs required checks, reports blockers and failures, and closes only inside the claim boundary. Available routes: recall or maintenance, evidence update, validation, closure.
+
+## Use When
+
+Use when the user request matches the kb-organization-maintenance activation boundary and needs this skill's governed workflow, source material, checks, or handoff behavior.
+
+## Do Not Use When
+
+Do not use when the task is outside this skill's domain, when required local materials are unavailable, when another more specific skill owns the request, or when the user asks only for a tiny direct answer.
+
+## Required Workflow
+
+Select the route, inspect local materials, perform the work in phase order, collect direct evidence, run the required checks, fix failures, and only then report progress or completion.
+
+## Hard Gates
+
+Do not skip phases, do not replace required evidence with prose, do not treat stale reports as current, do not weaken validation to pass, and do not claim completion when blockers remain.
+
+## Output Requirements
+
+When reporting, include evidence, failures, blockers, skipped_checks with reasons, residual_risk, and claim_boundary. State clearly what was checked, what was not checked, and what remains blocked or uncertain.
+
+## SkillGuard Maintenance
+
+Keep the `.skillguard` control root, work contract, check manifest, check scripts, evidence records, and progress ledger current. Re-run SkillGuard checks after changing this entrypoint, route behavior, evidence rules, or closure wording.
+
+<!-- END SKILLGUARD CONTRACT LAYER -->

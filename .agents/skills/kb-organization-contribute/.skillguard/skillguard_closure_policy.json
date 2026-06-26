@@ -1,0 +1,44 @@
+{
+  "schema_version": "skillguard.installed_closure_policy.v1",
+  "target_path": "..",
+  "target_type": "closure_policy",
+  "status": "checked",
+  "checks": [],
+  "evidence": [
+    {
+      "evidence_id": "current-closure",
+      "path": ".skillguard/reports/current_closure.json",
+      "summary": "Bounded closure record."
+    }
+  ],
+  "failures": [],
+  "blockers": [],
+  "skipped_checks": [],
+  "residual_risk": [
+    "This static record must be refreshed when the skill entrypoint, route contract, or validation rules change."
+  ],
+  "claim_boundary": "This record covers only the installed skill entrypoint, local SkillGuard records, and current files inspected for this target. It does not prove runtime checker execution, fixture coverage, CLI checks, tests, suite automation, package publication, code-contract validation, release readiness, or future AI behavior without separate current evidence.",
+  "closure_states": [
+    "open",
+    "blocked",
+    "closed_with_evidence",
+    "not_run"
+  ],
+  "hard_gates": [
+    {
+      "gate_id": "route-selected",
+      "condition": "No route was selected.",
+      "required_disposition": "open or blocked"
+    },
+    {
+      "gate_id": "direct-evidence",
+      "condition": "Required evidence is absent or stale.",
+      "required_disposition": "open or blocked"
+    },
+    {
+      "gate_id": "checks-current",
+      "condition": "Required checks were skipped, failed, or not run.",
+      "required_disposition": "open or blocked"
+    }
+  ]
+}

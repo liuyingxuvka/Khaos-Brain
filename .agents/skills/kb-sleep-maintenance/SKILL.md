@@ -13,19 +13,19 @@ Sleep is the experience-library editor, not a candidate factory. Optimize for ac
 
 Work from the repository root. Treat these files as authoritative and read them before stateful maintenance:
 
-- `PROJECT_SPEC.md`
-- `docs/maintenance_agent_worldview.md`
-- `docs/maintenance_runbook.md`
-- `.agents/skills/local-kb-retrieve/MAINTENANCE_PROMPT.md`
+- PROJECT_SPEC.md
+- docs/maintenance_agent_worldview.md
+- docs/maintenance_runbook.md
+- .agents/skills/local-kb-retrieve/MAINTENANCE_PROMPT.md
 
 Current user instructions still override repository files.
 
 ## Execution Contract
 
-1. Before the first stateful command, run `python .agents/skills/local-kb-retrieve/scripts/kb_lane_status.py --lane kb-sleep --status running --wait-clear --poll-seconds 300 --json`. If another core maintenance lane is running, wait and recheck every 5 minutes until the lane is free; do not skip merely because another lane is active.
+1. Before the first stateful command, run python .agents/skills/local-kb-retrieve/scripts/kb_lane_status.py --lane kb-sleep --status running --wait-clear --poll-seconds 300 --json. If another core maintenance lane is running, wait and recheck every 5 minutes until the lane is free; do not skip merely because another lane is active.
 2. Write a visible execution plan before the first stateful command after the lane guard, with checkpoint statuses.
 3. Read the shared maintenance-agent worldview and use it as the judgment model for accuracy, clarity, usefulness, evidence strength, and human-reviewable output quality.
-4. Run the sleep self-preflight search against `system/knowledge-library/maintenance`.
+4. Run the sleep self-preflight search against system/knowledge-library/maintenance.
 5. Inspect taxonomy, route gaps, route navigation when needed, and proposal-mode consolidation output.
 6. Track the current maintenance run id from the consolidation output or chosen `--run-id`; reuse that same run id in the final lane status completion command.
 7. Before choosing any apply lane, summarize high-volume proposal output as a compact editorial sample pack: action counts, apply eligibility, top route clusters, duplicate candidate clusters, strong examples, weak/noisy examples, Architect-only items, Dream-only items, low-risk navigation examples, and hub-card review examples. Use that map before deep-reading large raw JSON.
@@ -48,9 +48,53 @@ Current user instructions still override repository files.
 24. Attempt supported low-risk repairs and rerun the relevant validation when a command exposes a fixable issue.
 25. Run a final sleep postflight check.
 26. Append one structured maintenance observation when the pass exposed a reusable lesson, route gap, card weakness, merge signal, split signal, Skill bundle update, interface-boundary gap, or process hazard.
-27. Run `python .agents/skills/local-kb-retrieve/scripts/kb_lane_status.py --lane kb-sleep --status completed --run-id <run_id> --json`.
+27. Run python .agents/skills/local-kb-retrieve/scripts/kb_lane_status.py --lane kb-sleep --status completed --run-id <run_id> --json.
 28. Stop after that final observation. Do not immediately consolidate the observation just written.
 
 ## Report
 
 Report the run id, checkpoint status, self-preflight entries, what became more accurate, clearer, or easier to retrieve, observation counts reviewed, candidates created or deliberately not created, weak/noisy material rejected or kept history-only, route adjustments or concerns, similar-card merge checkpoint decisions, overloaded-card split checkpoint decisions, organization Skill bundle consolidation decisions, semantic-review decisions applied or skipped, canonical-interface checkpoint status, final zh-CN display completion status for cards and routes, translations updated or still missing, validations run, repaired or proposal-only issues, maintenance decisions, postflight observation status, undeclared taxonomy gaps, hub-vs-overloaded card reviews, and next proposal-only targets.
+
+
+<!-- BEGIN SKILLGUARD CONTRACT LAYER -->
+## Purpose
+
+Use this skill for its declared kb workflow while binding each run to a route, evidence, checks, and a bounded completion claim.
+
+## Entrypoint Scope
+
+The entrypoint covers the installed kb-sleep-maintenance skill and the local materials explicitly routed by its instructions. It does not expand to unrelated repositories, private files, external services, publication, or release claims unless the user request and skill workflow explicitly include them.
+
+## Local Material Routing
+
+Resolve local materials from the active workspace, this skill directory, user-provided files, or explicitly configured project paths. Treat private machine paths as local-only inputs and keep public-facing instructions portable.
+
+## Entrypoint Acceptance Map
+
+A valid run selects one declared route, follows the phase order, records direct evidence, runs required checks, reports blockers and failures, and closes only inside the claim boundary. Available routes: recall or maintenance, evidence update, validation, closure.
+
+## Use When
+
+Use when the user request matches the kb-sleep-maintenance activation boundary and needs this skill's governed workflow, source material, checks, or handoff behavior.
+
+## Do Not Use When
+
+Do not use when the task is outside this skill's domain, when required local materials are unavailable, when another more specific skill owns the request, or when the user asks only for a tiny direct answer.
+
+## Required Workflow
+
+Select the route, inspect local materials, perform the work in phase order, collect direct evidence, run the required checks, fix failures, and only then report progress or completion.
+
+## Hard Gates
+
+Do not skip phases, do not replace required evidence with prose, do not treat stale reports as current, do not weaken validation to pass, and do not claim completion when blockers remain.
+
+## Output Requirements
+
+When reporting, include evidence, failures, blockers, skipped_checks with reasons, residual_risk, and claim_boundary. State clearly what was checked, what was not checked, and what remains blocked or uncertain.
+
+## SkillGuard Maintenance
+
+Keep the `.skillguard` control root, work contract, check manifest, check scripts, evidence records, and progress ledger current. Re-run SkillGuard checks after changing this entrypoint, route behavior, evidence rules, or closure wording.
+
+<!-- END SKILLGUARD CONTRACT LAYER -->

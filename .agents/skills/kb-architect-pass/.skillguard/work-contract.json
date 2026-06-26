@@ -1,0 +1,305 @@
+{
+  "schema_version": "skillguard.work_contract.v1",
+  "skill_id": "kb-architect-pass",
+  "target_path": ".codex/skills/kb-architect-pass",
+  "contract_version": "2",
+  "routes": [
+    {
+      "route_id": "recall_or_maintenance",
+      "summary": "Use the recall or maintenance route for kb work when the task wording and local evidence match this path.",
+      "activation_keywords": [
+        "kb-architect-pass",
+        "recall or maintenance",
+        "kb"
+      ],
+      "do_not_use_when": [
+        "The task is outside this skill's activation boundary."
+      ],
+      "phase_order": [
+        "intake",
+        "inventory",
+        "execution",
+        "checks",
+        "closure"
+      ]
+    },
+    {
+      "route_id": "evidence_update",
+      "summary": "Use the evidence update route for kb work when the task wording and local evidence match this path.",
+      "activation_keywords": [
+        "kb-architect-pass",
+        "evidence update",
+        "kb"
+      ],
+      "do_not_use_when": [
+        "The task is outside this skill's activation boundary."
+      ],
+      "phase_order": [
+        "intake",
+        "inventory",
+        "execution",
+        "checks",
+        "closure"
+      ]
+    },
+    {
+      "route_id": "validation",
+      "summary": "Use the validation route for kb work when the task wording and local evidence match this path.",
+      "activation_keywords": [
+        "kb-architect-pass",
+        "validation",
+        "kb"
+      ],
+      "do_not_use_when": [
+        "The task is outside this skill's activation boundary."
+      ],
+      "phase_order": [
+        "intake",
+        "inventory",
+        "execution",
+        "checks",
+        "closure"
+      ]
+    },
+    {
+      "route_id": "closure",
+      "summary": "Use the closure route for kb work when the task wording and local evidence match this path.",
+      "activation_keywords": [
+        "kb-architect-pass",
+        "closure",
+        "kb"
+      ],
+      "do_not_use_when": [
+        "The task is outside this skill's activation boundary."
+      ],
+      "phase_order": [
+        "intake",
+        "inventory",
+        "execution",
+        "checks",
+        "closure"
+      ]
+    }
+  ],
+  "phases": [
+    {
+      "phase_id": "intake",
+      "summary": "Confirm target, requested outcome, route, scope, and claim boundary.",
+      "required_evidence": [
+        "task_summary"
+      ],
+      "required_checks": [
+        "check_route"
+      ],
+      "allowed_next": [
+        "inventory"
+      ]
+    },
+    {
+      "phase_id": "inventory",
+      "summary": "Inspect current target files, local materials, source ownership, and activation boundary.",
+      "required_evidence": [
+        "target_inventory"
+      ],
+      "required_checks": [
+        "check_phase_order"
+      ],
+      "allowed_next": [
+        "execution"
+      ]
+    },
+    {
+      "phase_id": "execution",
+      "summary": "Perform the skill work inside the selected route without skipping declared gates.",
+      "required_evidence": [
+        "direct_evidence"
+      ],
+      "required_checks": [
+        "check_evidence"
+      ],
+      "allowed_next": [
+        "checks"
+      ]
+    },
+    {
+      "phase_id": "checks",
+      "summary": "Run required checks, quality floors, freshness checks, and negative-case gates when applicable.",
+      "required_evidence": [
+        "check_output"
+      ],
+      "required_checks": [
+        "check_quality_floor"
+      ],
+      "allowed_next": [
+        "closure"
+      ]
+    },
+    {
+      "phase_id": "closure",
+      "summary": "Close only inside the evidence-backed claim boundary.",
+      "required_evidence": [
+        "closure_report"
+      ],
+      "required_checks": [
+        "check_closure"
+      ],
+      "allowed_next": []
+    }
+  ],
+  "required_evidence": [
+    {
+      "evidence_id": "task_summary",
+      "kind": "task_record",
+      "phase_id": "intake",
+      "required": true,
+      "source": ".skillguard/runs/"
+    },
+    {
+      "evidence_id": "target_inventory",
+      "kind": "file_inventory",
+      "phase_id": "inventory",
+      "required": true,
+      "source": ".skillguard/runs/"
+    },
+    {
+      "evidence_id": "direct_evidence",
+      "kind": "direct_evidence",
+      "phase_id": "execution",
+      "required": true,
+      "source": ".skillguard/runs/"
+    },
+    {
+      "evidence_id": "check_output",
+      "kind": "command_output",
+      "phase_id": "checks",
+      "required": true,
+      "source": ".skillguard/runs/"
+    },
+    {
+      "evidence_id": "closure_report",
+      "kind": "closure_record",
+      "phase_id": "closure",
+      "required": true,
+      "source": ".skillguard/runs/"
+    }
+  ],
+  "check_scripts": [
+    {
+      "check_id": "check_route",
+      "phase_id": "intake",
+      "required": true,
+      "script_path": ".skillguard/checks/check_route.py",
+      "command": "python .skillguard/checks/check_route.py",
+      "failure_class": "route"
+    },
+    {
+      "check_id": "check_phase_order",
+      "phase_id": "inventory",
+      "required": true,
+      "script_path": ".skillguard/checks/check_phase_order.py",
+      "command": "python .skillguard/checks/check_phase_order.py",
+      "failure_class": "phase_order"
+    },
+    {
+      "check_id": "check_evidence",
+      "phase_id": "execution",
+      "required": true,
+      "script_path": ".skillguard/checks/check_evidence.py",
+      "command": "python .skillguard/checks/check_evidence.py",
+      "failure_class": "evidence"
+    },
+    {
+      "check_id": "check_quality_floor",
+      "phase_id": "checks",
+      "required": true,
+      "script_path": ".skillguard/checks/check_quality_floor.py",
+      "command": "python .skillguard/checks/check_quality_floor.py",
+      "failure_class": "quality_floor"
+    },
+    {
+      "check_id": "check_closure",
+      "phase_id": "closure",
+      "required": true,
+      "script_path": ".skillguard/checks/check_closure.py",
+      "command": "python .skillguard/checks/check_closure.py",
+      "failure_class": "closure"
+    }
+  ],
+  "quality_floors": [
+    {
+      "floor_id": "no_prose_only_completion",
+      "summary": "Required checks and file evidence cannot be replaced by prose-only claims.",
+      "required_checks": [
+        "check_evidence",
+        "check_quality_floor"
+      ],
+      "failure_effect": "block checked or accepted closure"
+    },
+    {
+      "floor_id": "no_quality_downgrade",
+      "summary": "Do not weaken required workflow, evidence, freshness, or validation expectations to make a run pass.",
+      "required_checks": [
+        "check_quality_floor",
+        "check_closure"
+      ],
+      "failure_effect": "block accepted closure"
+    }
+  ],
+  "forbidden_shortcuts": [
+    {
+      "shortcut_id": "skip_to_closure",
+      "summary": "Do not move directly from intake or planning to closure without current phase evidence and required checks."
+    },
+    {
+      "shortcut_id": "reuse_stale_evidence",
+      "summary": "Do not treat old reports, prior chat summaries, or progress ledger entries as current closure evidence."
+    },
+    {
+      "shortcut_id": "downgrade_quality_floor",
+      "summary": "Do not weaken required checks, evidence, or quality floors to make a run pass."
+    }
+  ],
+  "closure_rules": [
+    {
+      "rule_id": "accepted_requires_all_required_checks",
+      "allowed_decision": "accepted",
+      "required_checks": [
+        "check_route",
+        "check_phase_order",
+        "check_evidence",
+        "check_quality_floor",
+        "check_closure"
+      ],
+      "required_evidence": [
+        "task_summary",
+        "target_inventory",
+        "direct_evidence",
+        "check_output",
+        "closure_report"
+      ],
+      "scope": "declared run scope only"
+    }
+  ],
+  "stale_bindings": [
+    {
+      "binding_id": "target_skill_prompt",
+      "path": "SKILL.md",
+      "stales": [
+        "route_selection",
+        "run_record",
+        "closure_report"
+      ]
+    },
+    {
+      "binding_id": "work_contract",
+      "path": ".skillguard/work-contract.json",
+      "stales": [
+        "route_selection",
+        "run_record",
+        "closure_report"
+      ]
+    }
+  ],
+  "claim_boundary": "This work contract governs only the declared target skill and local run evidence. It does not prove external services, package publication, GitHub release readiness, or future AI correctness.",
+  "contract_hash": "1DD37BAD0CBF688DC0CAD68B0D9495E9C4CC9E0AE465CCA95431A539A5DBC419"
+}
