@@ -1,0 +1,73 @@
+{
+  "schema_version": "skillguard.check_manifest.v1",
+  "target_skill": ".codex/skills/kb-dream-pass",
+  "contract_ref": ".codex/skills/kb-dream-pass/.skillguard/work-contract.json",
+  "output_schema": "skillguard.cli_result.v1",
+  "checks": [
+    {
+      "check_id": "check_route",
+      "command": "python .skillguard/checks/check_route.py",
+      "failure_class": "route",
+      "inputs": [
+        ".skillguard/work-contract.json",
+        ".skillguard/runs/"
+      ],
+      "phase_id": "intake",
+      "required": true
+    },
+    {
+      "check_id": "check_phase_order",
+      "command": "python .skillguard/checks/check_phase_order.py",
+      "failure_class": "phase_order",
+      "inputs": [
+        ".skillguard/work-contract.json",
+        ".skillguard/runs/"
+      ],
+      "phase_id": "inventory",
+      "required": true
+    },
+    {
+      "check_id": "check_evidence",
+      "command": "python .skillguard/checks/check_evidence.py",
+      "failure_class": "evidence",
+      "inputs": [
+        ".skillguard/work-contract.json",
+        ".skillguard/runs/"
+      ],
+      "phase_id": "execution",
+      "required": true
+    },
+    {
+      "check_id": "check_quality_floor",
+      "command": "python .skillguard/checks/check_quality_floor.py",
+      "failure_class": "quality_floor",
+      "inputs": [
+        ".skillguard/work-contract.json",
+        ".skillguard/runs/"
+      ],
+      "phase_id": "checks",
+      "required": true
+    },
+    {
+      "check_id": "check_closure",
+      "command": "python .skillguard/checks/check_closure.py",
+      "failure_class": "closure",
+      "inputs": [
+        ".skillguard/work-contract.json",
+        ".skillguard/runs/"
+      ],
+      "phase_id": "closure",
+      "required": true
+    }
+  ],
+  "freshness": {
+    "watch": [
+      "SKILL.md",
+      ".skillguard/work-contract.json",
+      ".skillguard/check_manifest.json",
+      ".skillguard/checks/",
+      ".skillguard/runs/"
+    ]
+  },
+  "claim_boundary": "This check manifest lists local SkillGuard runtime checks for the declared target only. It does not prove future executions or external service behavior."
+}
