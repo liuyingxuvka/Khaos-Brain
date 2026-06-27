@@ -69,5 +69,5 @@
       ".skillguard/runs/"
     ]
   },
-  "claim_boundary": "This check manifest lists local SkillGuard runtime checks for the declared target only. It does not prove future executions or external service behavior."
+  "claim_boundary": "This check manifest lists local SkillGuard contract-executor checks for the declared target only. It does not replace the target skill's native router/check system or prove future executions or external service behavior."
 }
