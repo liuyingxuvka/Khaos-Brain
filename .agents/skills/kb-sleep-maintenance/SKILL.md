@@ -55,46 +55,25 @@ Current user instructions still override repository files.
 
 Report the run id, checkpoint status, self-preflight entries, what became more accurate, clearer, or easier to retrieve, observation counts reviewed, candidates created or deliberately not created, weak/noisy material rejected or kept history-only, route adjustments or concerns, similar-card merge checkpoint decisions, overloaded-card split checkpoint decisions, organization Skill bundle consolidation decisions, semantic-review decisions applied or skipped, canonical-interface checkpoint status, final zh-CN display completion status for cards and routes, translations updated or still missing, validations run, repaired or proposal-only issues, maintenance decisions, postflight observation status, undeclared taxonomy gaps, hub-vs-overloaded card reviews, and next proposal-only targets.
 
-
 <!-- BEGIN SKILLGUARD CONTRACT LAYER -->
 ## Purpose
-
-Use this skill for its declared kb workflow while binding each run to a route, evidence, checks, and a bounded completion claim.
-
+Bind each kb run to the declared integration mode, evidence, blockers, residual_risk, and claim_boundary.
 ## Entrypoint Scope
-
-The entrypoint covers the installed kb-sleep-maintenance skill and the local materials explicitly routed by its instructions. It does not expand to unrelated repositories, private files, external services, publication, or release claims unless the user request and skill workflow explicitly include them.
-
+Covers kb-sleep-maintenance plus explicitly routed local materials; no unrelated repos, private files, external services, publication, or release claims unless requested and routed.
 ## Local Material Routing
-
-Resolve local materials from the active workspace, this skill directory, user-provided files, or explicitly configured project paths. Treat private machine paths as local-only inputs and keep public-facing instructions portable.
-
+Use workspace, skill directory, user files, or configured project paths; keep private machine paths local and public instructions portable.
 ## Entrypoint Acceptance Map
-
-A valid run selects one declared route, follows the phase order, records direct evidence, runs required checks, reports blockers and failures, and closes only inside the claim boundary. Available routes: recall or maintenance, evidence update, validation, closure.
-
+Use SkillGuard as the runtime contract executor attached to the native route/check owner: Predictive KB launcher, local KB records, and KB maintenance workflow. It enforces contract gates through that native owner before progress or closure; duplicate SkillGuard-owned execution paths are invalid. Declared gates/routes: recall or maintenance, evidence update, validation, closure.
 ## Use When
-
-Use when the user request matches the kb-sleep-maintenance activation boundary and needs this skill's governed workflow, source material, checks, or handoff behavior.
-
+Use when the request matches kb-sleep-maintenance and needs this governed workflow, materials, checks, or handoff behavior.
 ## Do Not Use When
-
-Do not use when the task is outside this skill's domain, when required local materials are unavailable, when another more specific skill owns the request, or when the user asks only for a tiny direct answer.
-
+Do not use outside the domain, without required materials, when a more specific skill owns the work, or for tiny direct answers.
 ## Required Workflow
-
-Select the route, inspect local materials, perform the work in phase order, collect direct evidence, run the required checks, fix failures, and only then report progress or completion.
-
+Select the target-owned native route/check surface, run the SkillGuard contract gates around the native workflow, collect evidence, run checks, fix failures, then report.
 ## Hard Gates
-
 Do not skip phases, do not replace required evidence with prose, do not treat stale reports as current, do not weaken validation to pass, and do not claim completion when blockers remain.
-
 ## Output Requirements
-
-When reporting, include evidence, failures, blockers, skipped_checks with reasons, residual_risk, and claim_boundary. State clearly what was checked, what was not checked, and what remains blocked or uncertain.
-
+Report evidence, failures, blockers, skipped_checks with reasons, residual_risk, and claim_boundary; distinguish checked, unchecked, blocked, and uncertain.
 ## SkillGuard Maintenance
-
-Keep the `.skillguard` control root, work contract, check manifest, check scripts, evidence records, and progress ledger current. Re-run SkillGuard checks after changing this entrypoint, route behavior, evidence rules, or closure wording.
-
+Keep `.skillguard` contracts, checks, evidence, and ledger current; rerun SkillGuard after entrypoint, route, evidence, or closure changes.
 <!-- END SKILLGUARD CONTRACT LAYER -->

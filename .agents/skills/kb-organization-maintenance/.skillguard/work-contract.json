@@ -2,16 +2,68 @@
   "schema_version": "skillguard.work_contract.v1",
   "skill_id": "kb-organization-maintenance",
   "target_path": ".codex/skills/kb-organization-maintenance",
-  "contract_version": "2",
+  "contract_version": "3",
+  "integration_mode": "native-integrated",
+  "native_route_owner": "Predictive KB launcher, local KB records, and KB maintenance workflow",
+  "native_route_bindings": [
+    {
+      "binding_id": "recall_or_maintenance_native_route",
+      "native_route_id": "kb.recall_or_maintenance",
+      "source": "Predictive KB launcher, local KB records, and KB maintenance workflow",
+      "required_before_closure": true
+    },
+    {
+      "binding_id": "evidence_update_native_route",
+      "native_route_id": "kb.evidence_update",
+      "source": "Predictive KB launcher, local KB records, and KB maintenance workflow",
+      "required_before_closure": true
+    },
+    {
+      "binding_id": "validation_native_route",
+      "native_route_id": "kb.validation",
+      "source": "Predictive KB launcher, local KB records, and KB maintenance workflow",
+      "required_before_closure": true
+    },
+    {
+      "binding_id": "closure_native_route",
+      "native_route_id": "kb.closure",
+      "source": "Predictive KB launcher, local KB records, and KB maintenance workflow",
+      "required_before_closure": true
+    }
+  ],
+  "native_check_bindings": [
+    {
+      "binding_id": "kb_preflight_search_native_check",
+      "native_check_id": "kb_preflight_search",
+      "evidence_source": "Predictive KB launcher, local KB records, and KB maintenance workflow",
+      "required": true
+    },
+    {
+      "binding_id": "kb_postflight_observation_review_native_check",
+      "native_check_id": "kb_postflight_observation_review",
+      "evidence_source": "Predictive KB launcher, local KB records, and KB maintenance workflow",
+      "required": true
+    }
+  ],
+  "skillguard_role": "native_contract_executor",
+  "may_define_parallel_execution_route": false,
+  "may_define_skillguard_runtime_route": false,
+  "integration_claim_boundary": "SkillGuard executes the runtime contract against the native route/check system owned by Predictive KB launcher, local KB records, and KB maintenance workflow. It may enforce contract gates before progress or closure, but must not create a competing execution router or bypass the native controller/checker.",
   "routes": [
     {
       "route_id": "recall_or_maintenance",
-      "summary": "Use the recall or maintenance route for kb work when the task wording and local evidence match this path.",
+      "summary": "SkillGuard runtime contract executor for the target skill's native recall or maintenance route/check surface. Duplicate SkillGuard-owned execution paths are invalid; evidence, required checks, blockers, and closure run through the target skill's own workflow.",
+      "route_source": "native_binding",
       "activation_keywords": [
-        "kb-organization-maintenance",
+        "recall_or_maintenance",
         "recall or maintenance",
-        "kb"
+        "recall-or-maintenance",
+        "recall",
+        "or",
+        "maintenance"
       ],
+      "default_route": true,
+      "route_priority": 0,
       "do_not_use_when": [
         "The task is outside this skill's activation boundary."
       ],
@@ -25,12 +77,19 @@
     },
     {
       "route_id": "evidence_update",
-      "summary": "Use the evidence update route for kb work when the task wording and local evidence match this path.",
+      "summary": "SkillGuard runtime contract executor for the target skill's native evidence update route/check surface. Duplicate SkillGuard-owned execution paths are invalid; evidence, required checks, blockers, and closure run through the target skill's own workflow.",
+      "route_source": "native_binding",
       "activation_keywords": [
-        "kb-organization-maintenance",
+        "evidence_update",
         "evidence update",
-        "kb"
+        "evidence-update",
+        "evidence",
+        "证据",
+        "材料",
+        "update"
       ],
+      "default_route": false,
+      "route_priority": 1,
       "do_not_use_when": [
         "The task is outside this skill's activation boundary."
       ],
@@ -44,12 +103,17 @@
     },
     {
       "route_id": "validation",
-      "summary": "Use the validation route for kb work when the task wording and local evidence match this path.",
+      "summary": "SkillGuard runtime contract executor for the target skill's native validation route/check surface. Duplicate SkillGuard-owned execution paths are invalid; evidence, required checks, blockers, and closure run through the target skill's own workflow.",
+      "route_source": "native_binding",
       "activation_keywords": [
-        "kb-organization-maintenance",
         "validation",
-        "kb"
+        "validate",
+        "验证",
+        "测试",
+        "校验"
       ],
+      "default_route": false,
+      "route_priority": 2,
       "do_not_use_when": [
         "The task is outside this skill's activation boundary."
       ],
@@ -63,12 +127,19 @@
     },
     {
       "route_id": "closure",
-      "summary": "Use the closure route for kb work when the task wording and local evidence match this path.",
+      "summary": "SkillGuard runtime contract executor for the target skill's native closure route/check surface. Duplicate SkillGuard-owned execution paths are invalid; evidence, required checks, blockers, and closure run through the target skill's own workflow.",
+      "route_source": "native_binding",
       "activation_keywords": [
-        "kb-organization-maintenance",
         "closure",
-        "kb"
+        "close",
+        "收尾",
+        "闭环",
+        "完成",
+        "归档",
+        "发布"
       ],
+      "default_route": false,
+      "route_priority": 3,
       "do_not_use_when": [
         "The task is outside this skill's activation boundary."
       ],
@@ -285,7 +356,7 @@
       "binding_id": "target_skill_prompt",
       "path": "SKILL.md",
       "stales": [
-        "route_selection",
+        "overlay_selection",
         "run_record",
         "closure_report"
       ]
@@ -294,12 +365,12 @@
       "binding_id": "work_contract",
       "path": ".skillguard/work-contract.json",
       "stales": [
-        "route_selection",
+        "overlay_selection",
         "run_record",
         "closure_report"
       ]
     }
   ],
-  "claim_boundary": "This work contract governs only the declared target skill and local run evidence. It does not prove external services, package publication, GitHub release readiness, or future AI correctness.",
-  "contract_hash": "4F607AF497CA56E3C81DDA119AD37CF279383988F117BA0B52CD51960E43A3CB"
+  "claim_boundary": "This work contract governs only SkillGuard overlay evidence for the declared target skill. It does not replace the target skill's native router/check system and does not prove external services, package publication, GitHub release readiness, or future AI correctness.",
+  "contract_hash": "9EA575160458D6DD20BB3C2F3F44B05F2E4BE43EC2D4F8B7CB8F61C2BE2C517E"
 }
