@@ -12,7 +12,7 @@
 
 | Repository Head | Latest Release | Project | License |
 | --- | --- | --- | --- |
-| `v0.5.1` | `v0.5.1` | `Khaos Brain` | MIT |
+| `v0.5.2` | `v0.5.2` | `Khaos Brain` | MIT |
 
 English comes first. A Chinese mirror follows below.
 

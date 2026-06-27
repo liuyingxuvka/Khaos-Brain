@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.5.2 - 2026-06-27
+
+- Added SkillGuard runtime-contract governance for the installed Khaos-Brain Codex skill materials.
+- Synchronized installed skill copies with accepted source material and local git evidence.
+- Recorded release-scope validation so route selection, evidence gates, quality floors, and closure boundaries remain visible before completion claims.
+
 ## v0.5.1 - 2026-06-15
 
 - Added a canonical machine/core interface boundary so CLI tools, installers, launchers, automations, and global templates emit encoding-stable machine JSON while Chinese remains in UI display projections and `i18n.zh-CN`.
