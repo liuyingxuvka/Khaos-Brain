@@ -23,7 +23,7 @@
 
 The canonical models and their grounded ModelMeshes live in a local file-backed LogicGuard authority store. Cards stay visible as deterministic YAML projections, so people can search, review, diff, consolidate, roll back, and optionally share them without making YAML a second semantic authority. The current release is Codex-first, with installer-managed skills, global defaults, and local maintenance automations already wired for Codex; the design can be adapted to any host agent that supports preflight retrieval, post-task write-back, local scripts, reusable workflows, scheduled maintenance, and Git.
 
-## Why It Is Worth Trying
+It does not save vague memories such as "remember this next time." It stores bounded model cards: the situation, the action under consideration, the predicted or observed result, confidence, source, status, and how an agent should use that lesson later.
 
 - It turns "remember this" into a LogicGuard model whose conclusion, support, assumptions, counterarguments, boundaries, and missing evidence can be inspected separately.
 - It keeps agent memory local, file-based, Git-versioned, and inspectable instead of hiding it in an opaque memory service.
@@ -36,9 +36,9 @@ The canonical models and their grounded ModelMeshes live in a local file-backed 
 | --- | --- | --- |
 | ![Khaos Brain desktop overview with local and organization cards](assets/screenshots/desktop-overview-en.png) | ![Khaos Brain organization source view](assets/screenshots/desktop-organization-en.png) | ![Khaos Brain card detail view](assets/screenshots/desktop-detail-en.png) |
 
-## English
+## How It Works
 
-### What Khaos Brain Is
+The everyday loop is:
 
 `Khaos Brain` is a local predictive experience system for AI agents. It does not only store memories; it organizes task experience, predictive models, user preferences, runtime lessons, and shareable Skills into exact LogicGuard models with visible Git-versioned card projections:
 
@@ -61,15 +61,24 @@ The authority boundary is strict:
 - retrieval may expand only grounded ModelMesh edges, never legacy `related_cards` or mere co-use;
 - missing exact authority fails visibly—there is no YAML or floating-head fallback.
 
-### The Problem It Solves
+## What A Card Contains
 
-Most AI memory systems save shallow reminders: "remember to do this next time." That is rarely enough for real work.
+| Card field | Why it matters |
+| --- | --- |
+| Situation | When the lesson applies |
+| Action | What route, tool, skill, or decision should be considered |
+| Predicted or observed result | Why the card is useful |
+| Confidence and status | Whether the card is candidate, trusted, weak, stale, or under review |
+| Source and author | Where the lesson came from |
+| Contrast | What weaker route failed, when that matters |
+| Skill dependency | Which reusable workflow or skill the card depends on |
+| Operational guidance | How a future agent should use it |
 
-Useful agent memory needs conditions, actions, outcomes, confidence, provenance, and maintenance. It should also know when a lesson is private, when it can be shared, when it is only a candidate, and when a repeated failure should become a stronger route.
+This makes memory inspectable instead of opaque.
 
 Khaos Brain turns those details into machine-auditable LogicGuard nodes, edges, ArgumentBlocks, gaps, and receipts rather than opaque vector-only memory. AI maintenance reads the lifecycle ledger, evidence, rollback records, and receipts automatically; the desktop viewer is optional and is not part of the completion gate.
 
-### Why It Feels Like A Brain
+Personal mode is the default. Each machine keeps its own local KB, including private preferences, local context, and local skill-use evidence.
 
 The system follows a brain-like rhythm:
 
@@ -91,44 +100,39 @@ Organization mode is optional. After Settings validates a Khaos organization KB 
 The boundary is intentional:
 
 - personal preferences stay local by default;
-- reusable task models, engineering experience, maintenance routes, and skill-use evidence can enter an organization candidate pool;
+- reusable task models and engineering lessons can enter an organization candidate pool;
 - organization cards carry source, author, status, confidence, and read-only metadata;
 - local retrieval remains first;
-- organization cards sync into a local cache and become local experience only after actual use;
-- meaningful local improvements can flow back as organization candidates.
+- organization cards become local experience only after actual use;
+- meaningful local improvements can flow back as reviewed organization candidates.
 
-### Organization Sharing Is More Than Skill Sharing
+## Organization Sharing Is More Than Skill Sharing
 
-The core organization feature is not just copying skill files to teammates. The important layer is shared experience models.
+Khaos Brain can share Skills, but the important layer is the experience model that explains why a Skill exists.
 
-An organization card can explain:
+An organization card can say:
 
 - which task class the lesson applies to;
 - which route or action to use;
 - what outcome it predicts;
-- its status and confidence;
-- who authored it;
-- whether it depends on a skill.
+- who authored it and how confident it is;
+- whether it depends on a Skill bundle.
 
-When a card depends on a skill, the skill travels as a card-bound bundle through the organization candidate flow. Candidate skills are not auto-installed. Only approved skills with pinned version and content-hash metadata are eligible for installation on another machine.
+Candidate Skills are not auto-installed. Only approved Skills with pinned version and content-hash metadata are eligible for installation on another machine.
 
-That gives skill sharing context: a teammate receives not only a script, but the lesson explaining why it exists, when to use it, and where its boundaries are.
+## Why GitHub Is Enough For An Organization KB
 
-### Why GitHub Is Enough For An Organization KB
-
-An organization shared KB can be a private GitHub repository.
-
-That has practical advantages:
+An organization shared KB can be a private GitHub repository:
 
 - no separate memory server to deploy;
 - existing GitHub permissions, branches, review, Actions, and rollback;
-- cards, candidate pools, import records, and skill registries remain inspectable files;
-- automated maintenance can submit proposals while GitHub handles checks and history;
-- if automation makes a bad change, a human can revert it through normal Git history.
+- cards, candidates, import records, and skill registries remain inspectable files;
+- automation can submit proposals while GitHub handles history and review;
+- bad automation changes can be reverted through ordinary Git.
 
-For many teams, a private repository is already the simplest reliable memory backend.
+For many teams, a private repository is already the simplest reliable backend for shared agent memory.
 
-### Why Try This Instead Of Another AI Memory Product
+## Install And Check
 
 - **Visible:** cards can be opened directly; source, author, confidence, status, and skill dependencies are visible.
 - **Maintainable:** incremental Sleep, convergent Dream, system update, and organization maintenance treat memory as a living system.
@@ -138,9 +142,25 @@ For many teams, a private repository is already the simplest reliable memory bac
 - **Open and customizable:** structure, cards, scripts, skills, and UI are files and source code.
 - **Honest automation:** shared knowledge still moves through candidates, review, maintenance, and rollback.
 
-### What Kind Of AI Agent It Needs
+- download `KhaosBrain.exe` from [GitHub Releases](https://github.com/liuyingxuvka/Khaos-Brain/releases/latest);
+- run the installer or repository setup for the local skill/runtime path used by your agent;
+- run the health check before relying on retrieval.
 
-The out-of-the-box host is currently Codex because Codex supports:
+Repository-local check:
+
+```powershell
+python scripts\install_codex_kb.py --check --json
+```
+
+Desktop viewer:
+
+```powershell
+python scripts\open_khaos_brain_ui.py
+```
+
+## What Kind Of AI Agent It Needs
+
+The out-of-the-box host is Codex because Codex supports:
 
 - repository-level instructions such as `AGENTS.md`;
 - skills and preflight invocation;
@@ -151,91 +171,73 @@ The out-of-the-box host is currently Codex because Codex supports:
 
 Another AI host can adapt the structure if it can read experience before work, write evidence afterward, load reusable workflows, run local maintenance scripts, and safely read/write Git repositories.
 
-### If You Just Want To Use It
+## Public Boundary
 
-The most natural path is to hand this repository to your AI agent and say:
+This public repository contains the Khaos Brain source code, examples, schemas, installer/check scripts, UI assets, screenshots, public-safe Skill material, and empty KB scaffolding.
+
+It does not contain a user's private KB, real local history, credentials, private candidate cards, personal preferences, organization secrets, live customer data, or unpublished local memory. Public screenshots use safe demo content.
+
+## Repository Layout
 
 ```text
-Install and enable this Khaos Brain experience system on this machine, then run the health check.
+local_kb/              Core package, retrieval, cards, maintenance, desktop UI
+.agents/skills/        Codex skills for retrieval, maintenance, organization flow, and UI launch
+kb/                    Public-safe KB scaffold and taxonomy example
+schemas/               Example card/schema files
+scripts/               Install, check, launch, and maintenance helpers
+templates/             Template artifacts
+assets/                Icons, screenshots, and README hero assets
+docs/                  Architecture, maintenance, organization, release, and UI docs
+tests/                 Regression tests
+VERSION                Current public version
+CHANGELOG.md           Release history
 ```
 
-Codex follows the repository rules and runs:
+## License
 
-```bash
-python scripts/install_codex_kb.py --json
-python scripts/install_codex_kb.py --check --json
-```
+MIT. See [`LICENSE`](./LICENSE).
 
 After the check passes, the machine has the global preflight skill, postflight rules, `KB Sleep`, `KB Dream`, `Khaos Brain System Update`, and the organization contribution / maintenance entry points. Each scheduled entry point is independently SkillGuard-covered through its complete native phase inventory, current provider/runtime readiness, positive/shallow calibration, real native receipt, and deep terminal closure. Upgrades also remove the retired Architect surfaces and settle old history, candidate, cache, sandbox, and maintenance debt under the current Chaos Brain standard, including late reintroduced files, Windows extended-length paths, and observations admitted by concurrent AI work. Old managed formats are upgrade input only: the AI-run transaction converts them directly into exact LogicGuard models, scoped ModelMeshes, deterministic projections, and an exact active index, publishes the generation pointer last, deletes retired authority, and requires a residual-zero receipt. Normal operation has no compatibility layer or projection fallback; missing current facts fail visibly. Every failed attempt remains durably retryable, and all five tasks remain paused until the updater's final composed SkillGuard gate authorizes an exact hash-bound restoration plan and the plan is applied and read back successfully.
 
 The exact migration phases, rollback behavior, pause-state preservation, and success gates are documented in [Chaos Brain upgrade contract](docs/chaos_brain_upgrade.md).
 
-### Desktop Card Viewer
+# Khaos Brain 中文说明
 
-The Windows Release includes the preview `KhaosBrain.exe`:
+| 仓库主线 | 最新发布 | 项目 | 许可证 |
+| --- | --- | --- | --- |
+| `v0.5.1` | `v0.5.1` | `Khaos Brain` | MIT |
 
-- download `KhaosBrain.exe` from [GitHub Releases](https://github.com/liuyingxuvka/Khaos-Brain/releases/latest);
-- place it in this repository directory, or pass `--repo-root` to point it at this repository;
-- double-click it to browse cards.
+## 它是什么
 
-Source entry:
+Khaos Brain 是给 AI agent 用的本地预测经验系统。
 
-```bash
-python scripts/kb_desktop.py --repo-root . --language en
-```
+它不是保存一句“下次记得这样做”的浅层记忆，而是保存有边界的 model cards：适用场景、可考虑的动作、预测或观察到的结果、信心、来源、状态，以及未来 agent 应该怎么使用这条经验。
 
-Chinese UI:
+这些 card 都是可见文件。它们可以被搜索、审查、diff、合并、回滚，也可以选择性通过 organization repository 共享。个人记忆默认留在本地。
 
-```bash
-python scripts/kb_desktop.py --repo-root . --language zh-CN
-```
+当前实现是 Codex-first：installer-managed skills、global defaults、本地维护 automations 和 desktop viewer 已经接到 Codex。只要另一个 host agent 支持 preflight retrieval、post-task write-back、本地脚本、可复用 workflow、定时维护和 Git，也可以适配这个结构。
 
-Headless check:
+## 为什么需要它
 
-```bash
-python scripts/kb_desktop.py --repo-root . --check
-```
+AI agent 经常从很浅的上下文重新开始：
 
-The desktop viewer does not start a browser, local web service, Electron, or Node. It reads the same file-based KB and, in organization mode, shows source, author, status, confidence, and skill dependency metadata.
+1. agent 以前做过类似任务，但经验埋在聊天历史里。
+2. 用户偏好只是一句话，不是 condition/action/outcome pattern。
+3. 某条路线成功过，但没人知道什么时候该复用。
+4. 错路反复出现，因为修正没有变成可复用 warning。
+5. 团队知识要么太私有、不可见，要么共享时没有 review 和 provenance。
 
-For the Windows exe, desktop shortcut, or Codex UI-opening skill, see [Windows desktop app](docs/windows_desktop_app.md). For organization mode, see [Organization mode plan](docs/organization_mode_plan.md).
+Khaos Brain 把重复工作变成可维护经验。
 
-### Voluntary Support
+## 产品预览
 
-If this project is useful to you, you can support its development here:
+| 本地 + 组织 Cards | 组织来源 | Card Detail |
+| --- | --- | --- |
+| ![Khaos Brain desktop overview with local and organization cards](assets/screenshots/desktop-overview-en.png) | ![Khaos Brain organization source view](assets/screenshots/desktop-organization-en.png) | ![Khaos Brain card detail view](assets/screenshots/desktop-detail-en.png) |
 
-[Buy me a coffee via PayPal](https://paypal.me/Yingxuliu)
+## 它怎么工作
 
-Contributions are voluntary and do not purchase support, warranty, priority service, commercial rights, or feature requests.
-
-### What This Public Repository Includes And Excludes
-
-This public repository is meant to include:
-
-- schema;
-- retrieval, recording, and maintenance tools;
-- skills, prompts, installer logic, and tests;
-- public-safe structures, screenshots, and examples.
-
-It should not casually publish:
-
-- live private cards;
-- real private history;
-- real candidate pools containing unreviewed personal details;
-- credentials, account data, machine-specific paths, or sensitive project context.
-
-### If You Are A Developer
-
-A good starting order is:
-
-- `PROJECT_SPEC.md`
-- `.agents/skills/local-kb-retrieve/`
-- `local_kb/`
-- `tests/`
-- `docs/organization_mode_plan.md`
-- `docs/release_policy.md`
-
-### Repository Layout
+日常循环是：
 
 ```text
 .
@@ -255,24 +257,29 @@ A good starting order is:
 └─ tests/
 ```
 
-## 中文
+翻成人话：
 
-### Khaos Brain 是什么
+- **Preflight search** 在任务开始前检索相关 local / organization cards。
+- **Postflight write-back** 在任务结束后记录经验、miss、修正和可复用模式。
+- **Sleep** 合并重复或过大的 card。
+- **Dream** 探索附近机会和弱信号，但不把它们当成可信事实。
+- **System Update** 只处理经过授权的软件更新；模型整理仍由 Sleep 独占。
+- **Organization mode** 让 reviewed cards 和 skill bundles 可以通过共享仓库流转，同时默认不暴露私人本地记忆。
 
 `Khaos Brain` 是一个给 AI agent 使用的本地预测型经验层。它不只是保存一句“下次记得这样做”，而是把每条有边界的经验写成一个可执行的 LogicGuard 论证模型：根预测结论、适用情境、方法、证据、论证桥梁、假设、反驳、边界、可信度、来源，以及仍然缺少什么支持。
 
 真正的语义权威保存在本地文件型 LogicGuard model / ModelMesh store 中；卡片仍然是可见的确定性 YAML 投影，可以搜索、审查、diff、整理、回滚，也可以通过可选的组织仓库共享可复用经验，但 YAML 不再是第二套权威。当前版本首先集成 Codex：安装器、全局 Skill、`AGENTS.md` 默认规则和本地维护自动化都已经接好；但只要宿主 agent 能在任务前检索、任务后写回、运行本地脚本、加载可复用工作流、做定期维护并读写 Git 仓库，同样结构也可以迁移。
 
-### 为什么值得一试
+这让 memory 可检查，而不是黑箱。
 
 - 它把“下次记得这样做”变成 LogicGuard 模型，把结论、证据、论证桥梁、假设、反例、边界和缺口分开表达。
 - 它把 agent 记忆保留为本地、文件化、Git 可追踪、可审查的结构，而不是藏在黑盒记忆服务里。
 - 它让记忆有全自动维护节律：任务前进入精确模型、任务后写回观察，随后由 Sleep 整理模型、Dream 做不可变压力测试、系统更新和可选组织维护继续收敛。
 - 它让 Skill 共享更有上下文：共享的不只是脚本，还有说明“什么时候该用、为什么该用”的经验卡片。
 
-### 它解决什么问题
+Personal mode 是默认模式。每台机器保留自己的 local KB，包括私人偏好、本地上下文和本地 skill-use evidence。
 
-大多数 AI memory 只保存浅层提醒，比如“下次记得这样做”。这对真实工作通常不够。
+Organization mode 是可选的。Settings 验证 organization KB GitHub repository 后，desktop UI 会启用 organization sources、organization cards、organization skill registry，以及 contribution / maintenance flows。
 
 有用的 agent memory 需要条件、动作、结果、可信度、来源和维护节律。它还应该知道哪些经验是私人的，哪些可以共享，哪些只是候选，哪些重复失败应该沉淀成更强路线。
 
@@ -308,40 +315,39 @@ A good starting order is:
 边界是故意这样设计的：
 
 - personal preferences 默认留在本地；
-- reusable task models、engineering experience、maintenance routes、skill-use evidence 可以进入 organization candidate pool；
-- organization cards 携带 source、author、status、confidence、read-only metadata；
+- 可复用任务模型和工程经验可以进入 organization candidate pool；
+- organization cards 带有 source、author、status、confidence 和 read-only metadata；
 - local retrieval 仍然优先；
-- organization cards 先同步到本地 cache，只有真正使用后才变成本地经验；
-- 有意义的本地改进可以再作为 organization candidates 回流。
+- organization card 只有在真实使用后才会变成本地经验；
+- 有意义的本地改进可以作为 reviewed organization candidate 回流。
 
-### 组织共享的不只是 Skill
+## 组织共享不只是共享 Skill
 
-组织功能的核心不是简单复制 skill 文件给同事，更重要的是共享经验模型。
+Khaos Brain 可以共享 Skills，但更重要的是解释“为什么需要这个 Skill”的 experience model。
 
-一张 organization card 可以说明：
+organization card 可以说明：
 
-- 经验适用于哪类任务；
-- 应该使用哪条 route 或 action；
-- 预测什么 outcome；
-- 当前 status 和 confidence；
-- 谁创建了它；
-- 是否依赖某个 skill。
+- 适用的任务类型；
+- 应该使用的 route 或 action；
+- 预测什么结果；
+- 谁写的、可信度如何；
+- 是否依赖一个 Skill bundle。
 
-如果一张 card 依赖 skill，这个 skill 会作为 card-bound bundle 进入 organization candidate flow。Candidate skill 不会自动安装。只有带 pinned version 和 content-hash metadata 的 approved skill，才有资格安装到另一台机器。
+Candidate Skills 不会自动安装。只有带 pinned version 和 content-hash metadata 的 approved Skills，才有资格安装到另一台机器。
 
-这让 skill sharing 有上下文：队友拿到的不只是脚本，还有说明它为什么存在、什么时候用、边界在哪里的经验卡片。
+## 为什么 GitHub 足够作为组织 KB
 
-### 为什么用 GitHub 做组织 KB 就够了
+组织共享 KB 可以就是一个 private GitHub repository：
 
-组织共享 KB 可以是一个 private GitHub repository。
+- 不需要另起 memory server；
+- 直接使用 GitHub permissions、branches、review、Actions 和 rollback；
+- cards、candidates、import records 和 skill registries 都是可检查文件；
+- 自动维护可以提交 proposals，GitHub 负责 history 和 review；
+- 如果自动化改坏了，可以用普通 Git 历史回滚。
 
-这样有几个实际好处：
+对很多团队来说，private repository 已经是最简单可靠的共享 agent memory backend。
 
-- 不需要额外部署 memory server；
-- 复用 GitHub permissions、branches、review、Actions 和 rollback；
-- cards、candidate pools、import records、skill registries 都是可检查文件；
-- 自动维护可以提交 proposal，同时由 GitHub 管理 checks 和历史；
-- 如果自动化产生坏改动，人可以通过普通 Git 历史回滚。
+## 安装和检查
 
 对很多团队来说，private repository 已经是最简单可靠的 memory backend。
 
@@ -392,67 +398,41 @@ python scripts/install_codex_kb.py --check --json
 Windows Release 包含预览版 `KhaosBrain.exe`：
 
 - 从 [GitHub Releases](https://github.com/liuyingxuvka/Khaos-Brain/releases/latest) 下载 `KhaosBrain.exe`；
-- 放到这个仓库目录，或用 `--repo-root` 指向这个仓库；
-- 双击浏览 cards。
+- 按你的 agent 使用的本地 skill/runtime 路径运行安装或仓库 setup；
+- 依赖 retrieval 前先运行 health check。
 
-源码入口：
+仓库本地检查：
 
-```bash
-python scripts/kb_desktop.py --repo-root . --language en
+```powershell
+python scripts\install_codex_kb.py --check --json
 ```
 
-中文界面：
+Desktop viewer：
 
-```bash
-python scripts/kb_desktop.py --repo-root . --language zh-CN
+```powershell
+python scripts\open_khaos_brain_ui.py
 ```
 
-Headless check：
+## 它需要什么样的 AI Agent
 
-```bash
-python scripts/kb_desktop.py --repo-root . --check
-```
+开箱支持的 host 是 Codex，因为 Codex 支持：
 
-桌面查看器不会启动浏览器、本地 web service、Electron 或 Node。它读取同一套 file-based KB；在 organization mode 下，会显示 source、author、status、confidence 和 skill dependency metadata。
+- `AGENTS.md` 这类仓库级说明；
+- skills 和 preflight invocation；
+- 本地脚本执行；
+- automations 和 scheduled runs；
+- GitHub / filesystem workflows；
+- post-task observation 和 write-back。
 
-Windows exe、桌面快捷方式和 Codex UI-opening skill 见 [Windows desktop app](docs/windows_desktop_app.md)。组织模式见 [Organization mode plan](docs/organization_mode_plan.md)。
+其他 AI host 如果能在工作前读取经验、工作后写回证据、加载可复用 workflow、运行本地维护脚本，并安全读写 Git 仓库，也可以适配这个结构。
 
-### 自愿支持项目维护
+## 公开边界
 
-如果这个项目对你有用，可以在这里自愿支持维护：
+这个公开仓库包含 Khaos Brain 源码、示例、schemas、安装/检查脚本、UI assets、screenshots、public-safe Skill material 和空 KB scaffold。
 
-[Buy me a coffee via PayPal](https://paypal.me/Yingxuliu)
+它不包含用户私人 KB、真实本地 history、credential、私人 candidate cards、个人偏好、组织 secret、真实客户数据或未公开本地记忆。公开 screenshots 使用安全演示内容。
 
-这只是自愿支持，不购买支持、保修、优先服务、商业权利或功能请求。
-
-### 公开仓库里放什么，不放什么
-
-公开仓库应该包含：
-
-- schema；
-- retrieval、recording、maintenance tools；
-- skills、prompts、installer logic、tests；
-- 公开安全的结构、截图和示例。
-
-不应该随意公开：
-
-- live private cards；
-- 真实私人历史；
-- 含未审查个人细节的真实 candidate pools；
-- credentials、account data、machine-specific paths 或 sensitive project context。
-
-### 如果你是开发者
-
-推荐阅读顺序：
-
-- `PROJECT_SPEC.md`
-- `.agents/skills/local-kb-retrieve/`
-- `local_kb/`
-- `tests/`
-- `docs/organization_mode_plan.md`
-- `docs/release_policy.md`
-
-### 仓库结构
+## 仓库结构
 
 ```text
 .
@@ -471,3 +451,7 @@ Windows exe、桌面快捷方式和 Codex UI-opening skill 见 [Windows desktop 
 ├─ templates/
 └─ tests/
 ```
+
+## 许可证
+
+MIT. See [`LICENSE`](./LICENSE).
