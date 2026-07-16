@@ -780,6 +780,64 @@ class CodexInstallTests(unittest.TestCase):
                 baseline_pythonpath,
             )
 
+    def test_pre_restore_assurance_failure_reports_owner_terminal_details(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            flowguard_root = root / "validation" / "python" / "flowguard"
+            flowguard_root.mkdir(parents=True)
+            logicguard_root = root / "validation" / "python" / "logicguard"
+            logicguard_root.mkdir(parents=True)
+            payload = {
+                "ok": False,
+                "failed_checks": ["full_regression"],
+                "entries": {
+                    "full_regression": {
+                        "terminal_status": "failed",
+                        "exit_code": 1,
+                        "timed_out": False,
+                        "cleanup_confirmed": True,
+                        "stdout_tail": "one regression failed",
+                        "stderr_tail": "assertion detail",
+                    }
+                },
+            }
+            completed = subprocess.CompletedProcess(
+                args=["python"],
+                returncode=1,
+                stdout=json.dumps(payload),
+                stderr="outer diagnostic",
+            )
+
+            with patch(
+                "local_kb.install.run_with_timeout_cleanup",
+                return_value=completed,
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "one regression failed",
+                ) as raised:
+                    _run_pre_restore_upgrade_assurance(
+                        root,
+                        root / ".codex",
+                        skillguard_validation_toolchain={
+                            "snapshot_root": str(root / "validation" / "skillguard"),
+                            "manifest": {"digest": "S" * 64},
+                        },
+                        flowguard_validation_toolchain={
+                            "snapshot_root": str(flowguard_root),
+                            "manifest": {"digest": "F" * 64},
+                        },
+                        logicguard_validation_toolchain={
+                            "snapshot_root": str(logicguard_root),
+                            "manifest": {"digest": "L" * 64},
+                        },
+                    )
+
+            message = str(raised.exception)
+            self.assertIn('"terminal_status": "failed"', message)
+            self.assertIn('"exit_code": 1', message)
+            self.assertIn("assertion detail", message)
+
     def test_install_is_transactional_current_and_retires_exact_architect(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as tmp:

@@ -2443,9 +2443,36 @@ def _run_pre_restore_upgrade_assurance(
     except json.JSONDecodeError:
         payload = {}
     if process.returncode != 0 or not bool(payload.get("ok")):
+        failed_checks = list(payload.get("failed_checks") or [])
+        entries = payload.get("entries") if isinstance(payload.get("entries"), Mapping) else {}
+        failure_details: dict[str, dict[str, Any]] = {}
+        for name in failed_checks:
+            entry = entries.get(name) if isinstance(entries, Mapping) else None
+            if not isinstance(entry, Mapping):
+                continue
+            failure_details[str(name)] = {
+                "terminal_status": str(entry.get("terminal_status") or ""),
+                "exit_code": entry.get("exit_code"),
+                "timed_out": bool(entry.get("timed_out")),
+                "cleanup_confirmed": entry.get("cleanup_confirmed"),
+                "stdout_tail": str(entry.get("stdout_tail") or "")[-1600:],
+                "stderr_tail": str(entry.get("stderr_tail") or "")[-1600:],
+            }
         raise RuntimeError(
             "Chaos Brain pre-restore assurance failed: "
-            + str(payload.get("failed_checks") or process.stderr or process.stdout[-4000:])
+            + json.dumps(
+                {
+                    "failed_checks": failed_checks,
+                    "failure_details": failure_details,
+                    "fallback_diagnostic": (
+                        str(process.stderr or process.stdout[-4000:])
+                        if not failed_checks
+                        else ""
+                    ),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
         )
     return payload
 
