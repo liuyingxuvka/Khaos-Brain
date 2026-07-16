@@ -1928,3 +1928,40 @@ un_khaos_brain_conformance.py` - conformance replay passed lane lock, organizati
 
 ### Next Actions
 - Commit v0.6.3, rerun branch/main/tag CI, then build and publish assets.
+
+
+## khaos-brain-v064-tag-receipt-consumer - Make tag validation consume the exact successful main receipt instead of duplicating full validation.
+
+- Project: Khaos-Brain
+- Trigger reason: v0.6.3 tag run 29511076362 proved that rerunning the stateful updater under a tag event remains a duplicate invalid execution owner even after branch-name materialization.
+- Status: completed
+- Skill decision: used_development_process_flow_model_miss_review_model_test_alignment_and_test_mesh
+- Started: 2026-07-16T15:33:58+00:00
+- Ended: 2026-07-16T15:33:58+00:00
+- Duration seconds: 0.000
+- Commands OK: True
+
+### Model Files
+- .github/workflows/tests.yml
+
+### Commands
+- OK (0.000s): `Two workflow lifecycle contract tests and YAML parsing passed.`
+- OK (0.000s): `The exact GitHub Actions API query found successful main run 29509958937 for SHA 5be1154.`
+
+### Findings
+- main is the sole final full-validation owner; a tag is a read-only receipt consumer bound to the same SHA and workflow conclusion.
+
+### Counterexamples
+- Do not rerun the stateful installer/update owner on a tag, synthesize main inside a tag job, move old tags, or accept a receipt for another SHA or branch.
+
+### Friction Points
+- none recorded
+
+### Skipped Steps
+- none recorded
+
+### Risk Evidence Summary
+- The tag job requires tag HEAD equals origin/main and an exact successful tests workflow run on main for the same SHA.
+
+### Next Actions
+- Publish v0.6.4 through branch and main full validation, then require the tag receipt-consumer job to pass.

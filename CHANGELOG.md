@@ -1,8 +1,8 @@
 # Changelog
 
-## v0.6.3 - 2026-07-16
+## v0.6.4 - 2026-07-16
 
-- Made tag-triggered CI materialize a temporary `main` branch only after proving the tag SHA exactly equals `origin/main`, so the real fast-forward-only system-update owner can run without weakening its branch identity or testing different source bytes.
+- Made `main` the sole final full-validation owner. Tag CI now proves the tag SHA equals `origin/main` and consumes the exact successful `main` Actions receipt for that SHA instead of rerunning the stateful installer/system-update owner in a detached tag environment.
 
 - Made clean Linux CI self-contained by freezing the public SkillGuard v0.3.1 validation-toolchain commit and OpenSpec 1.6.0 instead of depending on user-level global installations.
 - Declared an isolated CI-only automation model and reasoning effort so clean installation can validate rendered schedules without weakening the real-machine requirement for explicit current model authority.
@@ -20,6 +20,10 @@
 - Closed the real 3,427-card LogicGuard runtime model miss: distinct cards in one exact generation and authority scope now reuse a single immutable mesh view, publication clears every old-generation read cache, and catalog latency is measured separately from memory instrumentation without relaxing either budget. The observed runtime moved from a 3.146-second exact-context P95 failure to 0.053 seconds, with same-class and large-generation evidence bound back to the existing retrieval commitment.
 - Made launcher-resolution and LogicGuard-origin assertions platform-neutral while preserving the exact executable-identity and package-origin checks.
 - Kept product runtime behavior and dependencies unchanged; this patch repairs the public validation environment exposed by the v0.6.1 GitHub Actions run.
+
+## v0.6.3 - 2026-07-16 (not released)
+
+- The immutable candidate tag remains on its original commit, but no GitHub Release was created because materializing a branch name inside a tag job still duplicated the stateful full-validation owner. The receipt-consumer lifecycle repair is shipped as v0.6.4 without moving the old tag.
 
 ## v0.6.2 - 2026-07-16 (not released)
 

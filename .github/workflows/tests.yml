@@ -7,6 +7,7 @@ on:
 jobs:
   python-tests:
     name: Python tests
+    if: ${{ ! startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     env:
       SKILLGUARD_COMMIT: 3329d3350cb1f711f60b82b64fab1c9b352b98ae
@@ -16,16 +17,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-
-      - name: Materialize exact main identity for tag validation
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          git fetch --no-tags --depth=1 origin main
-          test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
-          git checkout -B main "$GITHUB_SHA"
-          git branch --set-upstream-to=origin/main main
-          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -58,3 +49,52 @@ jobs:
 
       - name: Run desktop viewer smoke check
         run: python scripts/kb_desktop.py --repo-root . --check
+
+  tag-release-receipt:
+    name: Verify tag release receipt
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+
+      - name: Verify exact main validation receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git fetch --no-tags --depth=1 origin main
+          test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
+          gh api --method GET "repos/$GITHUB_REPOSITORY/actions/runs" \
+            -f branch=main \
+            -f head_sha="$GITHUB_SHA" \
+            -f status=success \
+            -f event=push \
+            -f per_page=100 > "$RUNNER_TEMP/main-success-runs.json"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = json.loads(
+              (Path(os.environ["RUNNER_TEMP"]) / "main-success-runs.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          sha = os.environ["GITHUB_SHA"]
+          runs = [
+              run
+              for run in payload.get("workflow_runs", [])
+              if run.get("name") == "tests"
+              and run.get("event") == "push"
+              and run.get("head_branch") == "main"
+              and run.get("head_sha") == sha
+              and run.get("conclusion") == "success"
+          ]
+          if not runs:
+              raise SystemExit("exact successful main validation receipt is unavailable")
+          print(f"verified-main-run={runs[0]['id']} sha={sha}")
+          PY
