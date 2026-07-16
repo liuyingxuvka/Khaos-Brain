@@ -632,7 +632,7 @@
         "classification_rule_ids": [
           "skillguard.content_role_classifier.current:test_dev"
         ],
-        "component_hash": "sha256:f0efb9fac002773e0df24087bd8bebdb9986dcf1d197eb563046b8b44949bfd1",
+        "component_hash": "sha256:088d16f087e6094dd2f02786134440d29eb09678b8b779a4e379c21f7fb0a84e",
         "component_id": "component:test_dev:78110bef3521637d",
         "consumer_ids": [
           "projection:khaos-brain-update:target-tests"
@@ -666,7 +666,7 @@
       "owner_cycles": [],
       "unmapped_paths": []
     },
-    "impact_graph_hash": "sha256:8efd85b2658f03d6da5aa347caa57ac2860fdb7ae2d9c2257ad9784c21e68746",
+    "impact_graph_hash": "sha256:1e2fcb9056d0c28dee49aad3721ab4bcf29a2cdbc8ba6dd4bf554f2afc144d73",
     "inventory": [
       {
         "classification_rule_id": "skillguard.content_role_classifier.current:contract_schema",
@@ -831,7 +831,7 @@
       },
       {
         "classification_rule_id": "skillguard.content_role_classifier.current:test_dev",
-        "content_hash": "sha256:b164fd8026bcb9878aa6085b915f625442c08709a7603eb1f1277d972f49a4e3",
+        "content_hash": "sha256:eb11c0d78fd22ae72057a664d1b243726554bcf19c4b3d61f8c96cb1819c88f2",
         "install_disposition": "source_only",
         "path": "tests/test_codex_install.py",
         "role": "test_dev"
@@ -886,7 +886,7 @@
         "role": "test_dev"
       }
     ],
-    "inventory_hash": "sha256:5954e06f9206d7eb648e744a6d5645ef7c3140884f778e6b55861dd8a4d1b7b6",
+    "inventory_hash": "sha256:6c1707f2ccb0e0571f28b6f3ce2eb44a3601c2bbc46f15e62c4d8f03b865f2da",
     "member_root_path": ".agents/skills/khaos-brain-update",
     "owner_receipt_root_ref": {
       "path_token": "owner_evidence_root",
@@ -1083,13 +1083,13 @@
       },
       {
         "consumer_id": "projection:khaos-brain-update:target-tests",
-        "consumer_projection_hash": "sha256:e459bd2c85c1f8eb75487e1f722de38d20bc55ad2d4e08b0ee1521865b8e871d",
+        "consumer_projection_hash": "sha256:63f877134766885ff8a554b5bb673ef6b91bc1a48c0e4e9a0252109ccc0743f6",
         "impact_plan_schema_version": "skillguard.content_impact_plan.current",
         "impact_policy_id": "skillguard.content_impact_policy.current",
         "input_component_ids": [
           "component:test_dev:78110bef3521637d"
         ],
-        "input_projection_hash": "sha256:73bd484fc47195ed26fb93bc757f706b0d65f698fb6aabc0d888e7d4cb09b4d1",
+        "input_projection_hash": "sha256:9b4c52ce672c5b7dd87507337e6aab3a3d83ccf3c291d86d6da4e249fb21e06c",
         "kind": "target_test_source",
         "projection_declaration_hash": "sha256:038c2d8c664ff437e4ce005ba83ef676ab03e685cde1d3b736b3850c70c4e167"
       },
@@ -1117,7 +1117,7 @@
     "schema_version": "skillguard.content_impact_plan.current",
     "unknown_mapping_disposition": "block"
   },
-  "contract_hash": "E263E73E78B5F8DD60DE31D7A8775DF51CF7603878CF46736CB9ABE4C086EB7B",
+  "contract_hash": "64DF15081A56B2785E7DCAC06C585767256CD3926F5529E8A9D1856E2AFC8490",
   "depth_profile": {
     "claim_boundary": "Only exact current receipts for the target skill's declared checks are supervised. The target skill retains all domain judgment, including positive/shallow behavior and conditional update finalization.",
     "enforcement_level": "enforced",
@@ -1476,7 +1476,7 @@
     "implementation:scripts/check_kb_skillguard.py": "799D4C20A4665A89454DE6184FCA805FD5893AAF902C4A638CF1155B0628114E",
     "implementation:scripts/run_kb_guarded_automation.py": "C0748106B7F4EA1343AD5840B3C748C349B31599E34BDA4DE996062F830DB4A6",
     "implementation:scripts/run_khaos_brain_system_update.py": "AA5E86257B0AD939034D4C7185E5843F11E17FD3427A7B567671C1DE3DC16F21",
-    "implementation:tests/test_codex_install.py": "B164FD8026BCB9878AA6085B915F625442C08709A7603EB1F1277D972F49A4E3",
+    "implementation:tests/test_codex_install.py": "EB11C0D78FD22AE72057A664D1B243726554BCF19C4B3D61F8C96CB1819C88F2",
     "implementation:tests/test_kb_automation_activation.py": "A51BE246D7E41A484C21D94CF45FB9359BDD838F1F99DB42600ED57776BDA1A3",
     "implementation:tests/test_kb_automation_native_receipts.py": "96DF6C75478E0632F62F07EAF29FAA3D2B81B7BD5538D8D0558E8970D033D2CD",
     "implementation:tests/test_kb_automation_skillguard.py": "7B9E5DAA9EEE6C4ABE7B60F642A79EA032D2B97274ACD27C40241ACC2F93FA49",

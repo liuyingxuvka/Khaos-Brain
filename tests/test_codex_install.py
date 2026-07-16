@@ -581,12 +581,19 @@ class CodexInstallTests(unittest.TestCase):
 
     def test_source_validation_rejects_compiler_identity_change(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
-        installed_skillguard = Path.home() / ".codex" / "skills" / "skillguard"
-        self.assertTrue(installed_skillguard.is_dir())
+        configured_validation_root = os.environ.get(
+            "KHAOS_BRAIN_SKILLGUARD_VALIDATION_ROOT", ""
+        ).strip()
+        source_skillguard = (
+            Path(configured_validation_root).resolve()
+            if configured_validation_root
+            else Path.home() / ".codex" / "skills" / "skillguard"
+        )
+        self.assertTrue(source_skillguard.is_dir())
         with tempfile.TemporaryDirectory() as tmp:
             codex_home = Path(tmp) / ".codex"
             copied_skillguard = codex_home / "skills" / "skillguard"
-            shutil.copytree(installed_skillguard, copied_skillguard)
+            shutil.copytree(source_skillguard, copied_skillguard)
             compiler = copied_skillguard / "scripts" / "skillguard_compile.py"
             real_run = subprocess.run
             mutated = False
