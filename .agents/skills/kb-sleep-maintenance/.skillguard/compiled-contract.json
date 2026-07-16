@@ -412,7 +412,7 @@
         "classification_rule_ids": [
           "skillguard.content_role_classifier.current:runtime_source"
         ],
-        "component_hash": "sha256:8326449c693f5f5ae636c4e95151fefcec6db600151ea59ba99e2c0ac71c918e",
+        "component_hash": "sha256:87c419c9fb568feaa417300eb97e9e847ca9e5574cb44e998817a31f754fc323",
         "component_id": "component:runtime_source:087fe7972054f532",
         "consumer_ids": [
           "projection:kb-sleep-maintenance:target-runtime-sources"
@@ -476,7 +476,7 @@
       "owner_cycles": [],
       "unmapped_paths": []
     },
-    "impact_graph_hash": "sha256:b2a0190f383192a6f8f458d3a61d44ca7750494f8ab951b7a69731efe54d0bec",
+    "impact_graph_hash": "sha256:dd8dfaa1fc3c0d60b756dc165ca3573104038b5ea9b8c5df99fc57fa7f1f4900",
     "inventory": [
       {
         "classification_rule_id": "skillguard.content_role_classifier.current:contract_schema",
@@ -550,7 +550,7 @@
       },
       {
         "classification_rule_id": "skillguard.content_role_classifier.current:runtime_source",
-        "content_hash": "sha256:a6570ff2c2b2c723c26184c0f590c2c5d2dbaf592900ef767714d9fe64e53814",
+        "content_hash": "sha256:94721d4a43d8d5dc153df3d5b976784dd1d961f9f9a871a8b8ae005d958f6c48",
         "install_disposition": "source_only",
         "path": "local_kb/install.py",
         "role": "runtime_source"
@@ -696,7 +696,7 @@
         "role": "test_dev"
       }
     ],
-    "inventory_hash": "sha256:218ff60b5c9f236d5690597e4323e4b0fe466726039cbc757abfa6fa70a74ad7",
+    "inventory_hash": "sha256:92f3b5cac91467df86e21867490299326e4a490843a8e4a755daa0241af80aec",
     "member_root_path": ".agents/skills/kb-sleep-maintenance",
     "owner_receipt_root_ref": {
       "path_token": "owner_evidence_root",
@@ -841,7 +841,7 @@
       },
       {
         "consumer_id": "projection:kb-sleep-maintenance:target-runtime-sources",
-        "consumer_projection_hash": "sha256:9fca03a05ebd42989943840962ac124fcfe53d5a82161977bd485c5aacd8839d",
+        "consumer_projection_hash": "sha256:2e5650455578e0124449f98a6fe0041cacb48916442ee7fd1c17a4cba0513c21",
         "impact_plan_schema_version": "skillguard.content_impact_plan.current",
         "impact_policy_id": "skillguard.content_impact_policy.current",
         "input_component_ids": [
@@ -849,7 +849,7 @@
           "component:runtime_source:a4ae6578dc234284",
           "component:runtime_source:c9555c10baa5ef19"
         ],
-        "input_projection_hash": "sha256:e3427d68cae2fed533647dc43e194a18edc3c47854432de4475879511a483761",
+        "input_projection_hash": "sha256:979d0a704d675309537d0962f8ffe978fa2c3e9e538b6570d982250d5b758c3e",
         "kind": "target_runtime_source",
         "projection_declaration_hash": "sha256:f03b0d04a25c41b8955895f7c4f1a66f95426ecefe38565114aed32bc4dc7205"
       },
@@ -889,7 +889,7 @@
     "schema_version": "skillguard.content_impact_plan.current",
     "unknown_mapping_disposition": "block"
   },
-  "contract_hash": "484BDE62023DF37828B26CBC6631D070BDA117BF0BCDD0300E2997818FEB28DB",
+  "contract_hash": "6FF0B74627FECDB1CB80EE78972A64DCE38E40DC43F89A3F1301F1B679BCB8DC",
   "depth_profile": {
     "claim_boundary": "Only exact current receipts for the target skill's declared checks are supervised. The target skill retains all domain judgment, including positive/shallow behavior and conditional update finalization.",
     "enforcement_level": "enforced",
@@ -1162,7 +1162,7 @@
     "implementation:local_kb/automation_runtime.py": "BEFD8D5346EC5839609A86FD0A149DC263FBE0816649EE99C16078846745841A",
     "implementation:local_kb/calibration.py": "BFD51DFD535BC91F4455C91D4BD479EF6FF1660C48A44D630D4224D10A87024F",
     "implementation:local_kb/candidate_lifecycle.py": "868CE20C30F60252F6C6F55CE34AD786DCA1691814F79C66D89A7D3B72761BAB",
-    "implementation:local_kb/install.py": "A6570FF2C2B2C723C26184C0F590C2C5D2DBAF592900EF767714D9FE64E53814",
+    "implementation:local_kb/install.py": "94721D4A43D8D5DC153DF3D5B976784DD1D961F9F9A871A8B8AE005D958F6C48",
     "implementation:local_kb/lifecycle.py": "B53083C80AE9E43BD245541D84DA69CA73DC599830C8BF66E4122B5B69245583",
     "implementation:local_kb/logicguard_models.py": "3FF2A12BFE385106C3CB6063D614EEE2C673CD37E867FF4151CF8D009E6998C2",
     "implementation:local_kb/maintenance.py": "22746807804C27573A0CA8EAF2308A8B4925BE634B6FDD44391D54B072A76D60",

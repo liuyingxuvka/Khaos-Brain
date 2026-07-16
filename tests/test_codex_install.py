@@ -814,6 +814,11 @@ class CodexInstallTests(unittest.TestCase):
                             ],
                             "parse_error": "",
                         },
+                        "json_payload": {
+                            "checks": [
+                                {"id": "fixture-static-owner", "ok": False}
+                            ]
+                        },
                         "stdout_tail": "one regression failed",
                         "stderr_tail": "assertion detail",
                     }
@@ -856,6 +861,7 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn('"exit_code": 1', message)
             self.assertIn('"passed_count": 1', message)
             self.assertIn("tests/test_two.py::test_failed", message)
+            self.assertIn("fixture-static-owner", message)
             self.assertNotIn("one regression failed", message)
 
     def test_install_is_transactional_current_and_retires_exact_architect(self) -> None:

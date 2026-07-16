@@ -2483,7 +2483,21 @@ def _run_pre_restore_upgrade_assurance(
                 if isinstance(json_payload.get("skills"), Mapping)
                 else {}
             )
+            report_checks = (
+                json_payload.get("checks")
+                if isinstance(json_payload.get("checks"), list)
+                else []
+            )
+            failed_report_check_ids = [
+                str(row.get("id") or "")
+                for row in report_checks
+                if isinstance(row, Mapping) and row.get("ok") is not True
+            ]
+            if failed_report_check_ids:
+                detail["failed_report_check_ids"] = failed_report_check_ids
             capability_summary: dict[str, Any] = {}
+            capability_count = 0
+            capability_ok_count = 0
             for skill_id, skill_row in skill_rows.items():
                 if not isinstance(skill_row, Mapping):
                     continue
@@ -2499,10 +2513,15 @@ def _run_pre_restore_upgrade_assurance(
                 )
                 if not capability:
                     continue
+                capability_count += 1
                 missing = list(capability.get("missing_node_ids") or [])
                 unsafe = list(capability.get("unsafe_declared_node_ids") or [])
+                capability_ok = capability.get("ok") is True
+                if capability_ok:
+                    capability_ok_count += 1
+                    continue
                 capability_summary[str(skill_id)] = {
-                    "ok": bool(capability.get("ok")),
+                    "ok": False,
                     "receipt_terminal": bool(capability.get("receipt_terminal")),
                     "identity_current": bool(capability.get("identity_current")),
                     "proof_current": bool(capability.get("proof_current")),
@@ -2512,9 +2531,12 @@ def _run_pre_restore_upgrade_assurance(
                     "unsafe_count": len(unsafe),
                     "unsafe_declared_node_ids": unsafe[:4],
                 }
+            if capability_count:
+                detail["capability_count"] = capability_count
+                detail["capability_ok_count"] = capability_ok_count
             if capability_summary:
                 detail["capability_summary"] = capability_summary
-            if not junit and not capability_summary:
+            if not junit and not capability_summary and not failed_report_check_ids:
                 detail["stdout_tail"] = str(entry.get("stdout_tail") or "")[-600:]
                 detail["stderr_tail"] = str(entry.get("stderr_tail") or "")[-600:]
             failure_details[str(name)] = detail
