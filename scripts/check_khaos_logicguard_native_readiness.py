@@ -78,6 +78,9 @@ _INSTALLATION_IDENTITY_PYTHONPATH_PRESENT_ENV = (
 _INSTALLATION_IDENTITY_PYTHONPATH_VALUE_ENV = (
     "KHAOS_BRAIN_INSTALLATION_IDENTITY_PYTHONPATH_VALUE"
 )
+_INSTALLATION_IDENTITY_PYTHON_EXECUTABLE_ENV = (
+    "KHAOS_BRAIN_INSTALLATION_IDENTITY_PYTHON_EXECUTABLE"
+)
 
 
 def _configure_completed_install_toolchains(codex_home: Path) -> dict[str, Any]:
@@ -112,6 +115,10 @@ def _configure_completed_install_toolchains(codex_home: Path) -> dict[str, Any]:
         receipt = attempt.get(field)
         if not isinstance(receipt, dict):
             raise RuntimeError(f"Completed install attempt is missing {field}")
+        if field == "skillguard_validation_toolchain":
+            os.environ[_INSTALLATION_IDENTITY_PYTHON_EXECUTABLE_ENV] = str(
+                receipt.get("installation_python_executable") or sys.executable
+            )
         root = Path(str(receipt.get("snapshot_root") or "")).resolve()
         expected = str((receipt.get("manifest") or {}).get("digest") or "")
         actual = tree_manifest(root) if root.is_dir() else {}

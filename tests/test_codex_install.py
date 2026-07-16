@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -733,6 +734,7 @@ print(json.dumps({'status': 'passed', 'reports': [{'status': 'passed'}, {'status
                 tree_manifest(installed_router)["digest"],
             )
             self.assertEqual(Path(receipt["validation_codex_home"]).name, ".codex")
+            self.assertEqual(receipt["installation_python_executable"], sys.executable)
             self.assertTrue(
                 (installed / ".sg-runtime" / "installation" / "HEAD.json").is_file()
             )
@@ -844,6 +846,7 @@ print(json.dumps({'status': 'passed', 'reports': [{'status': 'passed'}, {'status
                     skillguard_validation_toolchain={
                         "snapshot_root": str(root / "validation" / "skillguard"),
                         "manifest": {"digest": "S" * 64},
+                        "installation_python_executable": "fixture-python",
                     },
                     flowguard_validation_toolchain={
                         "snapshot_root": str(flowguard_root),
@@ -871,6 +874,12 @@ print(json.dumps({'status': 'passed', 'reports': [{'status': 'passed'}, {'status
                     "KHAOS_BRAIN_INSTALLATION_IDENTITY_PYTHONPATH_VALUE"
                 ],
                 baseline_pythonpath,
+            )
+            self.assertEqual(
+                environment[
+                    "KHAOS_BRAIN_INSTALLATION_IDENTITY_PYTHON_EXECUTABLE"
+                ],
+                "fixture-python",
             )
 
     def test_pre_restore_assurance_failure_reports_owner_terminal_details(self) -> None:

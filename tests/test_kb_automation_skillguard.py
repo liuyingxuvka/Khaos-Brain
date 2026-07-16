@@ -410,11 +410,27 @@ def test_session_bootstrap_reports_the_worker_failure_detail(
         "stage": "replay-skillguard-installation-currentness",
         "error": "ValueError: installation_projection_component_hash_mismatch",
     }
+    installation_python = sys.executable
+    if os.name != "nt":
+        installation_python = str(
+            Path(sys.executable).parent
+            / ".."
+            / Path(sys.executable).parent.name
+            / Path(sys.executable).name
+        )
 
-    with patch(
+    with patch.dict(
+        os.environ,
+        {
+            "KHAOS_BRAIN_INSTALLATION_IDENTITY_PYTHON_EXECUTABLE": (
+                installation_python
+            )
+        },
+        clear=False,
+    ), patch(
         "scripts.check_kb_skillguard.subprocess.Popen",
         return_value=fake_process,
-    ), patch.object(
+    ) as popen, patch.object(
         _InstalledSupervisionSession,
         "_read_protocol",
         return_value=ready,
@@ -424,6 +440,43 @@ def test_session_bootstrap_reports_the_worker_failure_detail(
     ), pytest.raises(
         RuntimeError,
         match="installation_projection_component_hash_mismatch",
+    ):
+        _InstalledSupervisionSession.start(
+            skill_root=skill_root,
+            codex_home=codex_home,
+            repository_root=repository_root,
+            session_root=repository_root / ".local" / "session",
+            scheduler_or_trigger_id="fixture-trigger",
+            scheduled_execution_id="fixture-run",
+        )
+    assert popen.call_args.args[0][0] == installation_python
+
+
+def test_session_bootstrap_rejects_a_different_installation_python(
+    tmp_path: Path,
+) -> None:
+    repository_root = tmp_path / "repo"
+    skill_root = tmp_path / ".codex" / "skills" / "kb-dream-pass"
+    codex_home = tmp_path / ".codex"
+    repository_root.mkdir()
+    skill_root.mkdir(parents=True)
+    worker = repository_root / "scripts" / "run_installed_skillguard_supervision.py"
+    worker.parent.mkdir()
+    worker.write_text("# fixture\n", encoding="utf-8")
+    different_python = tmp_path / "different-python"
+    different_python.write_text("not the current interpreter\n", encoding="utf-8")
+
+    with patch.dict(
+        os.environ,
+        {
+            "KHAOS_BRAIN_INSTALLATION_IDENTITY_PYTHON_EXECUTABLE": str(
+                different_python
+            )
+        },
+        clear=False,
+    ), pytest.raises(
+        RuntimeError,
+        match="supervision Python identity changed",
     ):
         _InstalledSupervisionSession.start(
             skill_root=skill_root,

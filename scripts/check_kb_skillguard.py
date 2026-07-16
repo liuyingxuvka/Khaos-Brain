@@ -32,6 +32,9 @@ _INSTALLATION_IDENTITY_PYTHONPATH_PRESENT_ENV = (
 _INSTALLATION_IDENTITY_PYTHONPATH_VALUE_ENV = (
     "KHAOS_BRAIN_INSTALLATION_IDENTITY_PYTHONPATH_VALUE"
 )
+_INSTALLATION_IDENTITY_PYTHON_EXECUTABLE_ENV = (
+    "KHAOS_BRAIN_INSTALLATION_IDENTITY_PYTHON_EXECUTABLE"
+)
 
 
 @contextmanager
@@ -346,8 +349,19 @@ class _InstalledSupervisionSession:
             encoding="utf-8",
             newline="\n",
         )
-        command = [
+        installation_python = os.environ.get(
+            _INSTALLATION_IDENTITY_PYTHON_EXECUTABLE_ENV,
             sys.executable,
+        )
+        installation_python_identity = Path(installation_python).resolve()
+        current_python_identity = Path(sys.executable).resolve()
+        if installation_python_identity != current_python_identity:
+            stderr_handle.close()
+            raise RuntimeError(
+                "installed SkillGuard supervision Python identity changed"
+            )
+        command = [
+            installation_python,
             str(worker),
             str(skill_root.resolve(strict=True)),
             "--session",

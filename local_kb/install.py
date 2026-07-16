@@ -72,6 +72,9 @@ INSTALLATION_IDENTITY_PYTHONPATH_PRESENT_ENV = (
 INSTALLATION_IDENTITY_PYTHONPATH_VALUE_ENV = (
     "KHAOS_BRAIN_INSTALLATION_IDENTITY_PYTHONPATH_VALUE"
 )
+INSTALLATION_IDENTITY_PYTHON_EXECUTABLE_ENV = (
+    "KHAOS_BRAIN_INSTALLATION_IDENTITY_PYTHON_EXECUTABLE"
+)
 ORG_CONTRIBUTE_WINDOW = (10 * 60, 13 * 60 + 59)
 ORG_MAINTENANCE_WINDOW = (14 * 60, 16 * 60)
 MISTAKE_PRIORITY_MARKERS = (
@@ -1726,6 +1729,10 @@ def _freeze_skillguard_validation_toolchain(
                 "router_snapshot_root": str(router_root),
                 "router_manifest": router_manifest,
                 "validation_codex_home": str(validation_codex_home),
+                "installation_python_executable": os.environ.get(
+                    INSTALLATION_IDENTITY_PYTHON_EXECUTABLE_ENV,
+                    sys.executable,
+                ),
                 "installation_receipt_root": str(
                     root / ".sg-runtime" / "installation"
                 ),
@@ -1999,6 +2006,7 @@ def _freeze_skillguard_validation_toolchain(
                 "router_snapshot_root": str(installed_router_root),
                 "router_manifest": installed_router_manifest,
                 "validation_codex_home": str(validation_codex_home),
+                "installation_python_executable": sys.executable,
                 "installation_receipt_root": str(installation_receipt_root),
                 "installation_transaction_id": str(
                     ((install_report.get("reports") or [{}])[-1]).get(
@@ -2679,6 +2687,10 @@ def _run_pre_restore_upgrade_assurance(
     )
     environment[SKILLGUARD_VALIDATION_DIGEST_ENV] = str(
         (skillguard_validation_toolchain.get("manifest") or {}).get("digest") or ""
+    )
+    environment[INSTALLATION_IDENTITY_PYTHON_EXECUTABLE_ENV] = str(
+        skillguard_validation_toolchain.get("installation_python_executable")
+        or sys.executable
     )
     flowguard_root = Path(
         str(flowguard_validation_toolchain.get("snapshot_root") or "")
@@ -3504,11 +3516,18 @@ def install_codex_integration(
         previous_installation_identity_pythonpath_value = os.environ.get(
             INSTALLATION_IDENTITY_PYTHONPATH_VALUE_ENV
         )
+        previous_installation_identity_python_executable = os.environ.get(
+            INSTALLATION_IDENTITY_PYTHON_EXECUTABLE_ENV
+        )
         os.environ[INSTALLATION_IDENTITY_PYTHONPATH_PRESENT_ENV] = (
             "1" if "PYTHONPATH" in os.environ else "0"
         )
         os.environ[INSTALLATION_IDENTITY_PYTHONPATH_VALUE_ENV] = (
             previous_pythonpath or ""
+        )
+        os.environ[INSTALLATION_IDENTITY_PYTHON_EXECUTABLE_ENV] = str(
+            validation_toolchain.get("installation_python_executable")
+            or sys.executable
         )
         os.environ[SKILLGUARD_VALIDATION_ROOT_ENV] = str(
             validation_toolchain["snapshot_root"]
@@ -3609,6 +3628,14 @@ def install_codex_integration(
             else:
                 os.environ[INSTALLATION_IDENTITY_PYTHONPATH_VALUE_ENV] = (
                     previous_installation_identity_pythonpath_value
+                )
+            if previous_installation_identity_python_executable is None:
+                os.environ.pop(
+                    INSTALLATION_IDENTITY_PYTHON_EXECUTABLE_ENV, None
+                )
+            else:
+                os.environ[INSTALLATION_IDENTITY_PYTHON_EXECUTABLE_ENV] = (
+                    previous_installation_identity_python_executable
                 )
         payload["automations_paused_before_migration"] = paused_before_migration
         payload["pause_before_migration"] = pause_before_migration

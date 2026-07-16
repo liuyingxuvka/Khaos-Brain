@@ -1508,14 +1508,14 @@
         "metadata": {},
         "owner": "AutomationRuntimeAssuranceBlock",
         "primary_path_id": "",
-        "rationale": "The long-running supervisor freezes static authority before native work, then admits only the exact current run evidence produced after native completion; it never reloads global SkillGuard or inherits stale receipt authority.",
+        "rationale": "The long-running supervisor freezes static authority before native work, reuses the exact Python launch path captured by the isolated official installation while requiring it to resolve to the same interpreter identity, then admits only the exact current run evidence produced after native completion; it never reloads global SkillGuard or inherits stale receipt authority.",
         "scoped_out_reason": "",
         "similarity_obligation_ids": [],
         "similarity_relation_ids": [],
         "source_ref": "scripts/check_kb_skillguard.py#_InstalledSupervisionSession",
         "surface_id": "surface:automation-frozen-supervision-session",
         "surface_kind": "process",
-        "validation_boundary": "start-frozen identity reuse, exact seven-key dynamic evidence projection, inherited-value clearing, undeclared-key rejection, real scheduled Dream receipt replay, and FlowGuard same-class known-bad proofs"
+        "validation_boundary": "start-frozen identity reuse, cross-platform equivalent Python launch-alias acceptance with different-interpreter rejection, exact seven-key dynamic evidence projection, inherited-value clearing, undeclared-key rejection, real scheduled Dream receipt replay, and FlowGuard same-class known-bad proofs"
       },
       {
         "business_intent_ids": [

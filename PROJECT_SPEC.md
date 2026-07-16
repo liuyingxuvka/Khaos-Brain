@@ -1220,7 +1220,11 @@ SkillGuard/global-router pair then passes through the official SkillGuard
 transaction installer inside an attempt-local directory whose Codex home is an
 isolated `.codex`; the upgrader captures and replays the official current
 installation receipt there. Every child check consumes that installed isolated
-identity, while FlowGuard checks consume their frozen package snapshot. No child
+identity through the exact Python launch path captured at installation and
+also proves that path still resolves to the same interpreter binary. This keeps
+Linux executable aliases from changing command identity while rejecting a real
+interpreter replacement; FlowGuard checks consume their frozen package snapshot.
+No child
 rediscovers, installs, or rewrites the user's mutable global SkillGuard. A
 temporary live-tree replacement therefore cannot split one run across tool
 versions, but a genuinely different source or isolated installed identity at

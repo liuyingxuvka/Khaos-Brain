@@ -1743,3 +1743,77 @@ un_khaos_brain_conformance.py` - conformance replay passed lane lock, organizati
 
 ### Next Actions
 - Push the frozen Khaos branch and require terminal green clean branch, main, and tag CI before publishing v0.6.2.
+
+
+## khaos-brain-v062-linux-python-command-identity - Preserve exact isolated SkillGuard Python command identity across Linux scheduled supervision.
+
+- Project: Khaos-Brain
+- Trigger reason: Clean branch CI run 29502745770 failed closed because the installed smoke command fingerprint changed across equivalent Linux Python launch aliases.
+- Status: in_progress
+- Skill decision: used_existing_model_preflight_model_miss_review_development_process_flow_and_model_test_alignment
+- Started: 2026-07-16T13:50:18+00:00
+- Ended: 2026-07-16T13:50:18+00:00
+- Duration seconds: 0.000
+- Commands OK: False
+
+### Model Files
+- .flowguard/behavior_commitment_ledger/ledger.json
+
+### Commands
+- FAIL (0.000s): `GitHub Actions run 29502745770: all five scheduled-production owners blocked at current_installed_smoke_command_fingerprint.`
+
+### Findings
+- The official command fingerprint preserves the raw Python launch path while the environment fingerprint resolves the interpreter identity.
+
+### Counterexamples
+- Do not drop command identity, accept an arbitrary interpreter, refresh global SkillGuard, or add an alternate supervision path.
+
+### Friction Points
+- none recorded
+
+### Skipped Steps
+- none recorded
+
+### Risk Evidence Summary
+- The failed CI attempt remained paused and recoverable; no automation native owner started.
+
+### Next Actions
+- Bind scheduled supervision to the install-captured Python launch path, prove same resolved interpreter identity, compile affected contracts, and rerun clean CI.
+
+
+## khaos-brain-v062-linux-python-command-identity - Preserve exact isolated SkillGuard Python command identity across Linux scheduled supervision.
+
+- Project: Khaos-Brain
+- Trigger reason: Clean branch CI run 29502745770 failed closed because the installed smoke command fingerprint changed across equivalent Linux Python launch aliases.
+- Status: completed
+- Skill decision: used_existing_model_preflight_model_miss_review_development_process_flow_and_model_test_alignment
+- Started: 2026-07-16T13:54:42+00:00
+- Ended: 2026-07-16T13:54:42+00:00
+- Duration seconds: 0.000
+- Commands OK: True
+
+### Model Files
+- .flowguard/behavior_commitment_ledger/ledger.json
+
+### Commands
+- OK (0.000s): `80 affected SkillGuard automation, readiness, and installer tests plus 2 subtests passed.`
+- OK (0.000s): `All five Khaos managed SkillGuard contracts compiled and passed exact no-write parity checks.`
+- OK (0.000s): `Positive equivalent-launch-path and negative different-interpreter tests passed.`
+
+### Findings
+- Scheduled supervision now launches with the exact install-captured Python path and separately requires the official resolved interpreter identity to remain equal.
+
+### Counterexamples
+- A genuinely different interpreter remains blocked before the worker starts; no global SkillGuard refresh or alternate supervision route exists.
+
+### Friction Points
+- Windows Store Python requires the same non-strict path resolution semantics used by the official SkillGuard environment fingerprint.
+
+### Skipped Steps
+- none recorded
+
+### Risk Evidence Summary
+- Local same-class and affected regression evidence is current; one new clean Linux branch CI run is still required for release confidence.
+
+### Next Actions
+- Push the follow-up Khaos commit and require terminal green CI before main or tag.
