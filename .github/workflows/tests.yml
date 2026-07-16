@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SKILLGUARD_COMMIT: dadcc388de63b5ad4fb03a143bf320c9dcd80b0c
+      CODEX_KB_AUTOMATION_MODEL: ci-current-model
+      CODEX_KB_AUTOMATION_REASONING_EFFORT: xhigh
 
     steps:
       - name: Check out repository

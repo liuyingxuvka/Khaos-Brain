@@ -14,6 +14,7 @@
 - Current evidence: migration/installer testing passed 27 tests plus 4 subtests; affected projection/history/rollback/retrieval/assurance testing passed 38 tests plus 6 subtests; the final contract-aligned installer rerun passed 20 tests. The real workspace produced exactly one open `incompatible-current-projection-authority` work item.
 - FlowGuard evidence: authority cutover, field lifecycle, ModelMesh reattachment, code structure, skill-suite markers, and project adoption audits passed their current structural boundaries. Model-Test Alignment and TestMesh correctly remain `frozen_not_run` until the sole final aggregate owner executes.
 - Interrupted evidence: one installer-test launcher ended without a terminal report; zero matching descendant processes were confirmed before the clean 20-test rerun, and the interrupted output was not reused.
+- Clean CI evidence: run 29477368830 passed checkout, dependency installation, and frozen validation-toolchain setup, then failed closed before mutation because GitHub's runner has no Codex provider metadata or configuration from which to resolve an automation model. The repair supplies an explicit CI-only model/effort fixture; production resolution remains fail-closed and unchanged.
 - Claim boundary: focused model-miss evidence only. Installer, aggregate, CI, and release readiness remain pending on the frozen source.
 - Next actions: refresh only the affected repository-local SkillGuard contract, run affected installer/FlowGuard checks, then use clean branch CI as the fresh-install release gate.
 
