@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.6.1 - 2026-07-16
+
+- Fixed clean-machine and GitHub Actions installation by pinning the public LogicGuard v0.18.0 source commit instead of requesting a package that is not published on PyPI.
+- Raised the runtime minimum to LogicGuard 0.18.0, the first public release that provides the exact ModelStore and ModelMesh authority required by Khaos Brain 0.6.
+- Split repository validation dependencies from product runtime dependencies, pinned the public FlowGuard v0.56.0 source commit, and declared pytest for reproducible model-assurance checks in GitHub Actions.
+- Corrected GitHub Actions to run the pytest suite directly so pytest-style retirement and automation checks are executed instead of merely imported by unittest discovery.
+- Documented the official GitHub dependency boundary and preserved the existing LogicGuard-native card, Sleep, Dream, migration, and retrieval behavior unchanged.
+
 ## v0.6.0 - 2026-07-16
 
 - Made every admitted Khaos Brain card a deterministic projection of an exact LogicGuard model revision, root ArgumentBlock, generation, and grounded ModelMesh rather than an independent semantic authority.

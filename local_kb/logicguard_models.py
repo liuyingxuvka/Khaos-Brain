@@ -13,7 +13,7 @@ from uuid import uuid4
 from local_kb.common import normalize_string_list, normalize_text, safe_float, utc_now_iso
 
 
-MIN_LOGICGUARD_VERSION = "0.17.4"
+MIN_LOGICGUARD_VERSION = "0.18.0"
 LOGICGUARD_AUTHORITY_SCHEMA = "khaos-brain.logicguard-authority.v1"
 AUTHORITY_GENERATION_POINTER_SCHEMA = "khaos-brain.logicguard-authority-generation.v1"
 LOGICGUARD_AUTHORITY_ROOT = Path(".local") / "khaos-brain" / "logicguard-authority"

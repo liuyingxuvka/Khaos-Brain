@@ -1,0 +1,3 @@
+-r requirements.txt
+flowguard @ git+https://github.com/liuyingxuvka/FlowGuard.git@10b6f108a741be8263cb9a09c105b369429c4766
+pytest==9.0.2

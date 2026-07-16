@@ -88,7 +88,7 @@ REQUIRED_BY_FILE: dict[str, tuple[str, ...]] = {
         "authority_generation_id",
     ),
     "local_kb/logicguard_models.py": (
-        'MIN_LOGICGUARD_VERSION = "0.17.4"',
+        'MIN_LOGICGUARD_VERSION = "0.18.0"',
         "logicguard_dependency_preflight",
         "AUTHORITY_GENERATION_WRITERS",
         "read_exact_model",
