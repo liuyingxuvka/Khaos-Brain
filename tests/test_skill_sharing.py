@@ -18,6 +18,7 @@ from local_kb.skill_sharing import (
     skill_directory_content_hash,
 )
 from local_kb.store import load_yaml_file, write_yaml_file
+from tests.current_runtime_helpers import activate_current_kb_runtime
 
 
 class SkillSharingTests(unittest.TestCase):
@@ -37,7 +38,10 @@ class SkillSharingTests(unittest.TestCase):
             "if": {"notes": "A card relies on a local Skill."},
             "action": {"description": "Declare the dependency as metadata."},
             "predict": {"expected_result": "Maintainers can review card and Skill together."},
-            "use": {"guidance": "Do not auto-install the Skill."},
+            "use": {
+                "guidance": "Do not auto-install the Skill.",
+                "unavailable_skill_guidance": "Use the card without the Skill and keep the dependency unresolved.",
+            },
         }
 
     def test_extract_skill_dependencies_supports_required_and_recommended_fields(self) -> None:
@@ -83,6 +87,7 @@ class SkillSharingTests(unittest.TestCase):
                 encoding="utf-8",
             )
             write_yaml_file(root / "kb" / "public" / "skill-backed-card.yaml", self._card())
+            activate_current_kb_runtime(root)
 
             result = build_organization_outbox(root, organization_id="sandbox")
             proposal = load_yaml_file(Path(result["created"][0]["path"]))

@@ -1,18 +1,33 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
+import importlib.util
 import json
 import os
 import platform
 import re
 import shutil
+import subprocess
+import sys
 import time
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
+from local_kb.automation_contracts import (
+    PRE_RESTORE_ASSURANCE_TIMEOUT_SECONDS,
+    SKILLGUARD_COMPLETION_MARKER,
+    SKILLGUARD_PARTIAL_MARKER,
+    validate_completion_surface,
+)
 from local_kb.card_ids import load_or_create_installation_id
 from local_kb.common import utc_now_iso
+from local_kb.transactional_install import (
+    install_managed_runtime,
+    latest_install_receipt,
+    tree_manifest,
+)
 from local_kb.config import (
     KB_ROOT_ENV_VAR,
     default_codex_home,
@@ -21,6 +36,7 @@ from local_kb.config import (
     load_install_state,
     save_install_state,
 )
+from local_kb.process_control import run_with_timeout_cleanup
 
 
 GLOBAL_SKILL_NAME = "predictive-kb-preflight"
@@ -37,10 +53,24 @@ AUTOMATION_MODEL_POLICY = "strongest-available"
 AUTOMATION_REASONING_EFFORT_POLICY = "deepest"
 AUTOMATION_MODEL_ENV_VAR = "CODEX_KB_AUTOMATION_MODEL"
 AUTOMATION_REASONING_EFFORT_ENV_VAR = "CODEX_KB_AUTOMATION_REASONING_EFFORT"
-AUTOMATION_FALLBACK_MODEL = "gpt-5.5"
-AUTOMATION_FALLBACK_REASONING_EFFORT = "xhigh"
+UPGRADE_ATTEMPT_SCHEMA = "khaos-brain.upgrade-attempt.v1"
+UPGRADE_ATTEMPT_ROOT = Path(".khaos-brain-install") / "attempts"
 REASONING_EFFORT_ORDER = ("none", "minimal", "low", "medium", "high", "xhigh")
 AUTOMATION_DAILY_BYDAY = "SU,MO,TU,WE,TH,FR,SA"
+RETIRED_MAINTENANCE_SKILL_IDS = ("kb-architect-pass",)
+RETIRED_AUTOMATION_IDS = ("kb-architect",)
+SKILLGUARD_VALIDATION_ROOT_ENV = "KHAOS_BRAIN_SKILLGUARD_VALIDATION_ROOT"
+SKILLGUARD_VALIDATION_DIGEST_ENV = "KHAOS_BRAIN_SKILLGUARD_VALIDATION_DIGEST"
+FLOWGUARD_VALIDATION_ROOT_ENV = "KHAOS_BRAIN_FLOWGUARD_VALIDATION_ROOT"
+FLOWGUARD_VALIDATION_DIGEST_ENV = "KHAOS_BRAIN_FLOWGUARD_VALIDATION_DIGEST"
+LOGICGUARD_VALIDATION_ROOT_ENV = "KHAOS_BRAIN_LOGICGUARD_VALIDATION_ROOT"
+LOGICGUARD_VALIDATION_DIGEST_ENV = "KHAOS_BRAIN_LOGICGUARD_VALIDATION_DIGEST"
+INSTALLATION_IDENTITY_PYTHONPATH_PRESENT_ENV = (
+    "KHAOS_BRAIN_INSTALLATION_IDENTITY_PYTHONPATH_PRESENT"
+)
+INSTALLATION_IDENTITY_PYTHONPATH_VALUE_ENV = (
+    "KHAOS_BRAIN_INSTALLATION_IDENTITY_PYTHONPATH_VALUE"
+)
 ORG_CONTRIBUTE_WINDOW = (10 * 60, 13 * 60 + 59)
 ORG_MAINTENANCE_WINDOW = (14 * 60, 16 * 60)
 MISTAKE_PRIORITY_MARKERS = (
@@ -56,6 +86,25 @@ CANONICAL_INTERFACE_MARKERS = (
     "localized display projection",
     "encoding-stable json",
 )
+CURRENT_RUNTIME_ONLY_MARKERS = (
+    "zero compatibility",
+    "zero fallback",
+    "upgrade-only direct-migration",
+    "unfinished upgrade-ai work item",
+    "missing current authority",
+)
+LOGICGUARD_NATIVE_DEFAULT_MARKERS = (
+    "deterministic projection",
+    "exact logicguard",
+    "argumentblock",
+    "grounded modelmesh",
+    "sleep is the sole normal-runtime",
+)
+AUTOMATION_SKILLGUARD_COMPLETION_RULE = (
+    f"SkillGuard completion rule: {SKILLGUARD_PARTIAL_MARKER}; complete the native route and its "
+    f"{SKILLGUARD_COMPLETION_MARKER}. A declared no-op is complete only when the native gate receipt proves its terminal. "
+    "Fixture or capability evidence cannot close a scheduled run; the installed SkillGuard builder must bind the exact scheduler execution, current installation receipt id/hash plus portable receipt-root reference, and installed runtime fingerprint. "
+)
 MAINTENANCE_SKILL_SPECS = (
     {
         "name": "kb-sleep-maintenance",
@@ -66,11 +115,6 @@ MAINTENANCE_SKILL_SPECS = (
         "name": "kb-dream-pass",
         "automation_id": "kb-dream",
         "prompt_marker": "DREAM_PROMPT.md",
-    },
-    {
-        "name": "kb-architect-pass",
-        "automation_id": "kb-architect",
-        "prompt_marker": "ARCHITECT_PROMPT.md",
     },
     {
         "name": "kb-organization-contribute",
@@ -84,7 +128,7 @@ MAINTENANCE_SKILL_SPECS = (
     },
     {
         "name": "khaos-brain-update",
-        "automation_id": "manual-update",
+        "automation_id": "khaos-brain-system-update",
         "prompt_marker": "scripts/install_codex_kb.py",
     },
 )
@@ -100,119 +144,83 @@ def _has_canonical_interface_wording(text: str) -> bool:
     normalized = text.lower()
     return all(marker in normalized for marker in CANONICAL_INTERFACE_MARKERS)
 
+
+def _has_current_runtime_only_wording(text: str) -> bool:
+    normalized = text.lower()
+    return all(marker in normalized for marker in CURRENT_RUNTIME_ONLY_MARKERS)
+
+
+def _has_logicguard_native_default_wording(text: str) -> bool:
+    normalized = text.lower()
+    return all(marker in normalized for marker in LOGICGUARD_NATIVE_DEFAULT_MARKERS)
+
+SYSTEM_UPDATE_AUTOMATION_PROMPT = (
+    "Use $khaos-brain-update only as the fully automatic system-maintenance update gate for this workspace. "
+    + AUTOMATION_SKILLGUARD_COMPLETION_RULE
+    +
+    "Read PROJECT_SPEC.md and .agents/skills/local-kb-retrieve/SKILL.md, then run only "
+    "`python scripts/run_kb_guarded_automation.py --skill khaos-brain-update --json`. The guarded runner invokes "
+    "the native system-update owner and binds this exact immutable native receipt to SkillGuard; do not run only the child "
+    "system-check and call it complete. If apply_ready=false, finish through the sole enforced successful terminal no-op only for "
+    "no-update, waiting-for-user, or ui-running; already-upgrading, failed-awaiting-user, concurrent-update, and unknown blockers remain incomplete. "
+    "If apply_ready=true, apply the explicitly prepared update through "
+    "$khaos-brain-update: preserve local knowledge and settings, use Git fast-forward only, run the transactional "
+    "installer and install check, retire legacy managed surfaces, and execute the versioned maintenance migration as a direct-to-current LogicGuard authority cutover. "
+    "The migration must publish exact models, scoped meshes, deterministic projections, the exact active index, and the generation pointer last; "
+    "it must prove zero retired authority residuals and must not add a runtime legacy reader or projection fallback. Always keep surviving automations paused—"
+    "all five of them—through the prepared-update non-terminal declared-check authorization receipt (`authorization_only`, `overall_complete=false`), never a second closure profile. Then bind the preserved states, independent "
+    "user_paused values, current source hashes, and exact target automation.toml hashes into a staged restoration receipt; "
+    "run a fresh composed enforced SkillGuard closure over authorize+finalize before activating anything. Only after it "
+    "passes may the native executor apply those exact hashes, read back every managed state, run the normal install check, "
+    "mark CURRENT, and write the activation receipt. Completion means every hard gate passes. On any failure keep or return all survivors to PAUSED, preserve rollback "
+    "copies, mark FAILED, and report the machine receipts."
+)
+
+# Chaos Brain lifecycle prompts supersede the legacy editorial prompt bodies.
+# prompt bodies above.  They are intentionally compact because the Skills own
+# the full workflow contract and the automations only select the entrypoint.
 SLEEP_AUTOMATION_PROMPT = (
-    "Use $kb-sleep-maintenance to run the repository's local KB sleep-maintenance pass for this workspace. "
-    "Use PROJECT_SPEC.md, "
-    "docs/maintenance_agent_worldview.md, docs/maintenance_runbook.md, and .agents/skills/local-kb-retrieve/MAINTENANCE_PROMPT.md as the "
-    "authoritative guides. Before the first stateful command, run "
-    "`python .agents/skills/local-kb-retrieve/scripts/kb_lane_status.py --lane kb-sleep --status running "
-    "--wait-clear --poll-seconds 300 --json`; if another core maintenance lane is running, wait and recheck "
-    "every 5 minutes instead of skipping. "
-    "First read the shared maintenance-agent worldview, write a visible sleep execution plan with checkpoint statuses, start with a "
-    "sleep self-preflight search against system/knowledge-library/maintenance, then run proposal mode, inspect "
-    "taxonomy and route gaps, treat high-volume proposal output and candidate backlog as editorial triage inputs "
-    "rather than an apply agenda, track the current maintenance run id from the consolidation output or chosen "
-    "`--run-id` and reuse that same run id for final lane completion, run a mandatory similar-card merge checkpoint, run a mandatory overloaded-card "
-    "split checkpoint, run an organization Skill bundle consolidation checkpoint that groups imported read-only "
-    "Skills by bundle_id and keeps only the latest approved version by version_time, record skip-with-reason "
-    "decisions when merge, split, or Skill replacement is not safe, review "
-    "candidate route quality by preferring functional "
-    "domain paths over project-name roots, do not create new candidates merely because the tooling can, "
-    "treat mechanical apply eligibility as capability rather than approval and keep high-volume lanes proposal-only "
-    "unless a compact reviewed action-key set is explicitly selected, "
-    "inspect `dream_validation_summary` on review-candidate or review-entry-update actions as Dream sandbox evidence for Sleep judgment "
-    "rather than automatic promotion, "
-    "allow the current low-risk new-candidate, related-card, cross-index, "
-    "AI-authored semantic-review, and AI-authored i18n apply paths when clearly eligible, "
-    "use selected action keys with `--action-key` when only part of an apply lane is approved, "
-    "require future utility before auto-creating candidate cards, require semantic-review utility assessments, "
-    "limit semantic-review to at most 3 trusted-card modifications per run, run exactly one final AI-authored zh-CN "
-    "display completion checkpoint after candidate/card creation, semantic card text changes, and route review are done, "
-    "run a canonical-interface checkpoint before translation apply so CLI machine JSON, automation payload keys, installer checks, "
-    "top-level card fields, and route values remain canonical machine surfaces while Chinese stays in i18n.zh-CN, route display labels, and UI view models, "
-    "cover card display fields and route/path display labels in that single checkpoint through one i18n plan, do not "
-    "run separate mid-run translation cleanup, keep taxonomy rewrites proposal-only unless current "
-    "tooling cleanly supports them, inspect rollback artifacts including history-events, related-card-entries, "
-    "cross-index-entries, and semantic-review-entries when present, continue "
-    "through every safe checkpoint instead of stopping after a short proposal, attempt supported low-risk repairs "
-    "and rerun the relevant validation when a command exposes a fixable issue, run a final sleep postflight check, "
-    "append one structured maintenance observation when the pass exposed a reusable lesson or process hazard, stop "
-    "after that final observation instead of recursively consolidating it, then run "
-    "`python .agents/skills/local-kb-retrieve/scripts/kb_lane_status.py --lane kb-sleep --status completed --run-id <run_id> --json`, "
-    "and report the run id, execution plan "
-    "status, self-preflight entries, what became more accurate or clearer, reviewed observation counts, "
-    "candidates created or deliberately not created, weak/noisy material rejected or kept history-only, route adjustments or concerns, "
-    "semantic-review decisions applied or skipped, final zh-CN display completion status for cards and routes, translations updated or still missing, validations run, "
-    "repaired or proposal-only issues, maintenance decisions, "
-    "final postflight observation status, undeclared taxonomy gaps, hub-vs-overloaded card reviews, and the next "
-    "proposal-only targets."
+    "Use $kb-sleep-maintenance for the fully automatic local Sleep pass. Read PROJECT_SPEC.md, "
+    + AUTOMATION_SKILLGUARD_COMPLETION_RULE
+    +
+    "docs/maintenance_agent_worldview.md, and .agents/skills/local-kb-retrieve/MAINTENANCE_PROMPT.md. "
+    "Run only `python scripts/run_kb_guarded_automation.py --skill kb-sleep-maintenance --json`; the guarded "
+    "runner owns lane-to-terminal orchestration, invokes the native Sleep entrypoint "
+    "`.agents/skills/local-kb-retrieve/scripts/kb_sleep.py` exactly once, and binds this "
+    "run's immutable native receipt to SkillGuard. Do not run the child entrypoint directly. Consume only the committed "
+    "increment after the last watermark, give every admitted observation one explicit disposition, settle or park "
+    "candidates with executable reopen conditions, apply evidence-driven promotion or downgrade review, and act as the "
+    "sole canonical model-generation publisher. Build a LogicGuard model revision for every admitted entry, preserve "
+    "explicit model gaps instead of inventing support, assemble exact revisions into a grounded ModelMesh only from "
+    "qualifying provenance, consume typed Dream handoffs exactly once, and atomically publish models, meshes, "
+    "deterministic projections, manifests, and the generation pointer last. Rebuild and validate the active index against that exact generation; commit the watermark only after "
+    "all durable decisions succeed. On any blocker roll back the complete generation, leave the watermark unchanged, and report the machine receipt. "
+    "Do not request human file review, do not start a second maintenance implementation, and do not resume another "
+    "automation. Finish by marking the same Sleep run id completed or failed through kb_lane_status.py."
 )
 
 DREAM_AUTOMATION_PROMPT = (
-    "Use $kb-dream-pass to run one bounded local KB dream-mode pass for this workspace. "
-    "Use PROJECT_SPEC.md, docs/maintenance_agent_worldview.md, docs/dream_runbook.md, "
-    "and .agents/skills/local-kb-retrieve/DREAM_PROMPT.md as the authoritative guides. First read the "
-    "shared maintenance-agent worldview; the runner must wait on the shared local maintenance lock instead of skipping when Sleep or Architect is active, then run "
-    "`python .agents/skills/local-kb-retrieve/scripts/kb_dream.py --json`, "
-    "inspect the generated preflight, plan, opportunity, experiment, execution-plan, "
-    "and report artifacts, select a bounded route-deduped batch of grounded evidence gaps only when each one "
-    "clarifies future retrieval, routing, card use, or Sleep consolidation, report a no-op when no valuable gap exists, require experiment "
-    "design, validation plan, safety tier, rollback plan, and explicit success/failure/inconclusive criteria before "
-    "execution, write sandbox experiment artifacts only under kb/history/dream/<run-id>/sandbox/ and record "
-    "retrieval-ab sandbox paths, allowed writes, evidence grades, validation results, Sleep handoff, and Architect handoff, "
-    "skip route-and-mode experiments already passed with strong or moderate sandbox evidence in a prior Dream report, "
-    "when a strong or moderate passed sandbox result validates an existing candidate or low-confidence card, record "
-    "the source entry id and structured Sleep handoff with suggested_action update-card, "
-    "keep write-back history-only by default, create candidates only when history-only is insufficient, "
-    "keep external-system experiments proposal-only, avoid trusted-card or taxonomy rewrites, avoid repeating known "
-    "route-gap observations without new decision value, and report the run id, preflight entries retrieved, selected "
-    "evidence gaps or no-op reason, future retrieval/use decisions clarified, experiments executed in order, "
-    "execution-plan checkpoint status, safety tier and rollback plan, result classifications, candidates created if any with why history-only was insufficient, "
-    "history events written, sandbox paths, evidence grades, validation results, Sleep/Architect handoff, and anything still needing live-task confirmation."
-)
-
-ARCHITECT_AUTOMATION_PROMPT = (
-    "Use $kb-architect-pass to run one KB Architect mechanism-maintenance pass for this workspace. "
-    "Use PROJECT_SPEC.md, "
-    "docs/maintenance_agent_worldview.md, docs/architecture_runbook.md, and .agents/skills/local-kb-retrieve/ARCHITECT_PROMPT.md as the "
-    "authoritative guides. First read the shared maintenance-agent worldview. The runner must wait on the shared local maintenance lock instead of skipping when Sleep or Dream is active. Before the first stateful command, write a visible Architect execution plan with "
-    "checkpoint statuses and include every required checkpoint; do not skip any checkpoint silently. Start with "
-    "Architect self-preflight against system/knowledge-library/maintenance, then run "
-    "`python scripts/khaos_brain_update.py --architect-check --json`; if it reports apply_ready=true, use "
-    "$khaos-brain-update to apply the authorized update while the UI is closed, report the update result, and "
-    "stop this old-version Architect pass so the next run uses the updated code. If the update is available but "
-    "not prepared, or prepared while the UI is running, leave the state for the UI and continue normal Architect "
-    "maintenance. Then run "
-    "`python .agents/skills/local-kb-retrieve/scripts/kb_architect.py --json`, "
-    "inspect the generated plan, preflight, signals, proposals, decisions, "
-    "execution-plan, report, and proposal_queue artifacts as incoming evidence, inspect the maintained queue and the "
-    "system-readable maintenance rollup at kb/history/architecture/maintenance_rollup.json before "
-    "acting on new signals, start with queue hygiene by merging duplicates, closing resolved or obsolete items, and "
-    "avoiding reopened terminal items unless there is a real regression, use only Evidence, Impact, and Safety for proposal "
-    "review, keep statuses limited to new, watching, ready-for-patch, ready-for-apply, applied, rejected, and "
-    "superseded, do not use a human-review status, keep long-observation items as watching, keep the scope to "
-    "KB operating mechanisms rather than card content, do not rewrite trusted cards or promote candidates, apply "
-    "only narrow, reversible, high-value mechanism changes whose execution packet is agent-ready inside prompt, "
-    "runbook, validation, or proposal-queue maintenance with an immediate validation bundle, sandbox-apply only "
-    "when sandbox_apply.sandbox_ready=true and the packet lists planned sandbox path, allowed/disallowed writes, "
-    "expected effect, validation commands, manual checks, and merge/block decision fields, choose at most one "
-    "sandbox-ready packet to trial before ending the full Architect pass instead of repeatedly reporting the same "
-    "ready packet, inspect selected_sandbox_trial, write <planned_sandbox_path>/trial_result.json after the trial, "
-    "record it with --record-trial-result, generate patch plans "
-    "for medium-safety mechanism changes, mark successful packets applied and unsafe or failed packets blocked, "
-    "create a new proposal only when the signal is not already represented by an active or terminal queue item, confirm the "
-    "runner's KB postflight observation or append one structured Architect observation if a new mechanism lesson "
-    "was exposed, confirm the rollup contains Sleep, Dream, Architect, FlowGuard, organization, content-boundary, and install-sync status, and report the run id, checkpoint status for every plan item, preflight entries retrieved, "
-    "software update gate result, "
-    "proposal counts by status before and after queue hygiene, duplicate clusters merged or superseded, resolved or "
-    "already-applied items closed, ready-for-apply and ready-for-patch items, sandbox-ready packets with planned sandbox path and write boundaries, execution packets by mode, changes "
-    "applied, validation bundle run, blocked execution states, postflight observation status, system-readable maintenance rollup status, watching items left "
-    "for long observation, canonical-interface mechanism signals, and the system evolution route."
+    "Use $kb-dream-pass for one fully automatic bounded Dream pass. Read PROJECT_SPEC.md, "
+    + AUTOMATION_SKILLGUARD_COMPLETION_RULE
+    +
+    "docs/maintenance_agent_worldview.md, docs/dream_runbook.md, and "
+    ".agents/skills/local-kb-retrieve/DREAM_PROMPT.md, then run only "
+    "`python scripts/run_kb_guarded_automation.py --skill kb-dream-pass --json`. The guarded runner invokes the "
+    "native Dream entrypoint `.agents/skills/local-kb-retrieve/scripts/kb_dream.py` exactly once and binds this run's immutable terminal receipt to SkillGuard; do not "
+    "run the child entrypoint directly. First pin the exact LogicGuard generation, model revision, root ArgumentBlock, "
+    "and ModelMesh revision. Derive decision-relevant stable fingerprints, skip already closed unchanged evidence as "
+    "no_delta_closed, execute only a small valuable route-deduplicated experiment set, and run separate applicable checks for evidence removal, "
+    "assumption removal, rebuttal strengthening or counterexamples, boundary pressure, cross-edge removal, and neighbor-pin replacement. Emit typed idempotent Sleep handoffs "
+    "for material model gaps with exact authority bindings. Dream may write only bounded Dream runtime/experiment artifacts "
+    "and its handoff ledger; it must not directly write cards, models, meshes, candidates, confidence, predictive observations, "
+    "or central KB history, and it must prove the canonical generation unchanged. A no-op is a successful convergent result."
 )
 
 ORG_CONTRIBUTE_AUTOMATION_PROMPT = (
-    "Use $kb-organization-contribute to run one settings-gated organization KB contribution pass for this "
-    "workspace. Use PROJECT_SPEC.md, docs/organization_mode_plan.md, and .agents/skills/local-kb-retrieve/SKILL.md "
+    "Use $kb-organization-contribute to run one settings-gated organization KB contribution pass for this workspace. "
+    + AUTOMATION_SKILLGUARD_COMPLETION_RULE
+    +
+    "Use PROJECT_SPEC.md, docs/organization_mode_plan.md, and .agents/skills/local-kb-retrieve/SKILL.md "
     "as the authoritative guides. Start by reading .local/khaos_brain_desktop_settings.json through "
     "scripts/kb_org_outbox.py --automation; if the desktop settings are personal mode, missing, unvalidated, or not "
     "connected to a validated organization repository, return a successful no-op. When organization mode is valid, "
@@ -223,7 +231,9 @@ ORG_CONTRIBUTE_AUTOMATION_PROMPT = (
     "depend on local Skills, upload card-bound Skill bundles with bundle_id, content_hash, version_time, "
     "original_author, readonly_when_imported, and update_policy=original_author_only; if several local cards point "
     "at the same bundle_id, upload the local latest version for that bundle rather than an older card-carried copy. Use "
-    "`python scripts/kb_org_outbox.py --automation` for the scheduled pass; it should prepare an import branch under kb/imports, push eligible import proposals automatically, open a GitHub PR when available, and apply org-kb:auto-merge only when checks allow it "
+    "`python scripts/run_kb_guarded_automation.py --skill kb-organization-contribute --json` for the scheduled pass; "
+    "the guarded runner invokes scripts/kb_org_outbox.py --automation exactly once and binds the immutable native "
+    "terminal receipt to SkillGuard. Do not run the child entrypoint directly. The native pass should prepare an import branch under kb/imports, then revalidate the exact materialized changed paths, counts, hashes, privacy/shareability, Skill author/version/hash metadata, and base-branch rollback before any push, then push eligible import proposals automatically only after that current revalidation, open a GitHub PR when available, and apply org-kb:auto-merge only when current checks allow it "
     "while leaving movement into organization main, trust upgrades, and final merge to organization maintenance and GitHub checks. Run KB postflight after "
     "any non-skipped pass, record a "
     "structured observation, and report the settings gate, sync result, preflight entries, created and skipped proposal counts, "
@@ -232,13 +242,18 @@ ORG_CONTRIBUTE_AUTOMATION_PROMPT = (
 )
 
 ORG_MAINTENANCE_AUTOMATION_PROMPT = (
-    "Use $kb-organization-maintenance to run one settings-gated organization-level Sleep-like maintenance pass "
-    "for this workspace. Treat the organization KB as a shared exchange layer rather than a central truth layer: "
+    "Use $kb-organization-maintenance to run one settings-gated organization-level Sleep-like maintenance pass for this workspace. "
+    + AUTOMATION_SKILLGUARD_COMPLETION_RULE
+    +
+    "Treat the organization KB as a shared exchange layer rather than a central truth layer: "
     "organization maintenance may maintain organization main cards and imported card content with the same editorial "
     "posture as local Sleep, while local machines keep final adoption authority. Use PROJECT_SPEC.md, "
     "docs/maintenance_agent_worldview.md, docs/organization_mode_plan.md, "
     ".agents/skills/local-kb-retrieve/SKILL.md, and organization-review guidance when available. Start by "
-    "reading .local/khaos_brain_desktop_settings.json through scripts/kb_org_maintainer.py --automation; if the "
+    "running only `python scripts/run_kb_guarded_automation.py --skill kb-organization-maintenance --json`; the "
+    "guarded runner invokes scripts/kb_org_maintainer.py --automation exactly once and binds its immutable terminal "
+    "receipt to SkillGuard. Do not run the child entrypoint directly. The native pass first reads "
+    ".local/khaos_brain_desktop_settings.json; if the "
     "desktop settings are personal mode, missing, unvalidated, or organization maintenance participation is not "
     "requested, return a successful no-op. When participation is available for a validated organization "
     "repository, run KB preflight against system/knowledge-library/organization, validate the organization "
@@ -290,11 +305,11 @@ REPO_AUTOMATION_SPECS = (
         "execution_environment": "local",
     },
     {
-        "id": "kb-architect",
-        "name": "KB Architect",
+        "id": "khaos-brain-system-update",
+        "name": "Khaos Brain System Update",
         "kind": "cron",
-        "prompt": ARCHITECT_AUTOMATION_PROMPT,
-        "skill_name": "kb-architect-pass",
+        "prompt": SYSTEM_UPDATE_AUTOMATION_PROMPT,
+        "skill_name": "khaos-brain-update",
         "status": "ACTIVE",
         "rrule": "FREQ=WEEKLY;BYDAY=SU,MO,TU,WE,TH,FR,SA;BYHOUR=14;BYMINUTE=0",
         "model_policy": AUTOMATION_MODEL_POLICY,
@@ -325,6 +340,19 @@ REPO_AUTOMATION_SPECS = (
         "reasoning_effort_policy": AUTOMATION_REASONING_EFFORT_POLICY,
         "execution_environment": "local",
     },
+)
+
+# These managed jobs were introduced after the original Sleep/Dream install
+# surface.  Their absence on a legacy machine has no user state to preserve;
+# it is a known new-component case, not an ambiguous deletion.  Sleep and
+# Dream remain fail-closed when missing because older installations did own
+# those states.
+POST_LEGACY_AUTOMATION_IDS = frozenset(
+    {
+        "khaos-brain-system-update",
+        "kb-org-contribute",
+        "kb-org-maintenance",
+    }
 )
 
 
@@ -429,6 +457,14 @@ def _load_toml_object(path: Path) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _load_json_object(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 def _load_models_cache(codex_home: Path | None = None) -> list[dict[str, Any]]:
     path = models_cache_path(codex_home)
     if not path.exists():
@@ -456,7 +492,7 @@ def _supported_reasoning_efforts(model: dict[str, Any]) -> list[str]:
 
 
 def _general_model_version_key(slug: str) -> tuple[int, ...] | None:
-    match = re.fullmatch(r"gpt-(\d+(?:\.\d+)*)", slug.strip().lower())
+    match = re.fullmatch(r"gpt-(\d+(?:\.\d+)*)(?:-[a-z0-9][a-z0-9-]*)?", slug.strip().lower())
     if not match:
         return None
     return tuple(int(part) for part in match.group(1).split("."))
@@ -478,6 +514,14 @@ def resolve_automation_model(codex_home: Path | None = None) -> str:
         return env_value
 
     models = _load_models_cache(codex_home)
+    configured_model = _config_model(codex_home)
+    available_slugs = [
+        str(model.get("slug", "") or "").strip()
+        for model in models
+        if str(model.get("slug", "") or "").strip()
+    ]
+    if configured_model and (not available_slugs or configured_model in available_slugs):
+        return configured_model
     candidates: list[tuple[tuple[int, ...], str]] = []
     for model in models:
         slug = str(model.get("slug", "") or "").strip()
@@ -486,12 +530,15 @@ def resolve_automation_model(codex_home: Path | None = None) -> str:
             continue
         candidates.append((version_key, slug))
     if candidates:
-        return sorted(candidates, key=lambda item: item[0])[-1][1]
-
-    configured_model = _config_model(codex_home)
+        strongest_version = max(item[0] for item in candidates)
+        return next(slug for version, slug in candidates if version == strongest_version)
     if configured_model:
-        return configured_model
-    return AUTOMATION_FALLBACK_MODEL
+        raise RuntimeError(
+            f"Configured automation model is not present in current provider metadata: {configured_model}"
+        )
+    raise RuntimeError(
+        "Automation model cannot be resolved from an explicit override, current provider metadata, or current Codex configuration."
+    )
 
 
 def resolve_automation_reasoning_effort(
@@ -509,16 +556,19 @@ def resolve_automation_reasoning_effort(
         if str(model_payload.get("slug", "") or "").strip() != selected_model:
             continue
         supported = _supported_reasoning_efforts(model_payload)
-        if AUTOMATION_FALLBACK_REASONING_EFFORT in supported:
-            return AUTOMATION_FALLBACK_REASONING_EFFORT
         ranked = [item for item in REASONING_EFFORT_ORDER if item in supported]
         if ranked:
             return ranked[-1]
+        raise RuntimeError(
+            f"Current provider metadata declares no supported reasoning effort for automation model {selected_model}."
+        )
 
     configured_effort = _config_reasoning_effort(codex_home)
     if configured_effort:
         return configured_effort
-    return AUTOMATION_FALLBACK_REASONING_EFFORT
+    raise RuntimeError(
+        "Automation reasoning effort cannot be resolved from an explicit override, current provider metadata, or current Codex configuration."
+    )
 
 
 def resolve_automation_runtime(codex_home: Path | None = None) -> dict[str, str]:
@@ -803,15 +853,30 @@ def _automation_spec_payload(
 ) -> dict[str, Any]:
     runtime = resolve_automation_runtime(codex_home)
     schedule_window = automation_time_window_label(spec)
-    existing_status = str((existing or {}).get("status", "") or "").upper()
-    user_paused = spec["id"] in {"kb-org-contribute", "kb-org-maintenance"} and existing_status == "PAUSED"
+    existing_payload = existing or {}
+    existing_status = str(existing_payload.get("status", "") or "").upper()
+    status = (
+        existing_status
+        if existing_status in {"ACTIVE", "PAUSED"}
+        else str(spec["status"]).upper()
+    )
+    # Runtime status and the user's pause preference are independent.  An
+    # upgrade may temporarily pause an otherwise enabled automation without
+    # turning that safety pause into a permanent user preference.  Older
+    # automation files did not carry ``user_paused``; the installer performs
+    # this one-time direct state migration before writing the sole current form.
+    user_paused = (
+        bool(existing_payload.get("user_paused"))
+        if "user_paused" in existing_payload
+        else bool(existing_payload) and existing_status == "PAUSED"
+    )
     return {
         "version": 1,
         "id": spec["id"],
         "kind": spec["kind"],
         "name": spec["name"],
         "prompt": spec["prompt"],
-        "status": "PAUSED" if user_paused else spec["status"],
+        "status": status,
         "user_paused": user_paused,
         "rrule": automation_rrule_for_spec(spec, repo_root),
         "schedule_policy": "stable-jitter" if schedule_window else "fixed",
@@ -841,6 +906,704 @@ def _load_automation_toml(path: Path) -> dict[str, Any]:
 
 def _write_automation_toml(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_automation_toml_text(payload), encoding="utf-8")
+
+
+def _set_automation_status_atomic(path: Path, status: str) -> bool:
+    """Change only the scheduler status line, preserving unknown future fields."""
+
+    if not path.is_file():
+        return False
+    text = path.read_text(encoding="utf-8")
+    replacement = f'status = "{str(status).upper()}"'
+    updated, count = re.subn(
+        r'^status\s*=\s*"[A-Z]+"\s*$',
+        replacement,
+        text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    if count == 0:
+        return False
+    temporary = path.with_name(f".{path.name}.{time.time_ns()}.tmp")
+    with temporary.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write(updated)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, path)
+    return True
+
+
+def _render_automation_state_text(
+    text: str,
+    status: str,
+    user_paused: bool,
+) -> str | None:
+    normalized_status = str(status or "").upper()
+    if normalized_status not in {"ACTIVE", "PAUSED"}:
+        return None
+    updated, status_count = re.subn(
+        r'^status\s*=\s*"[A-Z]+"\s*$',
+        f'status = "{normalized_status}"',
+        text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    updated, paused_count = re.subn(
+        r"^user_paused\s*=\s*(?:true|false)\s*$",
+        f"user_paused = {'true' if user_paused else 'false'}",
+        updated,
+        count=1,
+        flags=re.MULTILINE | re.IGNORECASE,
+    )
+    if paused_count == 0 and status_count == 1:
+        updated, paused_count = re.subn(
+            r'^(status\s*=\s*"[A-Z]+"\s*)$',
+            r"\1\n" + f"user_paused = {'true' if user_paused else 'false'}",
+            updated,
+            count=1,
+            flags=re.MULTILINE,
+        )
+    return updated if status_count == 1 and paused_count == 1 else None
+
+
+def _write_text_atomic(path: Path, text: str) -> None:
+    temporary = path.with_name(f".{path.name}.{time.time_ns()}.tmp")
+    with temporary.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write(text)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, path)
+
+
+def _restore_exact_file_snapshot(path: Path, *, existed: bool, content: bytes) -> None:
+    """Restore one upgrade-owned file exactly, including prior absence."""
+
+    if not existed:
+        path.unlink(missing_ok=True)
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{time.time_ns()}.rollback.tmp")
+    with temporary.open("wb") as handle:
+        handle.write(content)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, path)
+
+
+def _text_sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest().upper()
+
+
+def _canonical_payload_hash(payload: Mapping[str, Any]) -> str:
+    return hashlib.sha256(
+        (
+            json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
+            + "\n"
+        ).encode("utf-8")
+    ).hexdigest().upper()
+
+
+def _upgrade_attempt_dir(codex_home: Path, attempt_id: str) -> Path:
+    return codex_home / UPGRADE_ATTEMPT_ROOT / attempt_id
+
+
+def _load_upgrade_attempt(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    supplied_hash = str(payload.get("receipt_hash") or "")
+    body = dict(payload)
+    body.pop("receipt_hash", None)
+    if (
+        payload.get("schema_version") != UPGRADE_ATTEMPT_SCHEMA
+        or not supplied_hash
+        or supplied_hash != _canonical_payload_hash(body)
+    ):
+        return {}
+    return payload
+
+
+def latest_upgrade_attempt(codex_home: Path) -> dict[str, Any]:
+    root = codex_home / UPGRADE_ATTEMPT_ROOT
+    if not root.is_dir():
+        return {}
+    candidates: list[tuple[int, Path, dict[str, Any]]] = []
+    for current in root.glob("*/current.json"):
+        payload = _load_upgrade_attempt(current)
+        if payload:
+            candidates.append((int(payload.get("sequence") or 0), current, payload))
+    if not candidates:
+        return {}
+    _sequence, path, payload = max(
+        candidates,
+        key=lambda row: (
+            str(row[2].get("updated_at") or ""),
+            row[0],
+            row[1].as_posix(),
+        ),
+    )
+    return {**payload, "current_path": str(path)}
+
+
+def _record_upgrade_attempt(
+    codex_home: Path,
+    attempt_id: str,
+    *,
+    phase: str,
+    status: str,
+    details: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    attempt_dir = _upgrade_attempt_dir(codex_home, attempt_id)
+    event_dir = attempt_dir / "events"
+    event_dir.mkdir(parents=True, exist_ok=True)
+    current_path = attempt_dir / "current.json"
+    previous = _load_upgrade_attempt(current_path) if current_path.is_file() else {}
+    sequence = int(previous.get("sequence") or 0) + 1
+    now = utc_now_iso()
+    event_body = {
+        "schema_version": "khaos-brain.upgrade-attempt-event.v1",
+        "attempt_id": attempt_id,
+        "sequence": sequence,
+        "phase": phase,
+        "status": status,
+        "details": dict(details or {}),
+        "created_at": now,
+        "previous_event_hash": str(previous.get("latest_event_hash") or ""),
+    }
+    event_hash = _canonical_payload_hash(event_body)
+    event = {**event_body, "event_hash": event_hash}
+    event_path = event_dir / f"{sequence:04d}-{event_hash[:16].lower()}.json"
+    encoded_event = (
+        json.dumps(event, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    )
+    try:
+        with event_path.open("x", encoding="utf-8", newline="\n") as handle:
+            handle.write(encoded_event)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except FileExistsError:
+        if event_path.read_text(encoding="utf-8") != encoded_event:
+            raise RuntimeError(f"upgrade attempt event collision: {event_path}")
+    started_at = str(previous.get("started_at") or now)
+    checkpoint_refs = [
+        *[
+            dict(item)
+            for item in previous.get("checkpoint_refs", [])
+            if isinstance(item, Mapping)
+        ],
+        {
+            "sequence": sequence,
+            "phase": phase,
+            "status": status,
+            "event_hash": event_hash,
+            "relative_path": event_path.relative_to(attempt_dir).as_posix(),
+        },
+    ]
+    current_body = {
+        "schema_version": UPGRADE_ATTEMPT_SCHEMA,
+        "attempt_id": attempt_id,
+        "status": status,
+        "phase": phase,
+        "sequence": sequence,
+        "started_at": started_at,
+        "updated_at": now,
+        "latest_event_hash": event_hash,
+        "checkpoint_refs": checkpoint_refs,
+        **{
+            key: value
+            for key, value in previous.items()
+            if key
+            not in {
+                "schema_version",
+                "attempt_id",
+                "status",
+                "phase",
+                "sequence",
+                "started_at",
+                "updated_at",
+                "latest_event_hash",
+                "checkpoint_refs",
+                "receipt_hash",
+                "current_path",
+            }
+        },
+        **dict(details or {}),
+    }
+    current = {**current_body, "receipt_hash": _canonical_payload_hash(current_body)}
+    attempt_dir.mkdir(parents=True, exist_ok=True)
+    _write_text_atomic(
+        current_path,
+        json.dumps(current, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+    )
+    return {**current, "current_path": str(current_path)}
+
+
+def _start_upgrade_attempt(
+    codex_home: Path,
+    *,
+    repo_root: Path,
+    pause_before_migration: Mapping[str, Any],
+    history_migration: Mapping[str, Any],
+) -> dict[str, Any]:
+    seed = f"{time.time_ns()}:{os.getpid()}:{repo_root}"
+    attempt_id = (
+        f"upgrade-{int(time.time() * 1000)}-"
+        f"{hashlib.sha256(seed.encode('utf-8')).hexdigest()[:10]}"
+    )
+    return _record_upgrade_attempt(
+        codex_home,
+        attempt_id,
+        phase="migration_committed_automations_paused",
+        status="in_progress",
+        details={
+            "repo_root": str(repo_root),
+            "repo_root_hash": hashlib.sha256(
+                str(repo_root).encode("utf-8")
+            ).hexdigest().upper(),
+            "pause_before_migration": dict(pause_before_migration),
+            "history_migration": dict(history_migration),
+            "survivors_must_remain_paused": True,
+        },
+    )
+
+
+def _automation_restoration_plan_hash(plan: Mapping[str, Any]) -> str:
+    body = {
+        "schema_version": str(plan.get("schema_version") or ""),
+        "states": dict(plan.get("states") or {}),
+        "user_paused": dict(plan.get("user_paused") or {}),
+        "source_states": dict(plan.get("source_states") or {}),
+        "source_user_paused": dict(plan.get("source_user_paused") or {}),
+        "source_hashes": dict(plan.get("source_hashes") or {}),
+        "target_hashes": dict(plan.get("target_hashes") or {}),
+    }
+    return hashlib.sha256(
+        json.dumps(
+            body,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest().upper()
+
+
+def _committed_install_receipt_projection(
+    transaction: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Project one successful native install transaction into migration authority."""
+
+    receipt_hash = str(transaction.get("receipt_hash") or "")
+    transaction_id = str(transaction.get("transaction_id") or "")
+    if transaction.get("ok") is not True or not receipt_hash or not transaction_id:
+        raise RuntimeError(
+            "A successful native install transaction is required for migration authority"
+        )
+    return {
+        "schema_version": "khaos-brain.committed-install-receipt.v1",
+        "status": "committed",
+        "receipt_hash": receipt_hash,
+        "transaction_id": transaction_id,
+    }
+
+
+def _set_automation_state_atomic(
+    path: Path,
+    status: str,
+    user_paused: bool,
+) -> bool:
+    """Restore status and its user-owned pause metadata as one atomic write."""
+
+    if not path.is_file():
+        return False
+    updated = _render_automation_state_text(
+        path.read_text(encoding="utf-8"),
+        status,
+        user_paused,
+    )
+    if updated is None:
+        return False
+    _write_text_atomic(path, updated)
+    return True
+
+
+def _pause_installed_kb_automations(codex_home: Path) -> list[str]:
+    paused: list[str] = []
+    for automation_id in (
+        *(str(spec["id"]) for spec in REPO_AUTOMATION_SPECS),
+        *RETIRED_AUTOMATION_IDS,
+    ):
+        if _set_automation_status_atomic(
+            automation_toml_path(automation_id, codex_home), "PAUSED"
+        ):
+            paused.append(automation_id)
+    return paused
+
+
+def capture_repo_automation_states(codex_home: Path) -> dict[str, str]:
+    states: dict[str, str] = {}
+    for spec in REPO_AUTOMATION_SPECS:
+        automation_id = str(spec["id"])
+        payload = _load_automation_toml(automation_toml_path(automation_id, codex_home))
+        status = str(payload.get("status") or "").upper()
+        if status in {"ACTIVE", "PAUSED"}:
+            states[automation_id] = status
+    return states
+
+
+def capture_repo_automation_state_snapshot(codex_home: Path) -> dict[str, Any]:
+    """Capture exact survivor status plus user-pause ownership without guessing legacy state."""
+
+    states: dict[str, str] = {}
+    user_paused: dict[str, bool] = {}
+    sources: dict[str, str] = {}
+    ambiguities: list[str] = []
+    for spec in REPO_AUTOMATION_SPECS:
+        automation_id = str(spec["id"])
+        path = automation_toml_path(automation_id, codex_home)
+        payload = _load_automation_toml(path)
+        status = str(payload.get("status") or "").upper()
+        if payload and status in {"ACTIVE", "PAUSED"}:
+            states[automation_id] = status
+            user_paused[automation_id] = bool(payload.get("user_paused"))
+            sources[automation_id] = "installed"
+            continue
+        if not path.exists() and automation_id in POST_LEGACY_AUTOMATION_IDS:
+            states[automation_id] = str(spec["status"]).upper()
+            user_paused[automation_id] = False
+            sources[automation_id] = "new-automation-policy"
+            continue
+        states[automation_id] = "PAUSED"
+        user_paused[automation_id] = True
+        sources[automation_id] = "unknown-fail-closed"
+        ambiguities.append(
+            f"prior automation state cannot be established: {automation_id}"
+        )
+    return {
+        "ok": not ambiguities,
+        "states": states,
+        "user_paused": user_paused,
+        "sources": sources,
+        "ambiguities": ambiguities,
+    }
+
+
+def plan_repo_automation_restoration(
+    codex_home: Path,
+    states: Mapping[str, str],
+    *,
+    user_paused_states: Mapping[str, bool],
+) -> dict[str, Any]:
+    """Plan exact live automation bytes without activating any scheduler entry."""
+
+    managed_ids = {str(spec["id"]) for spec in REPO_AUTOMATION_SPECS}
+    issues: list[str] = []
+    if set(states) != managed_ids:
+        issues.append(
+            f"restoration-state-set-mismatch:{sorted(managed_ids ^ set(states))}"
+        )
+    if set(user_paused_states) != managed_ids:
+        issues.append(
+            "restoration-user-pause-set-mismatch:"
+            f"{sorted(managed_ids ^ set(user_paused_states))}"
+        )
+    normalized_states: dict[str, str] = {}
+    normalized_user_paused: dict[str, bool] = {}
+    source_hashes: dict[str, str] = {}
+    target_hashes: dict[str, str] = {}
+    source_states: dict[str, str] = {}
+    source_user_paused: dict[str, bool] = {}
+    for automation_id in sorted(managed_ids):
+        status = str(states.get(automation_id) or "").upper()
+        if status not in {"ACTIVE", "PAUSED"}:
+            issues.append(f"invalid-restoration-status:{automation_id}:{status}")
+            continue
+        path = automation_toml_path(automation_id, codex_home)
+        if not path.is_file():
+            issues.append(f"restoration-source-missing:{automation_id}")
+            continue
+        try:
+            current_text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            issues.append(f"restoration-source-unreadable:{automation_id}:{type(exc).__name__}")
+            continue
+        user_paused = bool(user_paused_states.get(automation_id))
+        current_payload = _load_automation_toml(path)
+        current_status = str(current_payload.get("status") or "").upper()
+        if current_status not in {"ACTIVE", "PAUSED"}:
+            issues.append(f"restoration-source-status-invalid:{automation_id}")
+            continue
+        target_text = _render_automation_state_text(
+            current_text,
+            status,
+            user_paused,
+        )
+        if target_text is None:
+            issues.append(f"restoration-source-shape-invalid:{automation_id}")
+            continue
+        normalized_states[automation_id] = status
+        normalized_user_paused[automation_id] = user_paused
+        source_states[automation_id] = current_status
+        source_user_paused[automation_id] = bool(current_payload.get("user_paused"))
+        source_hashes[automation_id] = _text_sha256(current_text)
+        target_hashes[automation_id] = _text_sha256(target_text)
+    plan_body = {
+        "schema_version": "khaos-brain.automation-restoration-plan.v1",
+        "states": normalized_states,
+        "user_paused": normalized_user_paused,
+        "source_states": source_states,
+        "source_user_paused": source_user_paused,
+        "source_hashes": source_hashes,
+        "target_hashes": target_hashes,
+    }
+    plan_hash = _automation_restoration_plan_hash(plan_body)
+    return {
+        **plan_body,
+        "plan_hash": plan_hash,
+        "ok": not issues
+        and set(normalized_states) == managed_ids
+        and set(target_hashes) == managed_ids,
+        "issues": issues,
+        "claim_boundary": (
+            "Deterministic status/user-pause target bytes only; no live automation was activated."
+        ),
+    }
+
+
+def apply_repo_automation_restoration_plan(
+    codex_home: Path,
+    plan: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Apply one previously authorized restoration plan and read every target back."""
+
+    managed_ids = {str(spec["id"]) for spec in REPO_AUTOMATION_SPECS}
+    states = plan.get("states") if isinstance(plan.get("states"), Mapping) else {}
+    user_paused = (
+        plan.get("user_paused")
+        if isinstance(plan.get("user_paused"), Mapping)
+        else {}
+    )
+    source_hashes = (
+        plan.get("source_hashes")
+        if isinstance(plan.get("source_hashes"), Mapping)
+        else {}
+    )
+    target_hashes = (
+        plan.get("target_hashes")
+        if isinstance(plan.get("target_hashes"), Mapping)
+        else {}
+    )
+    source_states = (
+        plan.get("source_states")
+        if isinstance(plan.get("source_states"), Mapping)
+        else {}
+    )
+    source_user_paused = (
+        plan.get("source_user_paused")
+        if isinstance(plan.get("source_user_paused"), Mapping)
+        else {}
+    )
+    issues: list[str] = []
+    prepared_text: dict[str, str] = {}
+    source_text: dict[str, str] = {}
+    if plan.get("ok") is not True or any(
+        set(mapping) != managed_ids
+        for mapping in (
+            states,
+            user_paused,
+            source_states,
+            source_user_paused,
+            source_hashes,
+            target_hashes,
+        )
+    ):
+        issues.append("restoration-plan-incomplete")
+    if (
+        plan.get("schema_version") != "khaos-brain.automation-restoration-plan.v1"
+        or str(plan.get("plan_hash") or "") != _automation_restoration_plan_hash(plan)
+    ):
+        issues.append("restoration-plan-hash-mismatch")
+    for automation_id in sorted(managed_ids):
+        path = automation_toml_path(automation_id, codex_home)
+        try:
+            current_text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            issues.append(f"restoration-preflight-unreadable:{automation_id}:{type(exc).__name__}")
+            continue
+        if _text_sha256(current_text) != str(source_hashes.get(automation_id) or ""):
+            issues.append(f"restoration-source-changed:{automation_id}")
+            continue
+        source_text[automation_id] = current_text
+        current_payload = _load_automation_toml(path)
+        if (
+            str(current_payload.get("status") or "").upper()
+            != str(source_states.get(automation_id) or "").upper()
+            or bool(current_payload.get("user_paused"))
+            != bool(source_user_paused.get(automation_id))
+        ):
+            issues.append(f"restoration-source-state-changed:{automation_id}")
+            continue
+        target_text = _render_automation_state_text(
+            current_text,
+            str(states.get(automation_id) or ""),
+            bool(user_paused.get(automation_id)),
+        )
+        if target_text is None or _text_sha256(target_text) != str(
+            target_hashes.get(automation_id) or ""
+        ):
+            issues.append(f"restoration-target-hash-mismatch:{automation_id}")
+            continue
+        prepared_text[automation_id] = target_text
+    if issues or set(prepared_text) != managed_ids:
+        return {
+            "ok": False,
+            "restored": {},
+            "restored_user_paused": {},
+            "applied_hashes": {},
+            "plan_hash": str(plan.get("plan_hash") or ""),
+            "issues": issues or ["restoration-preflight-incomplete"],
+        }
+    write_failed = False
+    rollback_issues: list[str] = []
+    try:
+        for automation_id in sorted(managed_ids):
+            _write_text_atomic(
+                automation_toml_path(automation_id, codex_home),
+                prepared_text[automation_id],
+            )
+    except OSError as exc:
+        write_failed = True
+        issues.append(f"restoration-write-failed:{type(exc).__name__}:{exc}")
+        # A five-file restoration is one logical activation.  Compensate a
+        # partial write immediately instead of leaving a mixed live set for a
+        # caller to discover later.  The preflight source bytes are already
+        # hash-bound by the authorized plan.
+        for automation_id in sorted(managed_ids):
+            try:
+                _write_text_atomic(
+                    automation_toml_path(automation_id, codex_home),
+                    source_text[automation_id],
+                )
+            except OSError as rollback_exc:
+                rollback_issues.append(
+                    "restoration-rollback-write-failed:"
+                    f"{automation_id}:{type(rollback_exc).__name__}:{rollback_exc}"
+                )
+        if rollback_issues:
+            # Last-resort safety boundary: no survivor may remain active after
+            # an incomplete group activation, even when exact byte rollback
+            # itself encounters an I/O failure.
+            for automation_id in sorted(managed_ids):
+                if not _set_automation_status_atomic(
+                    automation_toml_path(automation_id, codex_home), "PAUSED"
+                ):
+                    rollback_issues.append(
+                        f"restoration-emergency-pause-failed:{automation_id}"
+                    )
+        issues.extend(rollback_issues)
+    restored: dict[str, str] = {}
+    restored_user_paused: dict[str, bool] = {}
+    applied_hashes: dict[str, str] = {}
+    for automation_id in sorted(managed_ids):
+        path = automation_toml_path(automation_id, codex_home)
+        payload = _load_automation_toml(path)
+        try:
+            applied_hash = _text_sha256(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError):
+            applied_hash = ""
+        status = str(payload.get("status") or "").upper()
+        pause_value = bool(payload.get("user_paused"))
+        if (
+            status != str(states.get(automation_id) or "").upper()
+            or pause_value != bool(user_paused.get(automation_id))
+            or applied_hash != str(target_hashes.get(automation_id) or "")
+        ):
+            issues.append(f"restoration-readback-mismatch:{automation_id}")
+            continue
+        restored[automation_id] = status
+        restored_user_paused[automation_id] = pause_value
+        applied_hashes[automation_id] = applied_hash
+    return {
+        "ok": not issues and set(restored) == managed_ids,
+        "restored": restored,
+        "restored_user_paused": restored_user_paused,
+        "applied_hashes": applied_hashes,
+        "plan_hash": str(plan.get("plan_hash") or ""),
+        "issues": issues,
+        "rollback": {
+            "attempted": write_failed,
+            "ok": write_failed and not rollback_issues,
+            "issues": rollback_issues,
+        },
+        "claim_boundary": "Exact authorized target bytes plus immediate live readback.",
+    }
+
+
+def pause_repo_automations(codex_home: Path) -> dict[str, Any]:
+    paused = _pause_installed_kb_automations(codex_home)
+    expected = {
+        automation_id
+        for automation_id in (
+            *(str(spec["id"]) for spec in REPO_AUTOMATION_SPECS),
+            *RETIRED_AUTOMATION_IDS,
+        )
+        if automation_toml_path(automation_id, codex_home).is_file()
+    }
+    return {
+        "ok": expected.issubset(set(paused)),
+        "expected_ids": sorted(expected),
+        "paused_ids": sorted(set(paused) & expected),
+    }
+
+
+def restore_repo_automation_states(
+    codex_home: Path,
+    states: Mapping[str, str],
+    *,
+    user_paused_states: Mapping[str, bool] | None = None,
+) -> dict[str, Any]:
+    restored: dict[str, str] = {}
+    restored_user_paused: dict[str, bool] = {}
+    errors: list[str] = []
+    managed_ids = {str(spec["id"]) for spec in REPO_AUTOMATION_SPECS}
+    for automation_id, status_value in states.items():
+        if automation_id not in managed_ids:
+            errors.append(f"unmanaged automation id in restoration snapshot: {automation_id}")
+            continue
+        status = str(status_value or "").upper()
+        if status not in {"ACTIVE", "PAUSED"}:
+            errors.append(f"invalid restoration status for {automation_id}: {status}")
+            continue
+        path = automation_toml_path(automation_id, codex_home)
+        user_paused = (
+            bool(user_paused_states.get(automation_id))
+            if user_paused_states is not None
+            else None
+        )
+        restored_ok = (
+            _set_automation_state_atomic(path, status, user_paused)
+            if user_paused is not None
+            else _set_automation_status_atomic(path, status)
+        )
+        if not restored_ok:
+            errors.append(f"failed to restore automation status: {automation_id}")
+            continue
+        restored[automation_id] = status
+        if user_paused is not None:
+            restored_user_paused[automation_id] = user_paused
+    expected = {key for key in states if key in managed_ids}
+    return {
+        "ok": not errors and set(restored) == expected,
+        "restored": restored,
+        "restored_user_paused": restored_user_paused,
+        "errors": errors,
+    }
+
+
+def _automation_toml_text(payload: Mapping[str, Any]) -> str:
     lines = [
         f"version = {int(payload['version'])}",
         f"id = {json.dumps(payload['id'], ensure_ascii=False)}",
@@ -861,74 +1624,908 @@ def _write_automation_toml(path: Path, payload: dict[str, Any]) -> None:
         f"created_at = {int(payload['created_at'])}",
         f"updated_at = {int(payload['updated_at'])}",
     ]
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return "\n".join(lines) + "\n"
 
 
 def install_repo_maintenance_skills(repo_root: Path, codex_home: Path | None = None) -> list[dict[str, Any]]:
-    home = codex_home or default_codex_home()
-    installed: list[dict[str, Any]] = []
-    for spec in MAINTENANCE_SKILL_SPECS:
-        skill_name = spec["name"]
-        source = maintenance_skill_source_dir(repo_root, skill_name)
-        destination = maintenance_skill_install_dir(skill_name, home)
-        skill_path = source / "SKILL.md"
-        if not skill_path.exists():
-            raise FileNotFoundError(f"Repository-managed maintenance skill is missing: {skill_path}")
-        if destination.exists():
-            shutil.rmtree(destination)
-        shutil.copytree(
-            source,
-            destination,
-            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
-        )
-        installed.append(
-            {
-                "name": skill_name,
-                "source_path": str(source),
-                "install_path": str(destination),
-                "skill_path": str(destination / "SKILL.md"),
-                "openai_path": str(destination / "agents" / "openai.yaml"),
-                "automation_id": spec["automation_id"],
-            }
-        )
-    return installed
+    del repo_root, codex_home
+    raise RuntimeError(
+        "Partial managed-Skill installation is retired; use install_codex_integration() "
+        "so Skills, automations, retirement, parity, and rollback share one transaction."
+    )
 
 
 def install_repo_automations(repo_root: Path, codex_home: Path | None = None) -> list[dict[str, Any]]:
-    home = codex_home or default_codex_home()
-    automation_root = automation_dir(home)
-    automation_root.mkdir(parents=True, exist_ok=True)
+    del repo_root, codex_home
+    raise RuntimeError(
+        "Partial managed-automation installation is retired; use install_codex_integration() "
+        "so Skills, automations, retirement, parity, and rollback share one transaction."
+    )
 
-    now_ms = int(time.time() * 1000)
-    installed: list[dict[str, Any]] = []
-    for spec in REPO_AUTOMATION_SPECS:
-        path = automation_toml_path(spec["id"], home)
-        existing = _load_automation_toml(path)
-        payload = _automation_spec_payload(spec, repo_root, codex_home=home, existing=existing)
-        payload["created_at"] = int(existing.get("created_at") or now_ms)
-        payload["updated_at"] = now_ms
-        _write_automation_toml(path, payload)
-        installed.append(
+
+def _skillguard_runtime_roots(
+    codex_home: Path,
+    explicit_root: Path | None = None,
+) -> tuple[Path, ...]:
+    roots: list[Path] = []
+    environment_root = os.environ.get(SKILLGUARD_VALIDATION_ROOT_ENV, "").strip()
+    for candidate in (
+        explicit_root,
+        Path(environment_root) if environment_root else None,
+        codex_home / "skills" / "skillguard",
+        default_codex_home() / "skills" / "skillguard",
+    ):
+        if candidate is None:
+            continue
+        resolved = Path(candidate).resolve()
+        if resolved not in roots:
+            roots.append(resolved)
+    return tuple(roots)
+
+
+def _skillguard_compiler_path(
+    codex_home: Path,
+    skillguard_root: Path | None = None,
+) -> Path:
+    for root in _skillguard_runtime_roots(codex_home, skillguard_root):
+        path = root / "scripts" / "skillguard_compile.py"
+        if path.is_file():
+            return path
+    raise FileNotFoundError(
+        "The current SkillGuard compiler is required before Chaos Brain managed Skills can be activated."
+    )
+
+
+def _freeze_skillguard_validation_toolchain(
+    codex_home: Path,
+    destination: Path,
+    *,
+    max_attempts: int = 20,
+) -> dict[str, Any]:
+    """Acquire one immutable SkillGuard identity without locking its live owner."""
+
+    inherited_root = os.environ.get(SKILLGUARD_VALIDATION_ROOT_ENV, "").strip()
+    inherited_digest = os.environ.get(SKILLGUARD_VALIDATION_DIGEST_ENV, "").strip()
+    if inherited_root and inherited_digest:
+        root = Path(inherited_root).resolve()
+        manifest = tree_manifest(root) if root.is_dir() else {}
+        if (
+            str(manifest.get("digest") or "") == inherited_digest
+            and (root / "scripts" / "skillguard_compile.py").is_file()
+            and (root / "scripts" / "skillguard.py").is_file()
+        ):
+            receipt = {
+                "schema_version": "khaos-brain.skillguard-validation-toolchain.v1",
+                "ok": True,
+                "status": "inherited_frozen",
+                "source_root": str(root),
+                "snapshot_root": str(root),
+                "manifest": manifest,
+                "compiler_sha256": _file_sha256(
+                    root / "scripts" / "skillguard_compile.py"
+                ),
+                "cli_sha256": _file_sha256(root / "scripts" / "skillguard.py"),
+            }
+            receipt["receipt_hash"] = _canonical_payload_hash(receipt)
+            return receipt
+
+    destination = destination.resolve()
+    staging = destination.with_name(f".{destination.name}.staging")
+    last_error = "skillguard_runtime_missing"
+    for attempt in range(1, max_attempts + 1):
+        source = next(
+            (
+                root
+                for root in _skillguard_runtime_roots(codex_home)
+                if (root / "scripts" / "skillguard_compile.py").is_file()
+                and (root / "scripts" / "skillguard.py").is_file()
+            ),
+            None,
+        )
+        if source is None:
+            last_error = "skillguard_runtime_missing"
+            time.sleep(0.5)
+            continue
+        try:
+            before = tree_manifest(source)
+            if staging.exists():
+                shutil.rmtree(staging)
+            staging.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(
+                source,
+                staging,
+                ignore=shutil.ignore_patterns(
+                    "__pycache__",
+                    "*.pyc",
+                    "*.pyo",
+                    "runs",
+                    "locks",
+                    "bootstrap",
+                    "test-results",
+                ),
+            )
+            after = tree_manifest(source)
+            snapshot = tree_manifest(staging)
+            if not (
+                before == after == snapshot
+                and (staging / "scripts" / "skillguard_compile.py").is_file()
+                and (staging / "scripts" / "skillguard.py").is_file()
+            ):
+                last_error = "skillguard_source_changed_during_snapshot"
+                shutil.rmtree(staging, ignore_errors=True)
+                time.sleep(0.5)
+                continue
+            if destination.exists():
+                shutil.rmtree(destination)
+            os.replace(staging, destination)
+            receipt = {
+                "schema_version": "khaos-brain.skillguard-validation-toolchain.v1",
+                "ok": True,
+                "status": "frozen",
+                "attempt_count": attempt,
+                "source_root": str(source),
+                "snapshot_root": str(destination),
+                "manifest": snapshot,
+                "compiler_sha256": _file_sha256(
+                    destination / "scripts" / "skillguard_compile.py"
+                ),
+                "cli_sha256": _file_sha256(
+                    destination / "scripts" / "skillguard.py"
+                ),
+            }
+            receipt["receipt_hash"] = _canonical_payload_hash(receipt)
+            receipt_path = destination.parent / "skillguard-validation-toolchain.json"
+            _write_text_atomic(
+                receipt_path,
+                json.dumps(receipt, ensure_ascii=False, indent=2, sort_keys=True)
+                + "\n",
+            )
+            receipt["receipt_path"] = str(receipt_path)
+            return receipt
+        except OSError as exc:
+            last_error = f"{type(exc).__name__}:{exc}"
+            shutil.rmtree(staging, ignore_errors=True)
+            time.sleep(0.5)
+    raise RuntimeError(
+        "Unable to freeze one current SkillGuard validation toolchain: " + last_error
+    )
+
+
+def _require_live_skillguard_matches_snapshot(receipt: Mapping[str, Any]) -> None:
+    source = Path(str(receipt.get("source_root") or ""))
+    expected = str((receipt.get("manifest") or {}).get("digest") or "")
+    actual = tree_manifest(source) if source.is_dir() else {}
+    if not expected or str(actual.get("digest") or "") != expected:
+        raise RuntimeError(
+            "Live SkillGuard identity changed after validation snapshot; "
+            "restart the idempotent upgrade against one current toolchain identity."
+        )
+
+
+def _freeze_flowguard_validation_toolchain(
+    destination: Path,
+    *,
+    source_root: Path | None = None,
+    max_attempts: int = 20,
+) -> dict[str, Any]:
+    """Freeze the complete imported FlowGuard package for every child process."""
+
+    inherited_root = os.environ.get(FLOWGUARD_VALIDATION_ROOT_ENV, "").strip()
+    inherited_digest = os.environ.get(FLOWGUARD_VALIDATION_DIGEST_ENV, "").strip()
+    if source_root is None and inherited_root and inherited_digest:
+        root = Path(inherited_root).resolve()
+        manifest = tree_manifest(root) if root.is_dir() else {}
+        if (
+            str(manifest.get("digest") or "") == inherited_digest
+            and (root / "__init__.py").is_file()
+        ):
+            receipt = {
+                "schema_version": "khaos-brain.flowguard-validation-toolchain.v1",
+                "ok": True,
+                "status": "inherited_frozen",
+                "source_root": str(root),
+                "snapshot_root": str(root),
+                "manifest": manifest,
+            }
+            receipt["receipt_hash"] = _canonical_payload_hash(receipt)
+            return receipt
+
+    if source_root is None:
+        spec = importlib.util.find_spec("flowguard")
+        locations = list(spec.submodule_search_locations or ()) if spec else []
+        source_root = Path(locations[0]).resolve() if locations else None
+    source = Path(source_root).resolve() if source_root is not None else None
+    if source is None or not (source / "__init__.py").is_file():
+        raise RuntimeError("Current FlowGuard package is unavailable for validation freeze")
+
+    destination = destination.resolve()
+    staging = destination.with_name(f".{destination.name}.staging")
+    last_error = "flowguard_source_unavailable"
+    for attempt in range(1, max_attempts + 1):
+        try:
+            before = tree_manifest(source)
+            if staging.exists():
+                shutil.rmtree(staging)
+            staging.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(
+                source,
+                staging,
+                ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"),
+            )
+            after = tree_manifest(source)
+            snapshot = tree_manifest(staging)
+            if not (
+                before == after == snapshot
+                and (staging / "__init__.py").is_file()
+            ):
+                last_error = "flowguard_source_changed_during_snapshot"
+                shutil.rmtree(staging, ignore_errors=True)
+                time.sleep(0.5)
+                continue
+            if destination.exists():
+                shutil.rmtree(destination)
+            os.replace(staging, destination)
+            receipt = {
+                "schema_version": "khaos-brain.flowguard-validation-toolchain.v1",
+                "ok": True,
+                "status": "frozen",
+                "attempt_count": attempt,
+                "source_root": str(source),
+                "snapshot_root": str(destination),
+                "manifest": snapshot,
+            }
+            receipt["receipt_hash"] = _canonical_payload_hash(receipt)
+            receipt_path = destination.parent / "flowguard-validation-toolchain.json"
+            _write_text_atomic(
+                receipt_path,
+                json.dumps(receipt, ensure_ascii=False, indent=2, sort_keys=True)
+                + "\n",
+            )
+            receipt["receipt_path"] = str(receipt_path)
+            return receipt
+        except OSError as exc:
+            last_error = f"{type(exc).__name__}:{exc}"
+            shutil.rmtree(staging, ignore_errors=True)
+            time.sleep(0.5)
+    raise RuntimeError(
+        "Unable to freeze one current FlowGuard validation toolchain: " + last_error
+    )
+
+
+def _require_live_flowguard_matches_snapshot(receipt: Mapping[str, Any]) -> None:
+    source = Path(str(receipt.get("source_root") or ""))
+    expected = str((receipt.get("manifest") or {}).get("digest") or "")
+    actual = tree_manifest(source) if source.is_dir() else {}
+    if not expected or str(actual.get("digest") or "") != expected:
+        raise RuntimeError(
+            "Live FlowGuard identity changed after validation snapshot; "
+            "restart the idempotent upgrade against one current toolchain identity."
+        )
+
+
+def _freeze_logicguard_validation_toolchain(
+    destination: Path,
+    *,
+    source_root: Path | None = None,
+    max_attempts: int = 20,
+) -> dict[str, Any]:
+    """Freeze the exact LogicGuard package that owns current model authority."""
+
+    inherited_root = os.environ.get(LOGICGUARD_VALIDATION_ROOT_ENV, "").strip()
+    inherited_digest = os.environ.get(LOGICGUARD_VALIDATION_DIGEST_ENV, "").strip()
+    if source_root is None and inherited_root and inherited_digest:
+        root = Path(inherited_root).resolve()
+        manifest = tree_manifest(root) if root.is_dir() else {}
+        if (
+            str(manifest.get("digest") or "") == inherited_digest
+            and (root / "__init__.py").is_file()
+        ):
+            receipt = {
+                "schema_version": "khaos-brain.logicguard-validation-toolchain.v1",
+                "ok": True,
+                "status": "inherited_frozen",
+                "source_root": str(root),
+                "snapshot_root": str(root),
+                "manifest": manifest,
+            }
+            receipt["receipt_hash"] = _canonical_payload_hash(receipt)
+            return receipt
+
+    dependency: dict[str, Any] = {}
+    if source_root is None:
+        from local_kb.logicguard_models import logicguard_dependency_preflight
+
+        dependency = logicguard_dependency_preflight()
+        module = importlib.import_module("logicguard")
+        source_root = Path(str(module.__file__)).resolve().parent
+    source = Path(source_root).resolve() if source_root is not None else None
+    if source is None or not (source / "__init__.py").is_file():
+        raise RuntimeError("Current LogicGuard package is unavailable for validation freeze")
+
+    destination = destination.resolve()
+    staging = destination.with_name(f".{destination.name}.staging")
+    last_error = "logicguard_source_unavailable"
+    for attempt in range(1, max_attempts + 1):
+        try:
+            before = tree_manifest(source)
+            if staging.exists():
+                shutil.rmtree(staging)
+            staging.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(
+                source,
+                staging,
+                ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"),
+            )
+            after = tree_manifest(source)
+            snapshot = tree_manifest(staging)
+            if not (
+                before == after == snapshot
+                and (staging / "__init__.py").is_file()
+            ):
+                last_error = "logicguard_source_changed_during_snapshot"
+                shutil.rmtree(staging, ignore_errors=True)
+                time.sleep(0.5)
+                continue
+            if destination.exists():
+                shutil.rmtree(destination)
+            os.replace(staging, destination)
+            receipt = {
+                "schema_version": "khaos-brain.logicguard-validation-toolchain.v1",
+                "ok": True,
+                "status": "frozen",
+                "attempt_count": attempt,
+                "source_root": str(source),
+                "snapshot_root": str(destination),
+                "manifest": snapshot,
+                "dependency": dependency,
+            }
+            receipt["receipt_hash"] = _canonical_payload_hash(receipt)
+            receipt_path = destination.parent / "logicguard-validation-toolchain.json"
+            _write_text_atomic(
+                receipt_path,
+                json.dumps(receipt, ensure_ascii=False, indent=2, sort_keys=True)
+                + "\n",
+            )
+            receipt["receipt_path"] = str(receipt_path)
+            return receipt
+        except OSError as exc:
+            last_error = f"{type(exc).__name__}:{exc}"
+            shutil.rmtree(staging, ignore_errors=True)
+            time.sleep(0.5)
+    raise RuntimeError(
+        "Unable to freeze one current LogicGuard validation toolchain: " + last_error
+    )
+
+
+def _require_live_logicguard_matches_snapshot(receipt: Mapping[str, Any]) -> None:
+    source = Path(str(receipt.get("source_root") or ""))
+    expected = str((receipt.get("manifest") or {}).get("digest") or "")
+    actual = tree_manifest(source) if source.is_dir() else {}
+    if not expected or str(actual.get("digest") or "") != expected:
+        raise RuntimeError(
+            "Live LogicGuard identity changed after validation snapshot; "
+            "restart the idempotent upgrade against one current toolchain identity."
+        )
+
+
+def _transaction_receipt_hash(value: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def _file_sha256(path: Path) -> str:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError as exc:
+        raise RuntimeError(f"Validation identity is unavailable: {path}: {exc}") from exc
+
+
+def _require_unchanged_validation_file(
+    path: Path, expected_sha256: str, *, identity: str
+) -> None:
+    actual_sha256 = _file_sha256(path)
+    if actual_sha256 != expected_sha256:
+        raise RuntimeError(
+            f"Validation identity changed during source validation: {identity}: "
+            f"expected={expected_sha256} actual={actual_sha256}"
+        )
+
+
+def _check_repo_skillguard_current_sources(
+    repo_root: Path,
+    codex_home: Path,
+    *,
+    skillguard_root: Path | None = None,
+) -> list[dict[str, Any]]:
+    compiler = _skillguard_compiler_path(codex_home, skillguard_root)
+    generator = repo_root / "scripts" / "build_kb_automation_skillguard_contracts.py"
+    generator_sha256 = _file_sha256(generator)
+    compiler_sha256 = _file_sha256(compiler)
+    generator_process = subprocess.run(
+        [sys.executable, str(generator), "--check", "--json"],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=120,
+        check=False,
+    )
+    _require_unchanged_validation_file(
+        generator, generator_sha256, identity="target-owned-generator"
+    )
+    _require_unchanged_validation_file(
+        compiler, compiler_sha256, identity="current-skillguard-compiler"
+    )
+    try:
+        generator_report = json.loads(generator_process.stdout)
+    except json.JSONDecodeError:
+        generator_report = {}
+    if generator_process.returncode != 0 or not bool(generator_report.get("ok")):
+        detail = generator_report or generator_process.stderr or generator_process.stdout
+        raise RuntimeError(f"Target-owned SkillGuard generation parity failed: {detail}")
+    generator_check_hash = _transaction_receipt_hash(generator_report)
+
+    checks: list[dict[str, Any]] = []
+    for spec in MAINTENANCE_SKILL_SPECS:
+        skill_name = str(spec["name"])
+        skill_root = maintenance_skill_source_dir(repo_root, skill_name)
+        for relative in (
+            "SKILL.md",
+            ".skillguard/contract-source.json",
+            ".skillguard/compiled-contract.json",
+            ".skillguard/check-manifest.json",
+        ):
+                path = skill_root / relative
+                if not path.is_file():
+                    raise FileNotFoundError(f"Managed Skill current authority is missing: {path}")
+        before_manifest = tree_manifest(skill_root)
+        _require_unchanged_validation_file(
+            compiler,
+            compiler_sha256,
+            identity=f"current-skillguard-compiler:before:{skill_name}",
+        )
+        process = subprocess.run(
+            [
+                sys.executable,
+                str(compiler),
+                str(skill_root),
+                "--repository-root",
+                str(repo_root),
+                "--check",
+            ],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=120,
+            check=False,
+        )
+        _require_unchanged_validation_file(
+            compiler,
+            compiler_sha256,
+            identity=f"current-skillguard-compiler:after:{skill_name}",
+        )
+        _require_unchanged_validation_file(
+            generator,
+            generator_sha256,
+            identity=f"target-owned-generator:after:{skill_name}",
+        )
+        manifest = tree_manifest(skill_root)
+        if manifest.get("digest") != before_manifest.get("digest"):
+            raise RuntimeError(
+                f"Managed Skill source changed during current validation: {skill_name}: "
+                f"before={before_manifest.get('digest')} after={manifest.get('digest')}"
+            )
+        try:
+            payload = json.loads(process.stdout)
+        except json.JSONDecodeError:
+            payload = {}
+        if process.returncode != 0 or not bool(payload.get("ok")):
+            detail = payload.get("findings") or process.stderr or process.stdout
+            raise RuntimeError(f"SkillGuard current parity failed for {skill_name}: {detail}")
+        receipt: dict[str, Any] = {
+            "schema_version": "chaos_brain.skillguard_source_validation.v1",
+            "skill_id": skill_name,
+            "status": "current",
+            "ok": True,
+            "source_tree_digest": str(manifest.get("digest") or ""),
+            "contract_hash": str(payload.get("contract_hash") or ""),
+            "manifest_hash": str(payload.get("manifest_hash") or ""),
+            "contract_source_sha256": hashlib.sha256(
+                (skill_root / ".skillguard" / "contract-source.json").read_bytes()
+            ).hexdigest(),
+            "compiled_contract_sha256": hashlib.sha256(
+                (skill_root / ".skillguard" / "compiled-contract.json").read_bytes()
+            ).hexdigest(),
+            "check_manifest_sha256": hashlib.sha256(
+                (skill_root / ".skillguard" / "check-manifest.json").read_bytes()
+            ).hexdigest(),
+            "compiler_sha256": compiler_sha256,
+            "generator_sha256": generator_sha256,
+            "generator_check_hash": generator_check_hash,
+        }
+        receipt["validation_input_hash"] = _transaction_receipt_hash(receipt)
+        receipt["receipt_hash"] = _transaction_receipt_hash(receipt)
+        checks.append(receipt)
+    _require_unchanged_validation_file(
+        compiler, compiler_sha256, identity="current-skillguard-compiler:final"
+    )
+    _require_unchanged_validation_file(
+        generator, generator_sha256, identity="target-owned-generator:final"
+    )
+    return checks
+
+
+def _refresh_skillguard_global_router(codex_home: Path) -> dict[str, Any]:
+    cli_candidates = tuple(
+        root / "scripts" / "skillguard.py"
+        for root in _skillguard_runtime_roots(codex_home)
+    )
+    cli = next((path for path in cli_candidates if path.is_file()), None)
+    if cli is None:
+        raise FileNotFoundError("SkillGuard CLI is required to refresh the global router after retirement.")
+    process = subprocess.run(
+        [
+            sys.executable,
+            str(cli),
+            "refresh-global-router",
+            "--codex-home",
+            str(codex_home),
+            "--output",
+            "-",
+        ],
+        cwd=str(codex_home),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=240,
+        check=False,
+    )
+    try:
+        payload = json.loads(process.stdout)
+    except json.JSONDecodeError:
+        payload = {}
+    if process.returncode != 0 or str(payload.get("decision") or "") != "pass":
+        raise RuntimeError(
+            "SkillGuard global-router refresh failed: "
+            + str(payload.get("failures") or process.stderr or process.stdout)
+        )
+    return payload
+
+
+def _skillguard_router_surface(codex_home: Path) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    for skill_name in ("skillguard", "skillguard-global-router"):
+        root = codex_home / "skills" / skill_name
+        if not root.is_dir():
+            rows.append({"skill_name": skill_name, "present": False, "digest": ""})
+            continue
+        manifest = tree_manifest(root)
+        rows.append(
             {
-                "id": spec["id"],
-                "kind": payload["kind"],
-                "name": payload["name"],
-                "path": str(path),
-                "rrule": payload["rrule"],
-                "schedule_policy": payload["schedule_policy"],
-                "schedule_window": payload["schedule_window"],
-                "model": payload["model"],
-                "reasoning_effort": payload["reasoning_effort"],
-                "model_policy": payload["model_policy"],
-                "reasoning_effort_policy": payload["reasoning_effort_policy"],
-                "execution_environment": payload["execution_environment"],
-                "cwds": list(payload["cwds"]),
+                "skill_name": skill_name,
+                "present": True,
+                "digest": str(manifest.get("digest") or ""),
+                "file_count": int(manifest.get("file_count") or 0),
             }
         )
-    return installed
+    return {
+        "rows": rows,
+        "surface_hash": _canonical_payload_hash({"rows": rows}),
+    }
 
 
-def install_codex_integration(
+def _run_skillguard_router_check(
+    codex_home: Path,
+    *,
+    command: str,
+    registry_path: Path,
+) -> dict[str, Any]:
+    cli_candidates = tuple(
+        root / "scripts" / "skillguard.py"
+        for root in _skillguard_runtime_roots(codex_home)
+    )
+    cli = next((path for path in cli_candidates if path.is_file()), None)
+    if cli is None:
+        return {
+            "ok": False,
+            "decision": "block",
+            "command": command,
+            "blockers": ["skillguard_cli_missing"],
+        }
+    arguments = [
+        sys.executable,
+        str(cli),
+        command,
+        "--registry",
+        str(registry_path),
+    ]
+    arguments.extend(
+        [
+            "--codex-home",
+            str(codex_home),
+            "--output",
+            "-",
+        ]
+    )
+    process = subprocess.run(
+        arguments,
+        cwd=str(codex_home),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=240,
+        check=False,
+    )
+    try:
+        payload = json.loads(process.stdout)
+    except json.JSONDecodeError:
+        payload = {}
+    return {
+        **(payload if isinstance(payload, dict) else {}),
+        "ok": process.returncode == 0
+        and str(payload.get("decision") or "") == "pass",
+        "exit_code": process.returncode,
+        "command": command,
+        "stderr_tail": process.stderr[-2000:],
+    }
+
+
+def _verify_skillguard_global_router(
+    codex_home: Path,
+    refresh_payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    registry_text = str(refresh_payload.get("registry_path") or "").strip()
+    canonical_registry = (
+        codex_home / ".skillguard" / "global-router" / "global_registry.json"
+    ).resolve()
+    display_registry = Path(registry_text).expanduser() if registry_text else Path()
+    registry_candidates = [
+        canonical_registry,
+        display_registry.resolve() if registry_text and display_registry.is_absolute() else Path(),
+        (Path.home() / display_registry).resolve() if registry_text else Path(),
+        (codex_home / display_registry).resolve() if registry_text else Path(),
+    ]
+    registry_path = next(
+        (candidate for candidate in registry_candidates if candidate.is_file()),
+        canonical_registry,
+    )
+    registry = _run_skillguard_router_check(
+        codex_home,
+        command="check-global-registry",
+        registry_path=registry_path,
+    )
+    prompt = _run_skillguard_router_check(
+        codex_home,
+        command="check-global-prompt",
+        registry_path=registry_path,
+    )
+    return {
+        "ok": bool(registry.get("ok") and prompt.get("ok")),
+        "registry_path": str(registry_path),
+        "registry_hash": str(refresh_payload.get("registry_hash") or ""),
+        "registry_check": registry,
+        "prompt_check": prompt,
+        "checked_at": utc_now_iso(),
+        "claim_boundary": (
+            "Current official registry and managed-prompt freshness against the active "
+            "SkillGuard/skill roots only."
+        ),
+    }
+
+
+def _refresh_and_verify_skillguard_global_router(
+    codex_home: Path,
+    *,
+    max_attempts: int = 2,
+) -> dict[str, Any]:
+    last: dict[str, Any] = {}
+    for attempt_number in range(1, max_attempts + 1):
+        refresh = _refresh_skillguard_global_router(codex_home)
+        surface_after_refresh = _skillguard_router_surface(codex_home)
+        live = _verify_skillguard_global_router(codex_home, refresh)
+        surface_after_check = _skillguard_router_surface(codex_home)
+        stable = (
+            surface_after_refresh.get("surface_hash")
+            == surface_after_check.get("surface_hash")
+        )
+        last = {
+            "ok": bool(live.get("ok") and stable),
+            "attempt_number": attempt_number,
+            "refresh": refresh,
+            "live_freshness": live,
+            "surface_after_refresh": surface_after_refresh,
+            "surface_after_check": surface_after_check,
+            "surface_stable": stable,
+        }
+        if last["ok"]:
+            return last
+    raise RuntimeError(
+        "SkillGuard global router did not remain current after refresh: "
+        + str(
+            last.get("live_freshness", {}).get("registry_check", {}).get("failures")
+            or last.get("live_freshness", {}).get("registry_check", {}).get("blockers")
+            or last.get("live_freshness", {}).get("prompt_check", {}).get("failures")
+            or last.get("live_freshness", {}).get("prompt_check", {}).get("blockers")
+            or "active SkillGuard surface changed during verification"
+        )
+    )
+
+
+def _run_pre_restore_upgrade_assurance(
+    repo_root: Path,
+    codex_home: Path,
+    *,
+    skillguard_validation_toolchain: Mapping[str, Any],
+    flowguard_validation_toolchain: Mapping[str, Any],
+    logicguard_validation_toolchain: Mapping[str, Any],
+) -> dict[str, Any]:
+    script = repo_root / "scripts" / "check_chaos_brain_readiness.py"
+    environment = os.environ.copy()
+    environment[SKILLGUARD_VALIDATION_ROOT_ENV] = str(
+        skillguard_validation_toolchain.get("snapshot_root") or ""
+    )
+    environment[SKILLGUARD_VALIDATION_DIGEST_ENV] = str(
+        (skillguard_validation_toolchain.get("manifest") or {}).get("digest") or ""
+    )
+    flowguard_root = Path(
+        str(flowguard_validation_toolchain.get("snapshot_root") or "")
+    ).resolve()
+    environment[FLOWGUARD_VALIDATION_ROOT_ENV] = str(flowguard_root)
+    environment[FLOWGUARD_VALIDATION_DIGEST_ENV] = str(
+        (flowguard_validation_toolchain.get("manifest") or {}).get("digest") or ""
+    )
+    logicguard_root = Path(
+        str(logicguard_validation_toolchain.get("snapshot_root") or "")
+    ).resolve()
+    environment[LOGICGUARD_VALIDATION_ROOT_ENV] = str(logicguard_root)
+    environment[LOGICGUARD_VALIDATION_DIGEST_ENV] = str(
+        (logicguard_validation_toolchain.get("manifest") or {}).get("digest") or ""
+    )
+    existing_pythonpath = environment.get("PYTHONPATH", "")
+    if INSTALLATION_IDENTITY_PYTHONPATH_PRESENT_ENV not in environment:
+        environment[INSTALLATION_IDENTITY_PYTHONPATH_PRESENT_ENV] = (
+            "1" if "PYTHONPATH" in environment else "0"
+        )
+        environment[INSTALLATION_IDENTITY_PYTHONPATH_VALUE_ENV] = existing_pythonpath
+    validation_parents = (str(flowguard_root.parent), str(logicguard_root.parent))
+    pythonpath_parts = [part for part in existing_pythonpath.split(os.pathsep) if part]
+    for parent in reversed(validation_parents):
+        normalized_parent = os.path.normcase(os.path.normpath(parent))
+        pythonpath_parts = [
+            part
+            for part in pythonpath_parts
+            if os.path.normcase(os.path.normpath(part)) != normalized_parent
+        ]
+        pythonpath_parts.insert(0, parent)
+    environment["PYTHONPATH"] = os.pathsep.join(pythonpath_parts)
+    environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    command = [
+        sys.executable,
+        str(script),
+        "--json",
+        "--pre-restore",
+        "--repo-root",
+        str(repo_root),
+        "--codex-home",
+        str(codex_home),
+    ]
+    try:
+        process = run_with_timeout_cleanup(
+            command,
+            cwd=str(repo_root),
+            env=environment,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=PRE_RESTORE_ASSURANCE_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        cleanup = dict(getattr(exc, "cleanup_receipt", {}) or {})
+        raise RuntimeError(
+            "Chaos Brain pre-restore assurance timed out; descendant cleanup: "
+            + json.dumps(cleanup, ensure_ascii=False, sort_keys=True)
+        ) from exc
+    try:
+        payload = json.loads(process.stdout)
+    except json.JSONDecodeError:
+        payload = {}
+    if process.returncode != 0 or not bool(payload.get("ok")):
+        raise RuntimeError(
+            "Chaos Brain pre-restore assurance failed: "
+            + str(payload.get("failed_checks") or process.stderr or process.stdout[-4000:])
+        )
+    return payload
+
+
+def _run_post_assurance_data_convergence(
+    repo_root: Path,
+    *,
+    max_attempts: int = 4,
+) -> dict[str, Any]:
+    """Drain data admitted during long assurance and recheck dependent gates."""
+
+    from local_kb.maintenance_migration import (
+        check_migration,
+        run_maintenance_migration,
+    )
+    from scripts.evaluate_kb_retrieval import build_report as build_retrieval_report
+
+    root = Path(repo_root).resolve()
+    attempts: list[dict[str, Any]] = []
+    final_migration: dict[str, Any] = {}
+    final_retrieval: dict[str, Any] = {}
+    final_check: dict[str, Any] = {}
+    for attempt in range(1, max_attempts + 1):
+        final_migration = run_maintenance_migration(root)
+        if final_migration.get("ok"):
+            final_retrieval = build_retrieval_report(
+                root,
+                root / "tests" / "fixtures" / "kb_retrieval_eval_cases.json",
+            )
+            final_check = check_migration(root)
+        else:
+            final_retrieval = {}
+            final_check = {}
+        attempt_receipt = {
+            "attempt": attempt,
+            "migration_ok": bool(final_migration.get("ok")),
+            "migration_status": str(final_migration.get("status") or ""),
+            "migration_issues": list(final_migration.get("issues") or []),
+            "retrieval_ok": bool(final_retrieval.get("ok")),
+            "retrieval_metrics": dict(final_retrieval.get("metrics") or {}),
+            "retrieval_threshold_results": dict(
+                final_retrieval.get("threshold_results") or {}
+            ),
+            "migration_check_ok": bool(final_check.get("ok")),
+            "migration_check_issues": list(final_check.get("issues") or []),
+        }
+        attempt_receipt["receipt_hash"] = _canonical_payload_hash(attempt_receipt)
+        attempts.append(attempt_receipt)
+        if (
+            final_migration.get("ok")
+            and final_retrieval.get("ok")
+            and final_check.get("ok")
+        ):
+            result = {
+                "schema_version": "khaos-brain.post-assurance-data-convergence.v1",
+                "ok": True,
+                "status": "current",
+                "attempt_count": attempt,
+                "attempts": attempts,
+                "history_migration": final_migration,
+                "retrieval_evaluation": final_retrieval,
+                "migration_check": final_check,
+            }
+            result["receipt_hash"] = _canonical_payload_hash(result)
+            return result
+    result = {
+        "schema_version": "khaos-brain.post-assurance-data-convergence.v1",
+        "ok": False,
+        "status": "paused_failed",
+        "attempt_count": len(attempts),
+        "attempts": attempts,
+        "history_migration": final_migration,
+        "retrieval_evaluation": final_retrieval,
+        "migration_check": final_check,
+    }
+    result["receipt_hash"] = _canonical_payload_hash(result)
+    return result
+
+
+def _install_codex_integration_impl(
     repo_root: Path,
     codex_home: Path | None = None,
     *,
@@ -936,38 +2533,315 @@ def install_codex_integration(
     git_executable: str | Path | None = None,
     rg_source: str | Path | None = None,
     persist_user_shell_path: bool = True,
+    original_automation_configs: Mapping[str, Mapping[str, Any]] | None = None,
+    history_migration: Mapping[str, Any] | None = None,
+    safe_upgrade: bool = False,
+    require_upgrade_assurance: bool = False,
+    defer_automation_restore: bool = False,
+    upgrade_attempt_id: str = "",
+    skillguard_validation_toolchain: Mapping[str, Any] | None = None,
+    flowguard_validation_toolchain: Mapping[str, Any] | None = None,
+    logicguard_validation_toolchain: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     home = codex_home or default_codex_home()
+    initial_history_migration = dict(history_migration or {})
+    post_assurance_history_migration: dict[str, Any] = {}
+    post_assurance_data_convergence: dict[str, Any] = {}
+    pre_assurance_update_state_migration: dict[str, Any] = {}
     skill_dir = global_skill_dir(home)
-    skill_dir.mkdir(parents=True, exist_ok=True)
-    (skill_dir / "agents").mkdir(parents=True, exist_ok=True)
-
     launcher_path = skill_dir / "kb_launch.py"
     skill_path = skill_dir / "SKILL.md"
     openai_path = skill_dir / "agents" / "openai.yaml"
-    global_agents = install_global_agents_defaults(repo_root=repo_root, codex_home=home)
-
     replacements = {
         "KB_ROOT": str(repo_root),
         "LAUNCHER_PATH": str(launcher_path),
         "ENV_VAR_NAME": KB_ROOT_ENV_VAR,
     }
-
-    skill_path.write_text(
-        _render_template(_read_template(repo_root, "SKILL.md.template"), replacements),
-        encoding="utf-8",
+    global_skill_files = {
+        "SKILL.md": _render_template(_read_template(repo_root, "SKILL.md.template"), replacements),
+        "kb_launch.py": _read_template(repo_root, "kb_launch.py"),
+        "agents/openai.yaml": _read_template(repo_root, Path("agents") / "openai.yaml"),
+    }
+    validation_toolchain = dict(skillguard_validation_toolchain or {})
+    validation_root = Path(str(validation_toolchain.get("snapshot_root") or ""))
+    if not validation_root.is_dir():
+        raise RuntimeError("Frozen SkillGuard validation toolchain is unavailable")
+    flowguard_toolchain = dict(flowguard_validation_toolchain or {})
+    flowguard_validation_root = Path(
+        str(flowguard_toolchain.get("snapshot_root") or "")
     )
-    launcher_path.write_text(_read_template(repo_root, "kb_launch.py"), encoding="utf-8")
-    openai_path.write_text(_read_template(repo_root, Path("agents") / "openai.yaml"), encoding="utf-8")
-    maintenance_skills = install_repo_maintenance_skills(repo_root=repo_root, codex_home=home)
+    if not (flowguard_validation_root / "__init__.py").is_file():
+        raise RuntimeError("Frozen FlowGuard validation toolchain is unavailable")
+    logicguard_toolchain = dict(logicguard_validation_toolchain or {})
+    logicguard_validation_root = Path(
+        str(logicguard_toolchain.get("snapshot_root") or "")
+    )
+    if not (logicguard_validation_root / "__init__.py").is_file():
+        raise RuntimeError("Frozen LogicGuard validation toolchain is unavailable")
+    skillguard_source_checks = _check_repo_skillguard_current_sources(
+        repo_root,
+        home,
+        skillguard_root=validation_root,
+    )
+    now_ms = int(time.time() * 1000)
+    automation_payloads: dict[str, dict[str, Any]] = {}
+    for spec in REPO_AUTOMATION_SPECS:
+        existing = dict(
+            (original_automation_configs or {}).get(str(spec["id"]), {})
+        ) or _load_automation_toml(automation_toml_path(spec["id"], home))
+        payload = _automation_spec_payload(spec, repo_root, codex_home=home, existing=existing)
+        payload["created_at"] = int(existing.get("created_at") or now_ms)
+        payload["updated_at"] = now_ms
+        automation_payloads[str(spec["id"])] = payload
+    paused_transaction: dict[str, Any] = {}
+    activation_payloads: Mapping[str, Mapping[str, Any]] = automation_payloads
+    if safe_upgrade:
+        activation_payloads = {
+            automation_id: {
+                **payload,
+                "status": "PAUSED",
+            }
+            for automation_id, payload in automation_payloads.items()
+        }
+    transaction = install_managed_runtime(
+        repo_root=repo_root,
+        codex_home=home,
+        global_skill_name=GLOBAL_SKILL_NAME,
+        global_skill_files=global_skill_files,
+        skill_sources={
+            str(spec["name"]): maintenance_skill_source_dir(repo_root, str(spec["name"]))
+            for spec in MAINTENANCE_SKILL_SPECS
+        },
+        skillguard_validation_receipts={
+            str(row["skill_id"]): row for row in skillguard_source_checks
+        },
+        automation_payloads=activation_payloads,
+        automation_renderer=_automation_toml_text,
+        retired_skill_ids=RETIRED_MAINTENANCE_SKILL_IDS,
+        retired_automation_ids=RETIRED_AUTOMATION_IDS,
+    )
+    if safe_upgrade:
+        paused_transaction = transaction
+        from local_kb.software_update import canonicalize_obsolete_update_state
+
+        pre_assurance_update_state_migration = canonicalize_obsolete_update_state(
+            repo_root,
+            install_receipt=_committed_install_receipt_projection(
+                paused_transaction
+            ),
+        )
+        if (
+            pre_assurance_update_state_migration.get("ok") is not True
+            or int(
+                pre_assurance_update_state_migration.get(
+                    "residual_retired_state_count", 0
+                )
+                or 0
+            )
+            != 0
+        ):
+            raise RuntimeError(
+                "Obsolete update state did not converge before aggregate assurance"
+            )
+        if upgrade_attempt_id:
+            _record_upgrade_attempt(
+                home,
+                upgrade_attempt_id,
+                phase="paused_install_transaction_committed",
+                status="in_progress",
+                details={
+                    "paused_install_transaction": transaction,
+                    "pre_assurance_update_state_migration": (
+                        pre_assurance_update_state_migration
+                    ),
+                    "survivors_must_remain_paused": True,
+                },
+            )
+    global_agents = install_global_agents_defaults(repo_root=repo_root, codex_home=home)
+    maintenance_skills = [
+        {
+            "name": str(spec["name"]),
+            "source_path": str(maintenance_skill_source_dir(repo_root, str(spec["name"]))),
+            "install_path": str(maintenance_skill_install_dir(str(spec["name"]), home)),
+            "skill_path": str(maintenance_skill_install_dir(str(spec["name"]), home) / "SKILL.md"),
+            "openai_path": str(maintenance_skill_install_dir(str(spec["name"]), home) / "agents" / "openai.yaml"),
+            "automation_id": str(spec["automation_id"]),
+        }
+        for spec in MAINTENANCE_SKILL_SPECS
+    ]
     shell_tools = install_codex_shell_tools(
         shell_bin_dir=shell_bin_dir,
         git_executable=git_executable,
         rg_source=rg_source,
         persist_user_path=persist_user_shell_path,
     )
+    global_router_refresh: dict[str, Any] = {}
+    global_router_live_freshness: dict[str, Any] = {}
+    pre_assurance_global_router: dict[str, Any] = {}
+    upgrade_assurance: dict[str, Any] = {}
+    if safe_upgrade:
+        pre_assurance_global_router = _refresh_and_verify_skillguard_global_router(home)
+        if upgrade_attempt_id:
+            _record_upgrade_attempt(
+                home,
+                upgrade_attempt_id,
+                phase="pre_assurance_router_current",
+                status="in_progress",
+                details={
+                    "pre_assurance_global_router": pre_assurance_global_router,
+                    "survivors_must_remain_paused": True,
+                },
+            )
+        if require_upgrade_assurance:
+            # Do not spend a long aggregate campaign against a validation
+            # toolchain that is already stale.  A change that happens during
+            # the campaign is still caught by the identical restore-gate
+            # checks below; neither case authorizes reinstalling that tool.
+            _require_live_skillguard_matches_snapshot(validation_toolchain)
+            _require_live_flowguard_matches_snapshot(flowguard_toolchain)
+            _require_live_logicguard_matches_snapshot(logicguard_toolchain)
+            upgrade_assurance = _run_pre_restore_upgrade_assurance(
+                repo_root,
+                home,
+                skillguard_validation_toolchain=validation_toolchain,
+                flowguard_validation_toolchain=flowguard_toolchain,
+                logicguard_validation_toolchain=logicguard_toolchain,
+            )
+            if upgrade_attempt_id:
+                _record_upgrade_attempt(
+                    home,
+                    upgrade_attempt_id,
+                    phase="aggregate_assurance_passed",
+                    status="in_progress",
+                    details={
+                        "upgrade_assurance": upgrade_assurance,
+                        "survivors_must_remain_paused": True,
+                    },
+                )
+            # Aggregate assurance is intentionally long. Peer AI work may admit
+            # observations while it runs, so drain that late logical debt and
+            # atomically rebuild the active index before any restore transaction.
+            post_assurance_data_convergence = (
+                _run_post_assurance_data_convergence(repo_root)
+            )
+            post_assurance_history_migration = dict(
+                post_assurance_data_convergence.get("history_migration") or {}
+            )
+            if not post_assurance_data_convergence.get("ok"):
+                raise RuntimeError(
+                    "Chaos Brain post-assurance data convergence failed: "
+                    + str(
+                        post_assurance_data_convergence.get("attempts")
+                        or post_assurance_data_convergence.get("status")
+                    )
+                )
+            history_migration = post_assurance_history_migration
+            if upgrade_attempt_id:
+                _record_upgrade_attempt(
+                    home,
+                    upgrade_attempt_id,
+                    phase="post_assurance_history_current",
+                    status="in_progress",
+                    details={
+                        "post_assurance_history_migration": (
+                            post_assurance_history_migration
+                        ),
+                        "post_assurance_data_convergence": (
+                            post_assurance_data_convergence
+                        ),
+                        "survivors_must_remain_paused": True,
+                    },
+                )
+        # This second all-or-nothing transaction is the restore gate.  If it
+        # fails, rollback returns to the already-validated paused runtime.
+        final_activation_payloads = (
+            activation_payloads if defer_automation_restore else automation_payloads
+        )
+        _require_live_skillguard_matches_snapshot(validation_toolchain)
+        _require_live_flowguard_matches_snapshot(flowguard_toolchain)
+        _require_live_logicguard_matches_snapshot(logicguard_toolchain)
+        final_skillguard_source_checks = _check_repo_skillguard_current_sources(
+            repo_root,
+            home,
+            skillguard_root=validation_root,
+        )
+        transaction = install_managed_runtime(
+            repo_root=repo_root,
+            codex_home=home,
+            global_skill_name=GLOBAL_SKILL_NAME,
+            global_skill_files=global_skill_files,
+            skill_sources={
+                str(spec["name"]): maintenance_skill_source_dir(repo_root, str(spec["name"]))
+                for spec in MAINTENANCE_SKILL_SPECS
+            },
+            skillguard_validation_receipts={
+                str(row["skill_id"]): row for row in final_skillguard_source_checks
+            },
+            automation_payloads=final_activation_payloads,
+            automation_renderer=_automation_toml_text,
+            retired_skill_ids=RETIRED_MAINTENANCE_SKILL_IDS,
+            retired_automation_ids=RETIRED_AUTOMATION_IDS,
+        )
+        if upgrade_attempt_id:
+            _record_upgrade_attempt(
+                home,
+                upgrade_attempt_id,
+                phase="final_install_transaction_committed",
+                status="in_progress",
+                details={
+                    "install_transaction": transaction,
+                    "survivors_must_remain_paused": bool(defer_automation_restore),
+                },
+            )
+        # The final managed-runtime transaction can replace Skill trees after
+        # the pre-assurance refresh. Refresh and check again at the true end.
+        final_router = _refresh_and_verify_skillguard_global_router(home)
+        global_router_refresh = dict(final_router.get("refresh") or {})
+        global_router_live_freshness = dict(
+            final_router.get("live_freshness") or {}
+        )
+        if upgrade_attempt_id:
+            _record_upgrade_attempt(
+                home,
+                upgrade_attempt_id,
+                phase="final_router_current",
+                status="ready_for_install_check",
+                details={
+                    "global_router_refresh": global_router_refresh,
+                    "global_router_live_freshness": global_router_live_freshness,
+                    "global_router_surface": final_router.get(
+                        "surface_after_check", {}
+                    ),
+                    "survivors_must_remain_paused": bool(defer_automation_restore),
+                },
+            )
     automation_runtime = resolve_automation_runtime(home)
-    automations = install_repo_automations(repo_root=repo_root, codex_home=home)
+    automations = [
+        {
+            "id": automation_id,
+            "kind": payload["kind"],
+            "name": payload["name"],
+            "path": str(automation_toml_path(automation_id, home)),
+            "status": payload["status"],
+            "user_paused": bool(payload.get("user_paused")),
+            "rrule": payload["rrule"],
+            "schedule_policy": payload["schedule_policy"],
+            "schedule_window": payload["schedule_window"],
+            "model": payload["model"],
+            "reasoning_effort": payload["reasoning_effort"],
+            "model_policy": payload["model_policy"],
+            "reasoning_effort_policy": payload["reasoning_effort_policy"],
+            "execution_environment": payload["execution_environment"],
+            "cwds": list(payload["cwds"]),
+        }
+        for automation_id, payload in sorted(automation_payloads.items())
+    ]
+    installed_automation_statuses = {
+        automation_id: str(
+            (activation_payloads if defer_automation_restore else automation_payloads)[automation_id]["status"]
+        )
+        for automation_id in sorted(automation_payloads)
+    }
 
     manifest = {
         "repo_root": str(repo_root),
@@ -985,16 +2859,400 @@ def install_codex_integration(
         "automation_runtime": automation_runtime,
         "automation_ids": [item["id"] for item in automations],
         "automations": automations,
+        "installed_automation_statuses": installed_automation_statuses,
+        "automation_restore_deferred": bool(defer_automation_restore),
+        "skillguard_validation_toolchain": validation_toolchain,
+        "flowguard_validation_toolchain": flowguard_toolchain,
+        "logicguard_validation_toolchain": logicguard_toolchain,
+        "skillguard_source_checks": skillguard_source_checks,
+        "install_transaction": transaction,
+        "paused_install_transaction": paused_transaction,
+        "history_migration_required": bool(safe_upgrade),
+        "history_migration": dict(history_migration or {}),
+        "initial_history_migration": initial_history_migration,
+        "post_assurance_history_migration": post_assurance_history_migration,
+        "post_assurance_data_convergence": post_assurance_data_convergence,
+        "pre_assurance_update_state_migration": (
+            pre_assurance_update_state_migration
+        ),
+        "upgrade_assurance_required": bool(require_upgrade_assurance),
+        "upgrade_assurance": upgrade_assurance,
+        "global_router_refresh": global_router_refresh,
+        "global_router_live_freshness": global_router_live_freshness,
+        "pre_assurance_global_router": pre_assurance_global_router,
+        "upgrade_attempt": (
+            latest_upgrade_attempt(home) if upgrade_attempt_id else {}
+        ),
+        "retired_skill_ids": list(RETIRED_MAINTENANCE_SKILL_IDS),
+        "retired_automation_ids": list(RETIRED_AUTOMATION_IDS),
         "installed_at": utc_now_iso(),
     }
-    manifest_path = save_install_state(manifest, home)
-    manifest["install_state_path"] = str(manifest_path)
     return manifest
+
+
+def install_codex_integration(
+    repo_root: Path,
+    codex_home: Path | None = None,
+    *,
+    shell_bin_dir: Path | None = None,
+    git_executable: str | Path | None = None,
+    rg_source: str | Path | None = None,
+    persist_user_shell_path: bool = True,
+    run_history_migration: bool = True,
+    run_upgrade_assurance: bool = True,
+    defer_automation_restore: bool = False,
+    automation_state_snapshot: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Install or upgrade Chaos Brain with migration-pause fail safety.
+
+    The two ``False`` switches exist only for isolated installer fixtures whose
+    repository root is the live source tree but whose Codex home is a temporary
+    sandbox. Product entrypoints always use both default hard gates.
+    """
+
+    home = (codex_home or default_codex_home()).resolve()
+    root = Path(repo_root).resolve()
+    if not run_history_migration:
+        if codex_home is None or home == default_codex_home().resolve():
+            raise RuntimeError(
+                "isolated installer fixture mode requires an explicit non-default codex_home"
+            )
+        if shell_bin_dir is None:
+            raise RuntimeError(
+                "isolated installer fixture mode requires an explicit shell_bin_dir"
+            )
+        if persist_user_shell_path:
+            raise RuntimeError(
+                "isolated installer fixture mode requires persist_user_shell_path=False"
+            )
+    original_configs = {
+        str(spec["id"]): _load_automation_toml(
+            automation_toml_path(str(spec["id"]), home)
+        )
+        for spec in REPO_AUTOMATION_SPECS
+    }
+    if automation_state_snapshot is not None:
+        states = automation_state_snapshot.get("states")
+        user_paused_states = automation_state_snapshot.get("user_paused")
+        if not isinstance(states, Mapping) or not isinstance(user_paused_states, Mapping):
+            raise RuntimeError("automation state snapshot is missing states or user_paused maps")
+        expected_ids = {str(spec["id"]) for spec in REPO_AUTOMATION_SPECS}
+        if set(states) != expected_ids or set(user_paused_states) != expected_ids:
+            raise RuntimeError("automation state snapshot does not cover the exact surviving automation set")
+        for automation_id in expected_ids:
+            status = str(states.get(automation_id) or "").upper()
+            if status not in {"ACTIVE", "PAUSED"}:
+                raise RuntimeError(f"invalid automation snapshot status for {automation_id}: {status}")
+            original_configs[automation_id] = {
+                **original_configs.get(automation_id, {}),
+                "status": status,
+                "user_paused": bool(user_paused_states.get(automation_id)),
+            }
+    if defer_automation_restore and not run_history_migration:
+        raise RuntimeError("deferred automation restoration requires the real migration gate")
+    history_migration: dict[str, Any] = {
+        "ok": False,
+        "status": "fixture_skipped",
+        "reason": "isolated installer fixture explicitly disabled repository migration",
+    }
+    paused_before_migration: list[str] = []
+    pause_before_migration: dict[str, Any] = {
+        "ok": True,
+        "expected_ids": [],
+        "paused_ids": [],
+    }
+    if run_history_migration:
+        pause_before_migration = pause_repo_automations(home)
+        paused_before_migration = list(pause_before_migration.get("paused_ids") or [])
+        if pause_before_migration.get("ok") is not True:
+            missing = sorted(
+                set(pause_before_migration.get("expected_ids") or [])
+                - set(pause_before_migration.get("paused_ids") or [])
+            )
+            raise RuntimeError(
+                "failed to pause every installed Chaos Brain automation before migration: "
+                + ", ".join(missing)
+            )
+        from local_kb.maintenance_migration import run_maintenance_migration
+
+        history_migration = run_maintenance_migration(root)
+        if not history_migration.get("ok"):
+            raise RuntimeError(
+                "Chaos Brain history migration paused failed: "
+                + str(history_migration.get("error") or history_migration.get("status"))
+            )
+    upgrade_attempt: dict[str, Any] = {}
+    if run_history_migration:
+        upgrade_attempt = _start_upgrade_attempt(
+            home,
+            repo_root=root,
+            pause_before_migration=pause_before_migration,
+            history_migration=history_migration,
+        )
+    attempt_id = str(upgrade_attempt.get("attempt_id") or "")
+    from local_kb.software_update import update_state_path
+
+    obsolete_update_state_file = update_state_path(root)
+    obsolete_update_state_before_existed = obsolete_update_state_file.is_file()
+    obsolete_update_state_before_bytes = (
+        obsolete_update_state_file.read_bytes()
+        if obsolete_update_state_before_existed
+        else b""
+    )
+    obsolete_update_state_settled = False
+    try:
+        snapshot_parent = (
+            _upgrade_attempt_dir(home, attempt_id) / "validation-toolchain"
+            if attempt_id
+            else home / ".khaos-brain-install" / "fixture-validation-toolchain"
+        )
+        validation_toolchain = _freeze_skillguard_validation_toolchain(
+            home,
+            snapshot_parent / "skillguard",
+        )
+        flowguard_toolchain = _freeze_flowguard_validation_toolchain(
+            snapshot_parent / "python" / "flowguard"
+        )
+        logicguard_toolchain = _freeze_logicguard_validation_toolchain(
+            snapshot_parent / "python" / "logicguard"
+        )
+        if attempt_id:
+            _record_upgrade_attempt(
+                home,
+                attempt_id,
+                phase="validation_toolchain_frozen",
+                status="in_progress",
+                details={
+                    "skillguard_validation_toolchain": validation_toolchain,
+                    "flowguard_validation_toolchain": flowguard_toolchain,
+                    "logicguard_validation_toolchain": logicguard_toolchain,
+                    "survivors_must_remain_paused": True,
+                },
+            )
+        previous_validation_root = os.environ.get(SKILLGUARD_VALIDATION_ROOT_ENV)
+        previous_validation_digest = os.environ.get(
+            SKILLGUARD_VALIDATION_DIGEST_ENV
+        )
+        previous_flowguard_root = os.environ.get(FLOWGUARD_VALIDATION_ROOT_ENV)
+        previous_flowguard_digest = os.environ.get(
+            FLOWGUARD_VALIDATION_DIGEST_ENV
+        )
+        previous_logicguard_root = os.environ.get(LOGICGUARD_VALIDATION_ROOT_ENV)
+        previous_logicguard_digest = os.environ.get(
+            LOGICGUARD_VALIDATION_DIGEST_ENV
+        )
+        previous_pythonpath = os.environ.get("PYTHONPATH")
+        previous_installation_identity_pythonpath_present = os.environ.get(
+            INSTALLATION_IDENTITY_PYTHONPATH_PRESENT_ENV
+        )
+        previous_installation_identity_pythonpath_value = os.environ.get(
+            INSTALLATION_IDENTITY_PYTHONPATH_VALUE_ENV
+        )
+        os.environ[INSTALLATION_IDENTITY_PYTHONPATH_PRESENT_ENV] = (
+            "1" if "PYTHONPATH" in os.environ else "0"
+        )
+        os.environ[INSTALLATION_IDENTITY_PYTHONPATH_VALUE_ENV] = (
+            previous_pythonpath or ""
+        )
+        os.environ[SKILLGUARD_VALIDATION_ROOT_ENV] = str(
+            validation_toolchain["snapshot_root"]
+        )
+        os.environ[SKILLGUARD_VALIDATION_DIGEST_ENV] = str(
+            validation_toolchain["manifest"]["digest"]
+        )
+        flowguard_root = Path(str(flowguard_toolchain["snapshot_root"])).resolve()
+        os.environ[FLOWGUARD_VALIDATION_ROOT_ENV] = str(flowguard_root)
+        os.environ[FLOWGUARD_VALIDATION_DIGEST_ENV] = str(
+            flowguard_toolchain["manifest"]["digest"]
+        )
+        logicguard_root = Path(
+            str(logicguard_toolchain["snapshot_root"])
+        ).resolve()
+        os.environ[LOGICGUARD_VALIDATION_ROOT_ENV] = str(logicguard_root)
+        os.environ[LOGICGUARD_VALIDATION_DIGEST_ENV] = str(
+            logicguard_toolchain["manifest"]["digest"]
+        )
+        os.environ["PYTHONPATH"] = os.pathsep.join(
+            dict.fromkeys(
+                part
+                for part in (
+                    str(flowguard_root.parent),
+                    str(logicguard_root.parent),
+                    previous_pythonpath or "",
+                )
+                if part
+            )
+        )
+        try:
+            payload = _install_codex_integration_impl(
+                root,
+                home,
+                shell_bin_dir=shell_bin_dir,
+                git_executable=git_executable,
+                rg_source=rg_source,
+                persist_user_shell_path=persist_user_shell_path,
+                original_automation_configs=original_configs,
+                history_migration=history_migration,
+                safe_upgrade=run_history_migration,
+                require_upgrade_assurance=(
+                    run_history_migration and run_upgrade_assurance
+                ),
+                defer_automation_restore=defer_automation_restore,
+                upgrade_attempt_id=attempt_id,
+                skillguard_validation_toolchain=validation_toolchain,
+                flowguard_validation_toolchain=flowguard_toolchain,
+                logicguard_validation_toolchain=logicguard_toolchain,
+            )
+        finally:
+            if previous_validation_root is None:
+                os.environ.pop(SKILLGUARD_VALIDATION_ROOT_ENV, None)
+            else:
+                os.environ[SKILLGUARD_VALIDATION_ROOT_ENV] = (
+                    previous_validation_root
+                )
+            if previous_validation_digest is None:
+                os.environ.pop(SKILLGUARD_VALIDATION_DIGEST_ENV, None)
+            else:
+                os.environ[SKILLGUARD_VALIDATION_DIGEST_ENV] = (
+                    previous_validation_digest
+                )
+            if previous_flowguard_root is None:
+                os.environ.pop(FLOWGUARD_VALIDATION_ROOT_ENV, None)
+            else:
+                os.environ[FLOWGUARD_VALIDATION_ROOT_ENV] = previous_flowguard_root
+            if previous_flowguard_digest is None:
+                os.environ.pop(FLOWGUARD_VALIDATION_DIGEST_ENV, None)
+            else:
+                os.environ[FLOWGUARD_VALIDATION_DIGEST_ENV] = (
+                    previous_flowguard_digest
+                )
+            if previous_logicguard_root is None:
+                os.environ.pop(LOGICGUARD_VALIDATION_ROOT_ENV, None)
+            else:
+                os.environ[LOGICGUARD_VALIDATION_ROOT_ENV] = previous_logicguard_root
+            if previous_logicguard_digest is None:
+                os.environ.pop(LOGICGUARD_VALIDATION_DIGEST_ENV, None)
+            else:
+                os.environ[LOGICGUARD_VALIDATION_DIGEST_ENV] = (
+                    previous_logicguard_digest
+                )
+            if previous_pythonpath is None:
+                os.environ.pop("PYTHONPATH", None)
+            else:
+                os.environ["PYTHONPATH"] = previous_pythonpath
+            if previous_installation_identity_pythonpath_present is None:
+                os.environ.pop(
+                    INSTALLATION_IDENTITY_PYTHONPATH_PRESENT_ENV, None
+                )
+            else:
+                os.environ[INSTALLATION_IDENTITY_PYTHONPATH_PRESENT_ENV] = (
+                    previous_installation_identity_pythonpath_present
+                )
+            if previous_installation_identity_pythonpath_value is None:
+                os.environ.pop(INSTALLATION_IDENTITY_PYTHONPATH_VALUE_ENV, None)
+            else:
+                os.environ[INSTALLATION_IDENTITY_PYTHONPATH_VALUE_ENV] = (
+                    previous_installation_identity_pythonpath_value
+                )
+        payload["automations_paused_before_migration"] = paused_before_migration
+        payload["pause_before_migration"] = pause_before_migration
+        if run_history_migration:
+            from local_kb.software_update import canonicalize_obsolete_update_state
+
+            obsolete_update_state_migration = canonicalize_obsolete_update_state(
+                root,
+                install_receipt=_committed_install_receipt_projection(
+                    dict(payload.get("install_transaction") or {})
+                ),
+            )
+            pre_assurance_update_state_migration = dict(
+                payload.get("pre_assurance_update_state_migration") or {}
+            )
+            obsolete_update_state_settled = bool(
+                pre_assurance_update_state_migration.get("status") == "committed"
+                or obsolete_update_state_migration.get("status") == "committed"
+            )
+            payload["obsolete_update_state_migration"] = {
+                "ok": bool(
+                    pre_assurance_update_state_migration.get("ok", True)
+                    and obsolete_update_state_migration.get("ok") is True
+                ),
+                "status": (
+                    "committed"
+                    if obsolete_update_state_settled
+                    else str(obsolete_update_state_migration.get("status") or "no_delta")
+                ),
+                "pre_assurance": pre_assurance_update_state_migration,
+                "post_install": obsolete_update_state_migration,
+                "residual_retired_state_count": 0,
+            }
+            final_check = build_installation_check(
+                repo_root=root,
+                codex_home=home,
+                allow_deferred_automation_restore=defer_automation_restore,
+                manifest_override=payload,
+            )
+            if not final_check.get("ok"):
+                raise RuntimeError(
+                    "Chaos Brain post-install aggregate check failed: "
+                    + "; ".join(str(item) for item in final_check.get("issues", []))
+                )
+            payload["post_install_check"] = final_check
+            upgrade_attempt = _record_upgrade_attempt(
+                home,
+                attempt_id,
+                phase="post_install_check_passed",
+                status="completed",
+                details={
+                    "post_install_check_ok": True,
+                    "install_transaction": payload.get("install_transaction", {}),
+                    "global_router_refresh": payload.get(
+                        "global_router_refresh", {}
+                    ),
+                    "global_router_live_freshness": payload.get(
+                        "global_router_live_freshness", {}
+                    ),
+                    "survivors_must_remain_paused": bool(
+                        defer_automation_restore
+                    ),
+                },
+            )
+            payload["upgrade_attempt"] = upgrade_attempt
+        manifest_path = save_install_state(payload, home)
+        payload["install_state_path"] = str(manifest_path)
+        return payload
+    except Exception as exc:
+        if run_history_migration:
+            _restore_exact_file_snapshot(
+                obsolete_update_state_file,
+                existed=obsolete_update_state_before_existed,
+                content=obsolete_update_state_before_bytes,
+            )
+            _pause_installed_kb_automations(home)
+            if attempt_id:
+                _record_upgrade_attempt(
+                    home,
+                    attempt_id,
+                    phase="failed_paused_recoverable",
+                    status="failed",
+                    details={
+                        "error_type": type(exc).__name__,
+                        "error": str(exc)[-4000:],
+                        "survivors_must_remain_paused": True,
+                        "recovery_action": (
+                            "Rerun the idempotent installer after the reported hard gate is repaired."
+                        ),
+                    },
+                )
+        raise
 
 
 def build_installation_check(
     repo_root: Path | None = None,
     codex_home: Path | None = None,
+    *,
+    allow_deferred_automation_restore: bool = False,
+    manifest_override: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     home = codex_home or default_codex_home()
     skill_dir = global_skill_dir(home)
@@ -1002,15 +3260,44 @@ def build_installation_check(
     launcher_path = skill_dir / "kb_launch.py"
     openai_path = skill_dir / "agents" / "openai.yaml"
     global_agents = global_agents_path(home)
-    manifest = load_install_state(home)
+    manifest = (
+        dict(manifest_override)
+        if isinstance(manifest_override, Mapping)
+        else load_install_state(home)
+    )
+    manifest_attempt = (
+        manifest.get("upgrade_attempt", {})
+        if isinstance(manifest.get("upgrade_attempt"), Mapping)
+        else {}
+    )
+    latest_attempt = latest_upgrade_attempt(home)
+    active_upgrade_attempt = dict(manifest_attempt)
+    if latest_attempt and (
+        not active_upgrade_attempt
+        or str(latest_attempt.get("updated_at") or "")
+        >= str(active_upgrade_attempt.get("updated_at") or "")
+    ):
+        active_upgrade_attempt = latest_attempt
     manifest_root_raw = str(manifest.get("repo_root", "") or "").strip()
     env_value = os.environ.get(KB_ROOT_ENV_VAR, "").strip()
     managed_automations = manifest.get("automations", [])
+    restore_deferred = manifest.get("automation_restore_deferred") is True
     managed_maintenance_skills = manifest.get("maintenance_skills", [])
     shell_tools_manifest = manifest.get("shell_tools", {}) if isinstance(manifest.get("shell_tools"), dict) else {}
 
     issues: list[str] = []
     warnings: list[str] = []
+    if (
+        manifest_override is None
+        and active_upgrade_attempt.get("status") == "failed"
+        and str(active_upgrade_attempt.get("updated_at") or "")
+        > str(manifest.get("installed_at") or "")
+    ):
+        issues.append(
+            "Latest Chaos Brain upgrade attempt failed safely and remains recoverable at "
+            f"phase={active_upgrade_attempt.get('phase', '')}; all surviving automations "
+            "must remain PAUSED until a complete retry passes."
+        )
 
     resolved_manifest_root = ""
     if manifest_root_raw:
@@ -1081,6 +3368,16 @@ def build_installation_check(
             "Global skill default_prompt does not contain the expected canonical machine interface wording. "
             "Re-run the installer to refresh the installed prompt."
         )
+    if openai_text and not _has_current_runtime_only_wording(openai_text):
+        issues.append(
+            "Global skill default_prompt does not contain the zero-compatibility and zero-fallback current-runtime rule. "
+            "Re-run the installer to refresh the installed prompt."
+        )
+    if openai_text and not _has_logicguard_native_default_wording(openai_text):
+        issues.append(
+            "Global skill default_prompt does not contain the exact LogicGuard model/projection/ModelMesh ownership rule. "
+            "Re-run the installer to refresh the installed prompt."
+        )
     if not global_agents.exists():
         issues.append(
             f"Global AGENTS defaults file is missing: {global_agents}. "
@@ -1134,6 +3431,16 @@ def build_installation_check(
             "Global AGENTS defaults do not contain the expected canonical machine interface wording. "
             "Re-run the installer to refresh the session-wide defaults."
         )
+    if global_agents_text and not _has_current_runtime_only_wording(global_agents_text):
+        issues.append(
+            "Global AGENTS defaults do not contain the zero-compatibility and zero-fallback current-runtime rule. "
+            "Re-run the installer to refresh the session-wide defaults."
+        )
+    if global_agents_text and not _has_logicguard_native_default_wording(global_agents_text):
+        issues.append(
+            "Global AGENTS defaults do not contain the exact LogicGuard model/projection/ModelMesh ownership rule. "
+            "Re-run the installer to refresh the session-wide defaults."
+        )
 
     shell_bin = Path(
         str(shell_tools_manifest.get("shell_bin_dir", "") or codex_shell_bin_dir())
@@ -1169,6 +3476,157 @@ def build_installation_check(
         )
 
     expected_repo_root = repo_root or (Path(manifest_root_raw) if manifest_root_raw else Path("."))
+    history_migration_required = bool(manifest.get("history_migration_required", True))
+    if history_migration_required:
+        from local_kb.software_update import load_update_state
+
+        current_update_state = load_update_state(expected_repo_root)
+        current_update_state_error = str(current_update_state.get("error") or "")
+        update_state_source_current = not (
+            current_update_state_error == "Update state could not be read."
+            or current_update_state_error == "Update state must be a current mapping."
+            or current_update_state_error.startswith("Update state is not current:")
+        )
+        if not update_state_source_current:
+            issues.append(
+                "The update-state file is not in the sole current schema; the versioned upgrade must rewrite it before installation can be healthy."
+            )
+        obsolete_update_state_settled = not bool(
+            str(current_update_state.get("status") or "") == "failed"
+            and str(current_update_state.get("error") or "")
+            == "SkillGuard installation identity is not current"
+        )
+        if not obsolete_update_state_settled:
+            issues.append(
+                "The exact retired SkillGuard installation-identity failure remains in update state; "
+                "the versioned upgrade must settle it before installation can be healthy."
+            )
+        from local_kb.maintenance_migration import check_migration
+
+        history_migration_check = check_migration(expected_repo_root)
+        if not history_migration_check.get("ok"):
+            issues.append(
+                "Chaos Brain history-debt migration is not current and committed: "
+                + "; ".join(
+                    str(item) for item in history_migration_check.get("issues", [])
+                )
+            )
+    else:
+        current_update_state = {
+            "schema_version": 1,
+            "status": "fixture_skipped",
+            "error": "",
+        }
+        update_state_source_current = True
+        obsolete_update_state_settled = True
+        history_migration_check = {
+            "ok": True,
+            "status": "fixture_skipped",
+            "reason": "isolated installer fixture does not read or mutate live repository runtime state",
+        }
+    upgrade_assurance_required = bool(manifest.get("upgrade_assurance_required", True))
+    upgrade_assurance = (
+        manifest.get("upgrade_assurance", {})
+        if isinstance(manifest.get("upgrade_assurance"), dict)
+        else {}
+    )
+    upgrade_assurance_ok = bool(
+        not upgrade_assurance_required or upgrade_assurance.get("ok")
+    )
+    if not upgrade_assurance_ok:
+        issues.append(
+            "Chaos Brain aggregate pre-restore assurance is missing or failed: "
+            + ", ".join(
+                str(item) for item in upgrade_assurance.get("failed_checks", [])
+            )
+        )
+    manifest_router_refresh = (
+        manifest.get("global_router_refresh", {})
+        if isinstance(manifest.get("global_router_refresh"), dict)
+        else {}
+    )
+    manifest_router_live = (
+        manifest.get("global_router_live_freshness", {})
+        if isinstance(manifest.get("global_router_live_freshness"), dict)
+        else {}
+    )
+    attempt_router_refresh = (
+        active_upgrade_attempt.get("global_router_refresh", {})
+        if isinstance(active_upgrade_attempt.get("global_router_refresh"), Mapping)
+        else {}
+    )
+    pre_assurance_router = (
+        active_upgrade_attempt.get("pre_assurance_global_router", {})
+        if isinstance(active_upgrade_attempt.get("pre_assurance_global_router"), Mapping)
+        else {}
+    )
+    pre_assurance_refresh = (
+        pre_assurance_router.get("refresh", {})
+        if isinstance(pre_assurance_router.get("refresh"), Mapping)
+        else {}
+    )
+    attempt_is_at_least_as_current = bool(
+        active_upgrade_attempt
+        and str(active_upgrade_attempt.get("updated_at") or "")
+        >= str(manifest.get("installed_at") or "")
+    )
+    global_router_refresh = (
+        dict(attempt_router_refresh or pre_assurance_refresh)
+        if attempt_is_at_least_as_current
+        else dict(manifest_router_refresh)
+    )
+    global_router_refresh_receipt_ok = bool(
+        not history_migration_required
+        or str(global_router_refresh.get("decision") or "") == "pass"
+    )
+    final_router_phase_bound = bool(
+        not history_migration_required
+        or (
+            bool(attempt_router_refresh)
+            and str(active_upgrade_attempt.get("phase") or "")
+            in {
+                "final_router_current",
+                "post_install_check_passed",
+            }
+        )
+        or (
+            not attempt_is_at_least_as_current
+            and bool(manifest_router_refresh)
+            and bool(manifest_router_live.get("ok"))
+        )
+    )
+    if not global_router_refresh_receipt_ok:
+        issues.append(
+            "SkillGuard global-router refresh receipt is missing or failed for the current upgrade attempt."
+        )
+    elif not final_router_phase_bound:
+        issues.append(
+            "SkillGuard router has only a pre-assurance refresh receipt; a final refresh after the "
+            "last managed Skill transaction is still required."
+        )
+    if history_migration_required and global_router_refresh_receipt_ok:
+        global_router_live_freshness = _verify_skillguard_global_router(
+            home, global_router_refresh
+        )
+        global_router_live_freshness_ok = bool(
+            global_router_live_freshness.get("ok") and final_router_phase_bound
+        )
+    else:
+        global_router_live_freshness = {
+            "ok": not history_migration_required,
+            "status": "fixture_skipped" if not history_migration_required else "not_run",
+        }
+        global_router_live_freshness_ok = bool(not history_migration_required)
+    if not global_router_live_freshness_ok:
+        issues.append(
+            "Current SkillGuard global registry and managed prompt are not both fresh against "
+            "the active Skill trees after the final refresh."
+        )
+    global_router_refresh_ok = bool(
+        global_router_refresh_receipt_ok
+        and final_router_phase_bound
+        and global_router_live_freshness_ok
+    )
     canonical_interface_checks: list[dict[str, Any]] = []
 
     def add_canonical_interface_check(check_id: str, path: Path, markers: tuple[str, ...]) -> None:
@@ -1206,11 +3664,6 @@ def build_installation_check(
         "local_kb_maintenance_prompt",
         expected_repo_root / ".agents" / "skills" / "local-kb-retrieve" / "MAINTENANCE_PROMPT.md",
         ("canonical-interface checkpoint", "CLI machine JSON", "i18n.zh-CN"),
-    )
-    add_canonical_interface_check(
-        "local_kb_architect_prompt",
-        expected_repo_root / ".agents" / "skills" / "local-kb-retrieve" / "ARCHITECT_PROMPT.md",
-        ("Canonical-interface mechanism signals", "encoding-stable", "localized UI display"),
     )
     add_canonical_interface_check(
         "preflight_skill_template",
@@ -1292,6 +3745,53 @@ def build_installation_check(
                 issues_for_skill.append(
                     f"Installed maintenance skill {skill_name} default prompt should mention ${skill_name}."
                 )
+        source_manifest = tree_manifest(source_dir) if source_dir.exists() else {}
+        install_manifest = tree_manifest(install_dir) if install_dir.exists() else {}
+        if source_manifest and install_manifest and source_manifest.get("digest") != install_manifest.get("digest"):
+            issues_for_skill.append(
+                f"Installed maintenance skill {skill_name} complete tree differs from repository source."
+            )
+        for authority_file in (
+            ".skillguard/contract-source.json",
+            ".skillguard/compiled-contract.json",
+            ".skillguard/check-manifest.json",
+        ):
+            if not (source_dir / authority_file).is_file():
+                issues_for_skill.append(f"Repository current SkillGuard authority is missing: {source_dir / authority_file}")
+            if not (install_dir / authority_file).is_file():
+                issues_for_skill.append(f"Installed current SkillGuard authority is missing: {install_dir / authority_file}")
+        automation_prompt = next(
+            (
+                str(item.get("prompt") or "")
+                for item in REPO_AUTOMATION_SPECS
+                if str(item.get("skill_name") or "") == skill_name
+            ),
+            "",
+        )
+        source_completion_findings = validate_completion_surface(
+            skill_name,
+            repo_root=expected_repo_root,
+            automation_prompt=automation_prompt,
+            skill_text=source_skill_text,
+            compiled_contract=_load_json_object(source_dir / ".skillguard" / "compiled-contract.json"),
+            check_manifest=_load_json_object(source_dir / ".skillguard" / "check-manifest.json"),
+        )
+        installed_completion_findings = validate_completion_surface(
+            skill_name,
+            repo_root=expected_repo_root,
+            automation_prompt=automation_prompt,
+            skill_text=skill_text,
+            compiled_contract=_load_json_object(install_dir / ".skillguard" / "compiled-contract.json"),
+            check_manifest=_load_json_object(install_dir / ".skillguard" / "check-manifest.json"),
+        )
+        for finding in source_completion_findings:
+            issues_for_skill.append(
+                f"Repository automation SkillGuard completion contract failed: {finding.get('code')}:{finding.get('detail')}"
+            )
+        for finding in installed_completion_findings:
+            issues_for_skill.append(
+                f"Installed automation SkillGuard completion contract failed: {finding.get('code')}:{finding.get('detail')}"
+            )
         if issues_for_skill:
             issues.extend(issues_for_skill)
         maintenance_skill_checks.append(
@@ -1302,6 +3802,10 @@ def build_installation_check(
                 "exists": install_skill_path.exists(),
                 "openai_exists": install_openai_path.exists(),
                 "automation_id": spec["automation_id"],
+                "source_manifest_digest": str(source_manifest.get("digest") or ""),
+                "install_manifest_digest": str(install_manifest.get("digest") or ""),
+                "source_completion_findings": source_completion_findings,
+                "installed_completion_findings": installed_completion_findings,
                 "issues": issues_for_skill,
             }
         )
@@ -1330,8 +3834,17 @@ def build_installation_check(
                 )
             payload_status = str(payload.get("status", "") or "")
             user_paused = bool(payload.get("user_paused")) and payload_status == "PAUSED"
-            manual_org_pause_allowed = spec["id"] in {"kb-org-contribute", "kb-org-maintenance"} and user_paused
-            if payload_status != expected["status"] and not manual_org_pause_allowed:
+            preserved_pause_allowed = user_paused
+            deferred_pause_allowed = bool(
+                allow_deferred_automation_restore
+                and restore_deferred
+                and payload_status == "PAUSED"
+            )
+            if (
+                payload_status != expected["status"]
+                and not preserved_pause_allowed
+                and not deferred_pause_allowed
+            ):
                 issues_for_automation.append(
                     f"Automation {expected['id']} should be status={expected['status']}."
                 )
@@ -1386,6 +3899,13 @@ def build_installation_check(
             required_prompt_markers = (
                 ".agents/skills/local-kb-retrieve",
                 "PROJECT_SPEC.md",
+                "scripts/run_kb_guarded_automation.py",
+                SKILLGUARD_PARTIAL_MARKER,
+                SKILLGUARD_COMPLETION_MARKER,
+                "immutable",
+                "Fixture or capability evidence cannot close a scheduled run",
+                "portable receipt-root reference",
+                "installed runtime fingerprint",
             )
             for marker in required_prompt_markers:
                 if marker not in prompt_text:
@@ -1397,25 +3917,16 @@ def build_installation_check(
             if expected["id"] == "kb-dream":
                 for marker in (
                     "docs/maintenance_agent_worldview.md",
-                    "shared maintenance-agent worldview",
-                    "generated preflight",
-                    "preflight entries retrieved",
-                    "bounded route-deduped batch",
-                    "experiments executed in order",
-                    "report a no-op",
-                    "execution-plan checkpoint status",
-                    "safety tier and rollback plan",
-                    "sandbox experiment artifacts",
-                    "retrieval-ab sandbox paths",
-                    "allowed writes",
-                    "evidence grades",
-                    "validation results",
-                    "prior Dream report",
-                    "structured Sleep handoff",
-                    "suggested_action update-card",
-                    "external-system experiments proposal-only",
-                    "Sleep handoff",
-                    "Sleep/Architect handoff",
+                    "stable fingerprints",
+                    "no_delta_closed",
+                    "pin the exact LogicGuard generation",
+                    "evidence removal",
+                    "assumption removal",
+                    "rebuttal strengthening",
+                    "typed idempotent Sleep handoffs",
+                    "must not directly write cards",
+                    "canonical generation unchanged",
+                    "no-op is a successful convergent result",
                 ):
                     if marker not in prompt_text:
                         issues_for_automation.append(
@@ -1427,83 +3938,22 @@ def build_installation_check(
                 )
             if expected["id"] == "kb-sleep":
                 for marker in (
-                    "visible sleep execution plan",
-                    "shared maintenance-agent worldview",
-                    "checkpoint statuses",
                     "kb_lane_status.py",
-                    "--wait-clear",
-                    "wait and recheck",
-                    "sleep self-preflight",
-                    "system/knowledge-library/maintenance",
-                    "mandatory similar-card merge checkpoint",
-                    "mandatory overloaded-card split checkpoint",
-                    "organization Skill bundle consolidation checkpoint",
-                    "latest approved version by version_time",
-                    "skip-with-reason decisions",
-                    "mechanical apply eligibility",
-                    "high-volume lanes proposal-only",
-                    "dream_validation_summary",
-                    "every safe checkpoint",
-                    "supported low-risk repairs",
-                    "rerun the relevant validation",
-                    "sleep postflight check",
-                    "structured maintenance observation",
-                    "selected action keys",
-                    "--action-key",
-                    "final AI-authored zh-CN",
-                    "canonical-interface checkpoint",
-                    "CLI machine JSON",
-                    "route/path display labels",
-                    "do not run separate mid-run translation cleanup",
-                    "--run-id <run_id>",
-                    "same run id",
-                    "status completed",
-                    "recursively consolidating",
+                    "kb_sleep.py",
+                    "committed increment",
+                    "explicit disposition",
+                    "executable reopen conditions",
+                    "sole canonical model-generation publisher",
+                    "LogicGuard model revision",
+                    "grounded ModelMesh",
+                    "explicit model gaps",
+                    "typed Dream handoffs exactly once",
+                    "commit the watermark only after",
+                    "Do not request human file review",
                 ):
                     if marker not in prompt_text:
                         issues_for_automation.append(
                             f"Automation kb-sleep prompt is missing sleep lifecycle marker: {marker}"
-                        )
-            if expected["id"] == "kb-architect" and "kb_architect.py" not in prompt_text:
-                issues_for_automation.append("Automation kb-architect prompt must reference kb_architect.py.")
-            if expected["id"] == "kb-architect":
-                for marker in (
-                    "docs/maintenance_agent_worldview.md",
-                    "shared maintenance-agent worldview",
-                    "visible Architect execution plan",
-                    "checkpoint statuses",
-                    "Architect self-preflight",
-                    "system/knowledge-library/maintenance",
-                    "scripts/khaos_brain_update.py --architect-check --json",
-                    "$khaos-brain-update",
-                    "software update gate result",
-                    "Evidence, Impact, and Safety",
-                    "human-review status",
-                    "long-observation items as watching",
-                    "KB operating mechanisms rather than card content",
-                    "do not rewrite trusted cards or promote candidates",
-                    "execution packet is agent-ready",
-                    "sandbox_apply.sandbox_ready=true",
-                    "planned sandbox path",
-                    "allowed/disallowed writes",
-                    "merge/block decision fields",
-                    "choose at most one",
-                    "instead of repeatedly reporting",
-                    "selected_sandbox_trial",
-                    "trial_result.json",
-                    "--record-trial-result",
-                    "sandbox-ready packets",
-                    "blocked execution states",
-                    "validation bundle",
-                    "postflight observation status",
-                    "system-readable maintenance rollup",
-                    "content-boundary",
-                    "install-sync status",
-                    "canonical-interface mechanism signals",
-                ):
-                    if marker not in prompt_text:
-                        issues_for_automation.append(
-                            f"Automation kb-architect prompt is missing architect lifecycle marker: {marker}"
                         )
             if expected["id"] == "kb-org-contribute":
                 for marker in (
@@ -1590,6 +4040,11 @@ def build_installation_check(
 
     automation_issue_map = {item["id"]: item["issues"] for item in automation_checks}
     maintenance_skill_ok = all(not item["issues"] for item in maintenance_skill_checks)
+    automation_skillguard_completion_ok = bool(maintenance_skill_checks) and all(
+        not item.get("source_completion_findings")
+        and not item.get("installed_completion_findings")
+        for item in maintenance_skill_checks
+    )
     global_skill_present = skill_path.exists() and launcher_path.exists() and openai_path.exists()
     global_skill_implicit = bool(openai_text and "allow_implicit_invocation: true" in openai_text)
     global_skill_postflight = bool(
@@ -1602,6 +4057,12 @@ def build_installation_check(
     global_skill_phase_checkpoints = bool(openai_text and "phase-change KB checkpoints" in openai_text)
     global_skill_mistake_priority = bool(openai_text and _has_mistake_priority_wording(openai_text))
     global_skill_canonical_interface = bool(openai_text and _has_canonical_interface_wording(openai_text))
+    global_skill_current_runtime_only = bool(
+        openai_text and _has_current_runtime_only_wording(openai_text)
+    )
+    global_skill_logicguard_native = bool(
+        openai_text and _has_logicguard_native_default_wording(openai_text)
+    )
     global_agents_present = global_agents.exists()
     global_agents_managed = bool(
         global_agents_text
@@ -1615,6 +4076,12 @@ def build_installation_check(
     global_agents_phase_checkpoints = bool(global_agents_text and "phase-change KB checkpoints" in global_agents_text)
     global_agents_mistake_priority = bool(global_agents_text and _has_mistake_priority_wording(global_agents_text))
     global_agents_canonical_interface = bool(global_agents_text and _has_canonical_interface_wording(global_agents_text))
+    global_agents_current_runtime_only = bool(
+        global_agents_text and _has_current_runtime_only_wording(global_agents_text)
+    )
+    global_agents_logicguard_native = bool(
+        global_agents_text and _has_logicguard_native_default_wording(global_agents_text)
+    )
     canonical_interface_ok = (
         global_skill_canonical_interface
         and global_agents_canonical_interface
@@ -1622,11 +4089,40 @@ def build_installation_check(
     )
     kb_sleep_ok = not automation_issue_map.get("kb-sleep")
     kb_dream_ok = not automation_issue_map.get("kb-dream")
-    kb_architect_ok = not automation_issue_map.get("kb-architect")
+    system_update_ok = not automation_issue_map.get("khaos-brain-system-update")
     kb_org_contribute_ok = not automation_issue_map.get("kb-org-contribute")
     kb_org_maintenance_ok = not automation_issue_map.get("kb-org-maintenance")
     automation_check_map = {item["id"]: item for item in automation_checks}
     codex_shell_tools_ok = not shell_tools_required or (git_shim_path.exists() and rg_path.exists())
+    retired_paths = [
+        *(home / "skills" / item for item in RETIRED_MAINTENANCE_SKILL_IDS),
+        *(home / "automations" / item for item in RETIRED_AUTOMATION_IDS),
+    ]
+    retired_source_paths = [
+        expected_repo_root / REPO_SKILLS_ROOT / item for item in RETIRED_MAINTENANCE_SKILL_IDS
+    ]
+    active_retired_absent = all(not path.exists() for path in retired_paths)
+    source_retired_absent = all(
+        not path.exists() or int(tree_manifest(path).get("file_count") or 0) == 0
+        for path in retired_source_paths
+    )
+    retired_surfaces_absent = active_retired_absent and source_retired_absent
+    if not retired_surfaces_absent:
+        issues.append(
+            "Retired Architect surfaces remain active: "
+            + ", ".join(
+                str(path)
+                for path in retired_paths
+                if path.exists()
+            )
+        )
+    install_transaction = latest_install_receipt(home)
+    transaction_committed = bool(
+        install_transaction.get("status") == "committed"
+        and install_transaction.get("receipt_hash")
+    )
+    if not transaction_committed:
+        issues.append("No current committed transactional Chaos Brain install receipt is available.")
     strong_defaults_ok = (
         global_skill_implicit
         and global_skill_postflight
@@ -1642,7 +4138,14 @@ def build_installation_check(
         and global_skill_mistake_priority
         and global_agents_mistake_priority
         and canonical_interface_ok
+        and global_skill_current_runtime_only
+        and global_agents_current_runtime_only
+        and global_skill_logicguard_native
+        and global_agents_logicguard_native
+        and obsolete_update_state_settled
+        and update_state_source_current
         and maintenance_skill_ok
+        and automation_skillguard_completion_ok
     )
     checklist = [
         _checklist_item(
@@ -1691,6 +4194,18 @@ def build_installation_check(
             "global_skill_canonical_interface",
             "Global predictive KB prompt preserves canonical machine interfaces and localized display projection",
             global_skill_canonical_interface,
+            f"openai_path={openai_path}",
+        ),
+        _checklist_item(
+            "global_skill_current_runtime_only",
+            "Global predictive KB prompt enforces zero compatibility and zero fallback in normal runtime",
+            global_skill_current_runtime_only,
+            f"openai_path={openai_path}",
+        ),
+        _checklist_item(
+            "global_skill_logicguard_native",
+            "Global predictive KB prompt enters exact LogicGuard models and keeps Sleep as the sole canonical publisher",
+            global_skill_logicguard_native,
             f"openai_path={openai_path}",
         ),
         _checklist_item(
@@ -1748,6 +4263,18 @@ def build_installation_check(
             f"global_agents_path={global_agents}",
         ),
         _checklist_item(
+            "global_agents_current_runtime_only",
+            "Global AGENTS defaults enforce upgrade-only direct migration and visible current-authority failure",
+            global_agents_current_runtime_only,
+            f"global_agents_path={global_agents}",
+        ),
+        _checklist_item(
+            "global_agents_logicguard_native",
+            "Global AGENTS defaults require deterministic projections, exact LogicGuard context, and grounded ModelMesh expansion",
+            global_agents_logicguard_native,
+            f"global_agents_path={global_agents}",
+        ),
+        _checklist_item(
             "canonical_machine_interfaces",
             "Repository prompts, templates, and launcher preserve canonical machine output and localized display boundaries",
             canonical_interface_ok,
@@ -1758,6 +4285,73 @@ def build_installation_check(
             "Repository-managed KB maintenance, organization, and update skills are installed",
             maintenance_skill_ok,
             "; ".join(f"{item['name']}={item['install_path']}" for item in maintenance_skill_checks),
+        ),
+        _checklist_item(
+            "automation_skillguard_completion_contracts",
+            "Every retained background automation has current target-specific runtime receipts and the sole enforced SkillGuard declared-check contract",
+            automation_skillguard_completion_ok,
+            "; ".join(
+                f"{item['name']}=source:{len(item.get('source_completion_findings', []))},installed:{len(item.get('installed_completion_findings', []))}"
+                for item in maintenance_skill_checks
+            ),
+        ),
+        _checklist_item(
+            "chaos_brain_history_migration",
+            "Versioned history debt is settled, archived, pruned, indexed, and committed",
+            bool(history_migration_check.get("ok")),
+            (
+                f"required={history_migration_required}; "
+                f"migration_id={history_migration_check.get('migration_id', '')}; "
+                f"status={history_migration_check.get('status', history_migration_check.get('journal', {}).get('status', ''))}"
+            ),
+        ),
+        _checklist_item(
+            "obsolete_update_state_settled",
+            "The exact retired update-identity failure is absent after upgrade-only settlement",
+            obsolete_update_state_settled,
+            f"status={current_update_state.get('status', '')}; error={current_update_state.get('error', '')}",
+        ),
+        _checklist_item(
+            "update_state_source_current",
+            "Update state uses the sole current schema and no daily compatibility reader",
+            update_state_source_current,
+            f"status={current_update_state.get('status', '')}; error={current_update_state.get('error', '')}",
+        ),
+        _checklist_item(
+            "skillguard_global_router_refresh_receipt",
+            "A durable final SkillGuard router-refresh receipt is bound after the last managed Skill transaction",
+            bool(global_router_refresh_receipt_ok and final_router_phase_bound),
+            (
+                f"registry={global_router_refresh.get('registry_path', '')}; "
+                f"registry_hash={global_router_refresh.get('registry_hash', '')}; "
+                f"agents_file={global_router_refresh.get('agents_file', '')}; "
+                f"decision={global_router_refresh.get('decision', '')}"
+            ),
+        ),
+        _checklist_item(
+            "skillguard_global_router_live_freshness",
+            "Current registry and managed prompt both match the active Skill trees after final refresh",
+            global_router_live_freshness_ok,
+            (
+                f"registry={global_router_live_freshness.get('registry_path', '')}; "
+                f"registry_decision={global_router_live_freshness.get('registry_check', {}).get('decision', '')}; "
+                f"prompt_decision={global_router_live_freshness.get('prompt_check', {}).get('decision', '')}"
+            ),
+        ),
+        _checklist_item(
+            "skillguard_global_router_refresh",
+            "Global SkillGuard routing is durably refreshed and currently fresh without the retired Architect Skill",
+            global_router_refresh_ok,
+            str(global_router_refresh.get("registry_path") or ""),
+        ),
+        _checklist_item(
+            "chaos_brain_aggregate_assurance",
+            "Current model, SkillGuard, retirement, retrieval, and full-regression gates passed before restore",
+            upgrade_assurance_ok,
+            (
+                f"required={upgrade_assurance_required}; "
+                f"failed={','.join(str(item) for item in upgrade_assurance.get('failed_checks', []))}"
+            ),
         ),
         _checklist_item(
             "kb_sleep_automation",
@@ -1772,10 +4366,22 @@ def build_installation_check(
             f"path={automation_toml_path('kb-dream', home)}",
         ),
         _checklist_item(
-            "kb_architect_automation",
-            "KB Architect automation is installed and matches the repository spec",
-            kb_architect_ok,
-            f"path={automation_toml_path('kb-architect', home)}",
+            "retired_architect_surfaces",
+            "Retired Architect Skill and automation surfaces are absent",
+            retired_surfaces_absent,
+            "; ".join(str(path) for path in [*retired_paths, *retired_source_paths]),
+        ),
+        _checklist_item(
+            "khaos_brain_system_update_automation",
+            "Khaos Brain system update automation is installed and matches the repository spec",
+            system_update_ok,
+            f"path={automation_toml_path('khaos-brain-system-update', home)}",
+        ),
+        _checklist_item(
+            "transactional_install_receipt",
+            "Managed Skills and automations have a committed parity-bound install receipt",
+            transaction_committed,
+            str(install_transaction.get("journal_path") or ""),
         ),
         _checklist_item(
             "kb_org_contribute_automation",
@@ -1839,6 +4445,23 @@ def build_installation_check(
         "canonical_interface_checks": canonical_interface_checks,
         "maintenance_skill_checks": maintenance_skill_checks,
         "automation_checks": automation_checks,
+        "automation_restore_deferred": restore_deferred,
+        "deferred_automation_restore_allowed": bool(allow_deferred_automation_restore),
+        "history_migration_required": history_migration_required,
+        "history_migration_check": history_migration_check,
+        "obsolete_update_state_settled": obsolete_update_state_settled,
+        "update_state_source_current": update_state_source_current,
+        "current_update_state": current_update_state,
+        "upgrade_assurance_required": upgrade_assurance_required,
+        "upgrade_assurance": upgrade_assurance,
+        "global_router_refresh": global_router_refresh,
+        "global_router_refresh_receipt_ok": global_router_refresh_receipt_ok,
+        "global_router_final_phase_bound": final_router_phase_bound,
+        "global_router_live_freshness": global_router_live_freshness,
+        "global_router_live_freshness_ok": global_router_live_freshness_ok,
+        "upgrade_attempt": active_upgrade_attempt,
+        "install_transaction": install_transaction,
+        "retired_paths": [str(path) for path in retired_paths],
         "issues": issues,
         "warnings": warnings,
     }

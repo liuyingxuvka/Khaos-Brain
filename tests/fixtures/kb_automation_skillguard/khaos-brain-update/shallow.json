@@ -1,0 +1,22 @@
+{
+  "case_id": "case:khaos-brain-update:shallow-automation-depth",
+  "important_gap_obligation_id": "obligation:khaos-brain-update:aggregate-hard-gates",
+  "mode": "target-native-important-obligation-gap",
+  "native_evaluator_id": "local_kb.automation_runtime.evaluate_native_payload",
+  "native_receipt_origin": "calibration-fixture",
+  "schema_version": "khaos-brain.target-native-depth-calibration.v1",
+  "skill_id": "khaos-brain-update",
+  "target_obligation_ids": [
+    "obligation:khaos-brain-update:authorization-system-check",
+    "obligation:khaos-brain-update:preserve-state-rollback",
+    "obligation:khaos-brain-update:fast-forward-only",
+    "obligation:khaos-brain-update:migration-debt-settlement",
+    "obligation:khaos-brain-update:transaction-retirement",
+    "obligation:khaos-brain-update:aggregate-hard-gates",
+    "obligation:khaos-brain-update:restore-or-stay-paused",
+    "obligation:khaos-brain-update:final-machine-receipt",
+    "obligation:khaos-brain-update:timeout-tree-cleanup",
+    "obligation:khaos-brain-update:staged-restoration-authorization",
+    "obligation:khaos-brain-update:depth-calibration"
+  ]
+}

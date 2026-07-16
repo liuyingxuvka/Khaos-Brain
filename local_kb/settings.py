@@ -5,15 +5,17 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from local_kb.i18n import DEFAULT_LANGUAGE, normalize_language
+from local_kb.i18n import DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, normalize_language
 
 
 PERSONAL_MODE = "personal"
 ORGANIZATION_MODE = "organization"
 VALID_DESKTOP_MODES = {PERSONAL_MODE, ORGANIZATION_MODE}
 VALID_ORG_VALIDATION_STATUSES = {"not_configured", "pending", "valid", "invalid"}
+CURRENT_DESKTOP_SETTINGS_SCHEMA_VERSION = 1
 
 DEFAULT_DESKTOP_SETTINGS = {
+    "schema_version": CURRENT_DESKTOP_SETTINGS_SCHEMA_VERSION,
     "language": DEFAULT_LANGUAGE,
     "mode": PERSONAL_MODE,
     "organization": {
@@ -30,12 +32,10 @@ DEFAULT_DESKTOP_SETTINGS = {
         "organization_maintenance_validated": False,
         "organization_maintenance_status": "not_configured",
         "organization_maintenance_message": "",
-        "maintainer_mode_requested": False,
-        "maintainer_validated": False,
-        "maintainer_validation_status": "not_configured",
-        "maintainer_validation_message": "",
     },
 }
+CURRENT_DESKTOP_SETTINGS_KEYS = frozenset(DEFAULT_DESKTOP_SETTINGS)
+CURRENT_ORGANIZATION_SETTING_KEYS = frozenset(DEFAULT_DESKTOP_SETTINGS["organization"])
 
 
 def desktop_settings_path(repo_root: Path) -> Path:
@@ -63,7 +63,7 @@ def _normalize_validation_status(value: Any) -> str:
 def _normalize_organization_maintenance_message(payload: dict[str, Any], maintenance_status: str) -> str:
     if maintenance_status == "valid":
         return ""
-    return _normalize_text(payload.get("organization_maintenance_message", payload.get("maintainer_validation_message")))
+    return _normalize_text(payload.get("organization_maintenance_message"))
 
 
 def _normalize_organization_settings(value: Any) -> dict[str, Any]:
@@ -72,10 +72,8 @@ def _normalize_organization_settings(value: Any) -> dict[str, Any]:
     validated = bool(payload.get("validated")) and validation_status == "valid"
     if validated:
         validation_status = "valid"
-    maintainer_validation_status = _normalize_validation_status(payload.get("maintainer_validation_status"))
-    maintainer_validated = bool(payload.get("maintainer_validated")) and validated and maintainer_validation_status == "valid"
-    maintenance_requested = bool(payload.get("organization_maintenance_requested", payload.get("maintainer_mode_requested")))
-    maintenance_status = _normalize_validation_status(payload.get("organization_maintenance_status", payload.get("maintainer_validation_status")))
+    maintenance_requested = bool(payload.get("organization_maintenance_requested"))
+    maintenance_status = _normalize_validation_status(payload.get("organization_maintenance_status"))
     maintenance_validated = maintenance_requested and validated
     if maintenance_validated:
         maintenance_status = "valid"
@@ -94,11 +92,43 @@ def _normalize_organization_settings(value: Any) -> dict[str, Any]:
         "organization_maintenance_validated": maintenance_validated,
         "organization_maintenance_status": maintenance_status,
         "organization_maintenance_message": _normalize_organization_maintenance_message(payload, maintenance_status),
-        "maintainer_mode_requested": maintenance_requested,
-        "maintainer_validated": maintainer_validated,
-        "maintainer_validation_status": "valid" if maintainer_validated else maintainer_validation_status,
-        "maintainer_validation_message": _normalize_text(payload.get("maintainer_validation_message")),
     }
+
+
+def current_desktop_settings_issues(payload: Any) -> list[str]:
+    if not isinstance(payload, dict):
+        return ["desktop settings must be a mapping"]
+    issues: list[str] = []
+    if payload.get("schema_version") != CURRENT_DESKTOP_SETTINGS_SCHEMA_VERSION:
+        issues.append("desktop settings schema_version is not current")
+    top_keys = set(payload)
+    if top_keys != set(CURRENT_DESKTOP_SETTINGS_KEYS):
+        missing = sorted(set(CURRENT_DESKTOP_SETTINGS_KEYS) - top_keys)
+        extra = sorted(top_keys - set(CURRENT_DESKTOP_SETTINGS_KEYS))
+        if missing:
+            issues.append("desktop settings missing current keys: " + ", ".join(missing))
+        if extra:
+            issues.append("desktop settings contain unknown keys: " + ", ".join(extra))
+    if payload.get("language") not in SUPPORTED_LANGUAGES:
+        issues.append("desktop settings language is not current")
+    if payload.get("mode") not in VALID_DESKTOP_MODES:
+        issues.append("desktop settings mode is not current")
+    organization = payload.get("organization")
+    if not isinstance(organization, dict):
+        issues.append("desktop settings organization must be a mapping")
+        return issues
+    organization_keys = set(organization)
+    if organization_keys != set(CURRENT_ORGANIZATION_SETTING_KEYS):
+        missing = sorted(set(CURRENT_ORGANIZATION_SETTING_KEYS) - organization_keys)
+        extra = sorted(organization_keys - set(CURRENT_ORGANIZATION_SETTING_KEYS))
+        if missing:
+            issues.append("organization settings missing current keys: " + ", ".join(missing))
+        if extra:
+            issues.append("organization settings contain obsolete or unknown keys: " + ", ".join(extra))
+    for key in ("validation_status", "organization_maintenance_status"):
+        if organization.get(key) not in VALID_ORG_VALIDATION_STATUSES:
+            issues.append(f"organization settings {key} is not current")
+    return issues
 
 
 def load_desktop_settings(repo_root: Path) -> dict[str, Any]:
@@ -107,11 +137,13 @@ def load_desktop_settings(repo_root: Path) -> dict[str, Any]:
         return deepcopy(DEFAULT_DESKTOP_SETTINGS)
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return deepcopy(DEFAULT_DESKTOP_SETTINGS)
-    if not isinstance(payload, dict):
-        return deepcopy(DEFAULT_DESKTOP_SETTINGS)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"Desktop settings are unreadable: {exc}") from exc
+    issues = current_desktop_settings_issues(payload)
+    if issues:
+        raise RuntimeError("Desktop settings are not current: " + "; ".join(issues))
     settings = deepcopy(DEFAULT_DESKTOP_SETTINGS)
+    settings["schema_version"] = CURRENT_DESKTOP_SETTINGS_SCHEMA_VERSION
     settings["language"] = normalize_language(payload.get("language"))
     settings["mode"] = normalize_desktop_mode(payload.get("mode"))
     settings["organization"] = _normalize_organization_settings(payload.get("organization"))
@@ -121,7 +153,17 @@ def load_desktop_settings(repo_root: Path) -> dict[str, Any]:
 
 
 def save_desktop_settings(repo_root: Path, settings: dict[str, Any]) -> Path:
+    organization_input = settings.get("organization")
+    if isinstance(organization_input, dict):
+        non_current = sorted(set(organization_input) - set(CURRENT_ORGANIZATION_SETTING_KEYS))
+        if non_current:
+            raise ValueError(
+                "Non-current organization settings are upgrade-only input: " + ", ".join(non_current)
+            )
+    if "schema_version" in settings and settings.get("schema_version") != CURRENT_DESKTOP_SETTINGS_SCHEMA_VERSION:
+        raise ValueError("Desktop settings schema_version is not current")
     payload = deepcopy(DEFAULT_DESKTOP_SETTINGS)
+    payload["schema_version"] = CURRENT_DESKTOP_SETTINGS_SCHEMA_VERSION
     payload["language"] = normalize_language(settings.get("language"))
     payload["mode"] = normalize_desktop_mode(settings.get("mode"))
     payload["organization"] = _normalize_organization_settings(settings.get("organization"))
@@ -149,10 +191,6 @@ def organization_sources_from_settings(settings: dict[str, Any]) -> list[dict[st
             "source_commit": organization["last_sync_commit"],
         }
     ]
-
-
-def maintainer_status_from_settings(settings: dict[str, Any]) -> dict[str, Any]:
-    return maintenance_participation_status_from_settings(settings)
 
 
 def maintenance_participation_status_from_settings(settings: dict[str, Any]) -> dict[str, Any]:

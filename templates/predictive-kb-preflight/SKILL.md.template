@@ -21,7 +21,7 @@ If the repository is moved or re-cloned to a different path, rerun:
 python scripts/install_codex_kb.py --json
 ```
 
-That installer refreshes the global preflight skill and the repository-managed `KB Sleep` / `KB Dream` / `KB Architect` cron automations under `$CODEX_HOME/automations`, so another machine can inherit the same maintenance cadence from the repository itself. Those automation specs should use the strongest available model and deepest supported reasoning policy rather than pinning a fixed model slug.
+That installer refreshes the global preflight skill plus the repository-managed `KB Sleep`, `KB Dream`, system-update, and organization automations under `$CODEX_HOME/automations`. It also removes the exact retired `KB Architect` Skill and automation on older machines and runs the versioned history-debt migration before reporting the upgrade healthy. Automation specs should use the strongest available model and deepest supported reasoning policy rather than pinning a fixed model slug.
 
 If the user asks to install, enable, deploy, bootstrap, or set up this predictive KB system on a machine from within this repository, the default first actions are:
 
@@ -41,9 +41,11 @@ Preferred operating pattern:
 - Skill and plugin usage lessons count as reusable signals when a skill choice, ordering, combination, fallback, or limitation materially changed the result.
 - Subagent and delegation usage lessons count as reusable signals when spawning, avoiding, sequencing, waiting for, or parallelizing subagents materially changed speed, coordination overhead, context isolation, main-thread clarity, verification quality, or task outcome.
 - Keep canonical machine interfaces separate from localized display projection. Repository CLI tools, installed launchers, automation payloads, and install checks should use canonical machine output and encoding-stable JSON; localized display belongs in UI view models, route display labels, and `i18n.zh-CN`.
+- Treat each returned card as a deterministic entry projection, then reason from its exact `logicguard` context: pinned generation/model/root ArgumentBlock/mesh revisions, typed support and challenge nodes, explicit gaps, and grounded mesh neighborhood. Route and lexical scores select the entry point; projection `related_cards` and co-use never authorize expansion.
+- Sleep is the sole normal-runtime canonical LogicGuard model-generation publisher. Ordinary preflight and feedback do not write models or meshes, and Dream may only produce immutable simulation evidence plus typed Sleep model-gap handoffs.
+- For this KB, normal runtime has zero compatibility and zero fallback. Exact retired managed formats belong only to the versioned direct-migration owner, which removes old authority and proves zero residuals. An incompatible residual is an unfinished upgrade-AI work item: derive one evidence-bound direct-to-current disposition and retry inside the rollbackable upgrade instead of adding a product reader. Missing current authority must fail visibly rather than selecting an alias, alternate launcher/model, or downgrade path.
 - The launcher is subcommand-based: `python "{{LAUNCHER_PATH}}" <command> ...`. The normal preflight entry is `search`.
-- For compatibility, the launcher also treats common search-style calls without the explicit `search` subcommand as a search request.
-- For search, prefer `--route-hint`. The underlying local search script also accepts the older `--path-hint` name.
+- The launcher accepts only explicit subcommands. Search uses the canonical `search --route-hint ...` grammar; removed implicit calls and argument aliases are rejected instead of reinterpreted.
 
 ## Workflow
 
@@ -70,7 +72,7 @@ Preferred operating pattern:
    ```
 
 5. If the task is a long mixed plan, mark phase-change KB checkpoints in the plan. Re-run search when the next phase needs a different route or operating model; skip extra searches for repeated same-type work where the first hit set still applies.
-6. Treat retrieved cards as bounded context. Follow current user instructions over stored cards if they conflict.
+6. Treat the returned exact LogicGuard model nodes as bounded context. Respect declared assumptions, rebuttals, limitations, and open gaps; never infer support from the readable projection alone. Follow current user instructions over stored models if they conflict.
 7. Finish the main task.
 8. Before finalizing any non-trivial task, run one explicit KB postflight check. First ask whether Codex exposed mistake-first evidence: its own mistake, weak path, missed instruction, failed validation, tool or skill misuse, user correction, or later correction episode. Treat that as the highest-priority observation evidence. Then check whether the task exposed a reusable lesson, a skill/plugin usage lesson, a subagent/delegation usage lesson, a miss, a route gap, a card weakness, or a KB-process failure.
 9. If the postflight check found a meaningful signal, append one structured observation:
@@ -114,11 +116,11 @@ Preferred operating pattern:
 - Use this skill before almost every task. The default is a lightweight recall scan, not a heavy workflow.
 - Use phase-change KB checkpoints for long mixed tasks. The checkpoint trigger is a change in action class or risk surface, not every numbered plan item.
 - The launcher resolves the active KB root in this order: `{{ENV_VAR_NAME}}`, the current workspace when it is itself a predictive KB clone, then the installed manifest.
-- If no useful card is found, continue the main task anyway and record the miss afterward when that miss is meaningful.
+- If no useful model entry is found, continue the main task anyway and record the miss afterward when that miss is meaningful. If an entry is selected but its exact LogicGuard authority is missing or inconsistent, fail visibly instead of falling back to YAML.
 - For non-trivial tasks, meaningful KB postflight write-back is part of done.
 
 ## Output Discipline
 
-- Briefly state which KB entry ids influenced the work, if any.
+- Briefly state which KB entry ids and exact model revisions influenced the work, if any.
 - If the KB was weak, empty, or misaligned, say so and record that in the observation.
 - Do not expose private KB content unless the user is authorized to see it.

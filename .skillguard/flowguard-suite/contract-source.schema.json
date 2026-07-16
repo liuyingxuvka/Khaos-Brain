@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FlowGuard Skill Contract Source",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "skill_id",
+    "route_id",
+    "route_role",
+    "native_owner",
+    "route_summary",
+    "activation_keywords",
+    "use_when",
+    "do_not_use_when",
+    "workflow",
+    "native_checks",
+    "source_requirements",
+    "direct_references",
+    "downstream_targets",
+    "output_fields",
+    "layout_profiles",
+    "claim_boundary"
+  ],
+  "properties": {
+    "schema_version": {"const": "flowguard.skill_contract_source.v1"},
+    "skill_id": {"type": "string", "minLength": 1},
+    "route_id": {"type": "string", "minLength": 1},
+    "route_role": {"enum": ["kernel", "public_owner", "delegated_mode"]},
+    "native_owner": {"type": "string", "minLength": 1},
+    "route_summary": {"type": "string", "minLength": 1},
+    "activation_keywords": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "use_when": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "do_not_use_when": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "workflow": {
+      "type": "array",
+      "minItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["phase_id", "summary"],
+        "properties": {
+          "phase_id": {"enum": ["intake", "inventory", "execution", "checks", "closure"]},
+          "summary": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "native_checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["binding_id", "native_check_id", "kind", "summary", "command", "evidence_source"],
+        "properties": {
+          "binding_id": {"type": "string", "minLength": 1},
+          "native_check_id": {"type": "string", "minLength": 1},
+          "kind": {"type": "string", "minLength": 1},
+          "summary": {"type": "string", "minLength": 1},
+          "command": {"type": "string", "minLength": 1},
+          "evidence_source": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "source_requirements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["requirement_id", "category", "summary"],
+        "properties": {
+          "requirement_id": {"type": "string", "minLength": 1},
+          "category": {"type": "string", "minLength": 1},
+          "summary": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "direct_references": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "downstream_targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["target_kind", "target_id", "condition", "claim_scope"],
+        "properties": {
+          "target_kind": {"enum": ["skill", "internal_route", "helper_api", "external_action"]},
+          "target_id": {"type": "string", "minLength": 1},
+          "condition": {"type": "string", "minLength": 1},
+          "claim_scope": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "output_fields": {"type": "array", "minItems": 6, "items": {"type": "string", "minLength": 1}},
+    "layout_profiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "installed"],
+      "properties": {
+        "source": {"type": "string", "minLength": 1},
+        "installed": {"type": "string", "minLength": 1}
+      }
+    },
+    "claim_boundary": {"type": "string", "minLength": 1},
+    "default_route": {"type": "boolean"}
+  }
+}

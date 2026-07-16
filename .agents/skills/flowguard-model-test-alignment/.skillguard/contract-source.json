@@ -1,0 +1,223 @@
+{
+  "artifacts": [],
+  "checks": [
+    {
+      "check_id": "check:flowguard-model-test-alignment:plane-boundary",
+      "coverage_rationale": "The check is the single declared owner for its mapped obligation set.",
+      "coverage_scope": "declared_obligations",
+      "covers_obligation_ids": [
+        "obligation:flowguard-model-test-alignment:plane-boundary"
+      ],
+      "depends_on_check_ids": [],
+      "evidence_class": "hard",
+      "evidence_domain_id": "evidence-domain:check:flowguard-model-test-alignment:plane-boundary",
+      "execution_owner_id": "owner:check:flowguard-model-test-alignment:plane-boundary",
+      "input_selectors": [
+        {
+          "kind": "path",
+          "path": ".flowguard/model_test_code_alignment/model.py"
+        }
+      ],
+      "kind": "model_assertion",
+      "semantic_check_id": "semantic:check:flowguard-model-test-alignment:plane-boundary",
+      "timeout_seconds": 30
+    },
+    {
+      "args": [
+        ".flowguard/model_test_code_alignment/run_checks.py"
+      ],
+      "check_id": "check:flowguard-model-test-alignment:native-authority",
+      "command": "python",
+      "coverage_rationale": "The check is the single declared owner for its mapped obligation set.",
+      "coverage_scope": "declared_obligations",
+      "covers_obligation_ids": [
+        "obligation:flowguard-model-test-alignment:native-authority"
+      ],
+      "cwd_token": "repository_root",
+      "depends_on_check_ids": [],
+      "evidence_class": "hard",
+      "evidence_domain_id": "evidence-domain:check:flowguard-model-test-alignment:native-authority",
+      "execution_owner_id": "owner:check:flowguard-model-test-alignment:native-authority",
+      "expected": {
+        "exit_code": 0
+      },
+      "input_selectors": [
+        {
+          "kind": "path",
+          "path": ".flowguard/model_test_code_alignment/model.py"
+        },
+        {
+          "kind": "path",
+          "path": ".flowguard/model_test_code_alignment/run_checks.py"
+        },
+        {
+          "kind": "role",
+          "role": "runtime_source"
+        },
+        {
+          "kind": "role",
+          "role": "documentation_model"
+        },
+        {
+          "kind": "role",
+          "role": "test_dev"
+        }
+      ],
+      "kind": "command",
+      "semantic_check_id": "semantic:check:flowguard-model-test-alignment:native-authority",
+      "timeout_seconds": 180
+    },
+    {
+      "check_id": "check:flowguard-model-test-alignment:evidence-closure",
+      "coverage_rationale": "The check is the single declared owner for its mapped obligation set.",
+      "coverage_scope": "declared_obligations",
+      "covers_obligation_ids": [
+        "obligation:flowguard-model-test-alignment:evidence-closure"
+      ],
+      "depends_on_check_ids": [],
+      "evidence_class": "hard",
+      "evidence_domain_id": "evidence-domain:check:flowguard-model-test-alignment:evidence-closure",
+      "execution_owner_id": "owner:check:flowguard-model-test-alignment:evidence-closure",
+      "input_selectors": [
+        {
+          "kind": "path",
+          "path": ".flowguard/model_test_code_alignment/model.py"
+        }
+      ],
+      "kind": "model_assertion",
+      "semantic_check_id": "semantic:check:flowguard-model-test-alignment:evidence-closure",
+      "timeout_seconds": 30
+    }
+  ],
+  "claim_boundary": "Alignment proves only current row-level parity among declared obligations, one stable behavior authority identity, owner/delegating code, and supplied materialized evidence; it does not prove unmodeled behavior or production conformance.",
+  "closure_profiles": [
+    {
+      "profile_id": "enforced",
+      "required_obligation_ids": [
+        "obligation:flowguard-model-test-alignment:plane-boundary",
+        "obligation:flowguard-model-test-alignment:native-authority",
+        "obligation:flowguard-model-test-alignment:evidence-closure"
+      ]
+    }
+  ],
+  "confirmed": true,
+  "content_impact_policy": {
+    "full_admission_reason_codes": [
+      "explicit_final_gate",
+      "explicit_release_gate",
+      "impact_policy_or_compiler_changed",
+      "shared_validation_runtime_changed",
+      "all_owner_component_changed"
+    ],
+    "owner_receipt_root_ref": {
+      "path_token": "owner_evidence_root",
+      "relative_path": "check-executions"
+    },
+    "policy_id": "skillguard.content_impact_policy.current",
+    "unknown_mapping_disposition": "block"
+  },
+  "default_route_id": "route:model_test_alignment",
+  "depth_profile": {
+    "schema_version": "skillguard.depth_profile.v2",
+    "profile_id": "profile:flowguard-model-test-alignment:fixed-enforced-declared-check-supervision",
+    "target_skill_id": "flowguard-model-test-alignment",
+    "integration_mode": "native-integrated",
+    "native_owner_id": "model_test_alignment",
+    "native_route_ids": [
+      "route:model_test_alignment"
+    ],
+    "native_check_ids": [
+      "check:flowguard-model-test-alignment:plane-boundary",
+      "check:flowguard-model-test-alignment:native-authority",
+      "check:flowguard-model-test-alignment:evidence-closure"
+    ],
+    "skillguard_adds_domain_route": false,
+    "enforcement_level": "enforced",
+    "required_closure_profiles": [
+      "enforced"
+    ],
+    "provider_runtime": {
+      "provider_id": "skillguard-local-provider",
+      "required_runtime_contract_id": "skillguard-declared-check-supervision-current",
+      "required_capability_ids": [
+        "declared-check-inventory.v1",
+        "declared-check-receipt-reconciliation.v1",
+        "installation-receipt-binding.v1",
+        "installation-currentness-replay.v1",
+        "provider-runtime-enrollment.v1",
+        "single-flight-check-execution.v1"
+      ],
+      "required_enrollment_status": "enrolled",
+      "readiness_check_ids": [
+        "check:flowguard-model-test-alignment:native-authority"
+      ]
+    },
+    "claim_boundary": "flowguard-model-test-alignment owns every check's domain meaning; SkillGuard only reconciles the exact current declared-check inventory and terminal receipts in one fixed enforced closure."
+  },
+  "implementation_paths": [
+    ".agents/skills/flowguard-model-test-alignment",
+    ".flowguard/model_test_code_alignment",
+    "flowguard/model_test_alignment.py",
+    "flowguard/skill_contract_model.py",
+    "tests/test_model_test_alignment.py"
+  ],
+  "integration_mode": "native-integrated",
+  "judgment_rubrics": [],
+  "may_define_parallel_execution_route": false,
+  "may_define_skillguard_runtime_route": false,
+  "model_id": "flowguard.model_test_alignment.skill_contract.v2",
+  "model_path": ".flowguard/model_test_code_alignment/model.py",
+  "native_check_bindings": [
+    {
+      "authority": "target-native",
+      "check_id": "check:flowguard-model-test-alignment:native-authority",
+      "owner_id": "model_test_alignment"
+    }
+  ],
+  "native_route_bindings": [
+    {
+      "authority": "target-native",
+      "owner_id": "model_test_alignment",
+      "route_id": "route:model_test_alignment"
+    }
+  ],
+  "native_route_owner": "model_test_alignment",
+  "release_eligible": false,
+  "schema_version": "skillguard.contract_source.v2",
+  "skill_id": "flowguard-model-test-alignment",
+  "step_bindings": [
+    {
+      "action": {
+        "kind": "inventory",
+        "summary": "Inventory model obligations, execution plane, business intent, commitment, selected path, owner contracts, code, tests, and evidence scope."
+      },
+      "check_ids": [
+        "check:flowguard-model-test-alignment:plane-boundary"
+      ],
+      "output_artifact_ids": [],
+      "step_id": "step:flowguard-model-test-alignment:intake"
+    },
+    {
+      "action": {
+        "kind": "native",
+        "summary": "Run the existing alignment owner to build row-level obligation, owner-code, test, replay, and provenance bindings."
+      },
+      "check_ids": [
+        "check:flowguard-model-test-alignment:native-authority"
+      ],
+      "output_artifact_ids": [],
+      "step_id": "step:flowguard-model-test-alignment:execute"
+    },
+    {
+      "action": {
+        "kind": "verifier",
+        "summary": "Reject cross-plane ownership, path drift, parallel facade success, opaque provenance, stale evidence, missing rows, or overclaiming."
+      },
+      "check_ids": [
+        "check:flowguard-model-test-alignment:evidence-closure"
+      ],
+      "output_artifact_ids": [],
+      "step_id": "step:flowguard-model-test-alignment:verify"
+    }
+  ]
+}

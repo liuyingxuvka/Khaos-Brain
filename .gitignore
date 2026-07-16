@@ -19,7 +19,11 @@ kb/history/*
 
 kb/candidates/*.yaml
 kb/candidates/adopted/
+kb/indexes/
 kb/outbox/
 kb/history/consolidation/
 .local/
 tmp/
+work/
+.flowguard/evidence/
+.agents/skills/.flowguard-skill-suite-ownership.json

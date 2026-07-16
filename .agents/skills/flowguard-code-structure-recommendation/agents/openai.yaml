@@ -1,0 +1,4 @@
+interface:
+  display_name: "FlowGuard Code Structure Recommendation"
+  short_description: "Derive implementation ownership from a model"
+  default_prompt: "Use $flowguard-code-structure-recommendation for route_id=code_structure_recommendation, role=public_owner, native_owner=code_structure_recommendation; require a named model, single ownership, facade, and validation boundaries; do not refactor existing code or replace parity evidence; output evidence, failures, blockers, skipped_checks, residual_risk, claim_boundary, and typed_next_actions; claim only recommendation readiness. When creating or materially changing a concrete model instance, first freeze task/instance-specific one-or-many protected failures and the claim boundary, then bind the exact candidate plus native good, per-failure bad, oracle, and current evidence; reusable model types are not permanently single-purpose; FlowGuard owns semantics and SkillGuard only supervises declared checks."

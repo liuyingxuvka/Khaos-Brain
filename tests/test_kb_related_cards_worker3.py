@@ -7,7 +7,10 @@ from pathlib import Path
 
 import yaml
 
-from local_kb.consolidate import consolidate_history
+from tests.current_runtime_helpers import consolidate_current_history as consolidate_history
+from local_kb.logicguard_models import read_exact_mesh
+from local_kb.maintenance_migration import migrate_legacy_card_generation
+from local_kb.model_projection import binding_from_projection
 from local_kb.proposals import build_proposal_report, format_proposal_report
 
 
@@ -187,7 +190,7 @@ class RelatedCardMaintenanceTests(unittest.TestCase):
                 },
             )
             write_yaml(
-                repo_root / "kb" / "public" / "work" / "communication" / "email" / "model-c.yaml",
+                repo_root / "kb" / "private" / "work" / "communication" / "email" / "model-c.yaml",
                 {
                     "id": "model-c",
                     "title": "C",
@@ -206,6 +209,9 @@ class RelatedCardMaintenanceTests(unittest.TestCase):
                     "updated_at": "2026-04-20",
                 },
             )
+
+            migration = migrate_legacy_card_generation(repo_root)
+            self.assertTrue(migration["ok"], migration)
 
             write_history(
                 repo_root / "kb" / "history" / "events.jsonl",
@@ -276,7 +282,8 @@ class RelatedCardMaintenanceTests(unittest.TestCase):
             )
 
             self.assertEqual(result["apply_mode"], "related-cards")
-            self.assertEqual(result["apply_summary"]["updated_entry_count"], 2)
+            self.assertEqual(result["apply_summary"]["updated_entry_count"], 0)
+            self.assertEqual(result["apply_summary"]["relationship_proposal_count"], 2)
 
             model_a = yaml.safe_load(
                 (repo_root / "kb" / "public" / "system" / "knowledge-library" / "retrieval" / "model-a.yaml")
@@ -286,16 +293,24 @@ class RelatedCardMaintenanceTests(unittest.TestCase):
                 (repo_root / "kb" / "public" / "engineering" / "debugging" / "version-change" / "model-b.yaml")
                 .read_text(encoding="utf-8")
             )
-            self.assertEqual(model_a["related_cards"], ["model-b"])
-            self.assertEqual(model_b["related_cards"], ["model-a"])
+            self.assertEqual(model_a["related_cards"], [])
+            self.assertEqual(model_b["related_cards"], [])
+            mesh = read_exact_mesh(repo_root, binding_from_projection(model_a))
+            self.assertEqual(len(mesh.cross_model_edges), 0)
+            proposals = [
+                item
+                for item in mesh.metadata["unresolved_relationships"]
+                if item.get("disposition") == "sleep-grounding-required"
+            ]
+            self.assertEqual(len(proposals), 2)
 
             history_events = [
                 json.loads(line)
                 for line in (repo_root / "kb" / "history" / "events.jsonl").read_text(encoding="utf-8").splitlines()
                 if line.strip()
             ]
-            self.assertEqual(history_events[-1]["event_type"], "related-cards-updated")
-            self.assertEqual(history_events[-2]["event_type"], "related-cards-updated")
+            self.assertEqual(history_events[-1]["event_type"], "related-cards-proposed")
+            self.assertEqual(history_events[-2]["event_type"], "related-cards-proposed")
 
     def test_selected_action_keys_apply_only_the_approved_related_card_actions(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -343,6 +358,9 @@ class RelatedCardMaintenanceTests(unittest.TestCase):
                 },
             )
 
+            migration = migrate_legacy_card_generation(repo_root)
+            self.assertTrue(migration["ok"], migration)
+
             write_history(
                 repo_root / "kb" / "history" / "events.jsonl",
                 [
@@ -384,7 +402,8 @@ class RelatedCardMaintenanceTests(unittest.TestCase):
                 selected_action_keys=["review-related-cards::entry::model-a"],
             )
 
-            self.assertEqual(result["apply_summary"]["updated_entry_count"], 1)
+            self.assertEqual(result["apply_summary"]["updated_entry_count"], 0)
+            self.assertEqual(result["apply_summary"]["relationship_proposal_count"], 1)
             self.assertEqual(result["apply_summary"]["action_selection"]["matched_action_count"], 1)
             self.assertEqual(
                 result["apply_summary"]["action_selection"]["unselected_apply_eligible_action_count"],
@@ -392,8 +411,13 @@ class RelatedCardMaintenanceTests(unittest.TestCase):
             )
             model_a = yaml.safe_load(model_a_path.read_text(encoding="utf-8"))
             model_b = yaml.safe_load(model_b_path.read_text(encoding="utf-8"))
-            self.assertEqual(model_a["related_cards"], ["model-b"])
-            self.assertNotIn("related_cards", model_b)
+            self.assertEqual(model_a["related_cards"], [])
+            self.assertEqual(model_b["related_cards"], [])
+            mesh = read_exact_mesh(repo_root, binding_from_projection(model_a))
+            self.assertEqual(len(mesh.cross_model_edges), 0)
+            proposals = mesh.metadata["unresolved_relationships"]
+            self.assertEqual(len(proposals), 1)
+            self.assertEqual(proposals[0]["source_card_id"], "model-a")
 
     def test_proposal_report_human_output_includes_related_card_hint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -433,7 +457,7 @@ class RelatedCardMaintenanceTests(unittest.TestCase):
             human = format_proposal_report(report)
 
             self.assertEqual(report["stubs"][0]["related_card_suggestion"]["suggested_related_cards"], ["model-b"])
-            self.assertIn("related_cards=model-b", human)
+            self.assertIn("unresolved_relation_proposals=model-b", human)
 
 
 if __name__ == "__main__":

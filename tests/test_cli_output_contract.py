@@ -15,10 +15,19 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class CliOutputContractTests(unittest.TestCase):
-    def run_json(self, args: list[str], *, encoding: str) -> object:
+    def run_json(
+        self,
+        args: list[str],
+        *,
+        encoding: str,
+        extra_env: dict[str, str] | None = None,
+    ) -> object:
         env = os.environ.copy()
         env["PYTHONIOENCODING"] = encoding
         env["CODEX_PREDICTIVE_KB_ROOT"] = str(REPO_ROOT)
+        env["CODEX_KB_AUTOMATION_MODEL"] = "test-current-model"
+        env["CODEX_KB_AUTOMATION_REASONING_EFFORT"] = "high"
+        env.update(extra_env or {})
         completed = subprocess.run(
             [sys.executable, *args],
             cwd=REPO_ROOT,
@@ -90,16 +99,71 @@ class CliOutputContractTests(unittest.TestCase):
             install_payload = self.run_json(
                 ["scripts/install_codex_kb.py", "--codex-home", str(codex_home), "--json"],
                 encoding="cp1252",
+                extra_env={"KHAOS_BRAIN_ISOLATED_INSTALL_FIXTURE": "1"},
             )
             check_payload = self.run_json(
                 ["scripts/install_codex_kb.py", "--codex-home", str(codex_home), "--check", "--json"],
                 encoding="cp1252",
             )
 
+            self.assertEqual(
+                Path(install_payload["shell_tools"]["shell_bin_dir"]),
+                (codex_home.parent / "codex-shell-bin").resolve(),
+            )
+            self.assertFalse(install_payload["shell_tools"]["user_path_updated"])
+
         self.assertEqual(install_payload["codex_home"], str(codex_home))
         self.assertTrue(check_payload["ok"], check_payload["issues"])
         checklist = {item["id"]: item for item in check_payload["checklist"]}
         self.assertTrue(checklist["canonical_machine_interfaces"]["ok"])
+
+    def test_aggregate_assurance_child_cannot_recursively_run_upgrade_gates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            codex_home = Path(tmp_dir) / ".codex"
+            payload = self.run_json(
+                ["scripts/install_codex_kb.py", "--codex-home", str(codex_home), "--json"],
+                encoding="cp1252",
+                extra_env={"KHAOS_BRAIN_ASSURANCE_ACTIVE": "1"},
+            )
+
+            self.assertEqual(
+                Path(payload["shell_tools"]["shell_bin_dir"]),
+                (codex_home.parent / "codex-shell-bin").resolve(),
+            )
+            self.assertFalse(payload["shell_tools"]["user_path_updated"])
+
+        self.assertFalse(payload["history_migration_required"])
+        self.assertFalse(payload["upgrade_assurance_required"])
+        self.assertEqual(payload["history_migration"]["status"], "fixture_skipped")
+
+    def test_installer_failure_is_one_parseable_json_terminal_without_traceback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            codex_home = Path(tmp_dir) / ".codex"
+            missing_snapshot = Path(tmp_dir) / "missing-snapshot.json"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/install_codex_kb.py",
+                    "--codex-home",
+                    str(codex_home),
+                    "--automation-state-snapshot",
+                    str(missing_snapshot),
+                    "--json",
+                ],
+                cwd=REPO_ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+
+        self.assertNotEqual(completed.returncode, 0)
+        payload = json.loads(completed.stdout)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["status"], "failed")
+        self.assertIn("checkpoint", payload)
+        self.assertIn("blockers", payload)
+        self.assertNotIn("Traceback", completed.stderr)
 
 
 if __name__ == "__main__":

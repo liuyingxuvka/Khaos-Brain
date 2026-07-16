@@ -1,7 +1,0 @@
-interface:
-  display_name: "KB Architect Pass"
-  short_description: "Run one KB Architect mechanism maintenance pass"
-  default_prompt: "Use $kb-architect-pass to run one KB Architect mechanism maintenance pass for this repository."
-
-policy:
-  allow_implicit_invocation: false

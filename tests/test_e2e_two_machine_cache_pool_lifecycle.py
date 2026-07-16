@@ -6,13 +6,14 @@ from pathlib import Path
 
 from local_kb.adoption import ADOPTION_KEY, adopt_organization_entry_by_source_info
 from local_kb.org_outbox import build_organization_outbox
-from local_kb.store import load_yaml_file, write_yaml_file
+from local_kb.model_maintenance import publish_sleep_model_generation
+from local_kb.store import load_yaml_file
 from local_kb.ui_data import build_search_payload
 from tests.org_helpers import (
     ORGANIZATION_ID,
     connect_profile_to_org,
     init_git_repo,
-    publish_outbox_to_org_candidates,
+    publish_accepted_outbox_to_org_main,
     write_local_skill_backed_card,
     write_valid_org_repo,
 )
@@ -42,7 +43,10 @@ class TwoMachineCachePoolLifecycleE2ETests(unittest.TestCase):
                 organization_id=ORGANIZATION_ID,
                 organization_sources=sources_a,
             )
-            created_candidate_files = publish_outbox_to_org_candidates(org_repo, Path(outbox_a["outbox_dir"]))
+            created_main_files = publish_accepted_outbox_to_org_main(
+                org_repo,
+                Path(outbox_a["outbox_dir"]),
+            )
 
             connect_b_synced, sources_b_synced = connect_profile_to_org(machine_b, org_repo)
             synced_b_payload = build_search_payload(
@@ -62,7 +66,12 @@ class TwoMachineCachePoolLifecycleE2ETests(unittest.TestCase):
             adopted_path = Path(adoption_b["path"])
             adopted = load_yaml_file(adopted_path)
             adopted["use"]["guidance"] = "Machine B added practical feedback after using the organization card."
-            write_yaml_file(adopted_path, adopted)
+            publication = publish_sleep_model_generation(
+                machine_b,
+                reason="test-machine-b-organization-feedback",
+                card_upserts={adopted_path.relative_to(machine_b).as_posix(): adopted},
+            )
+            self.assertTrue(publication["ok"], publication)
 
             outbox_b = build_organization_outbox(
                 machine_b,
@@ -77,7 +86,7 @@ class TwoMachineCachePoolLifecycleE2ETests(unittest.TestCase):
         self.assertNotIn("skill-backed-card", [item["id"] for item in initial_b_payload["results"]])
         self.assertTrue(outbox_a["ok"], outbox_a)
         self.assertEqual(outbox_a["created_count"], 1)
-        self.assertIn("kb/candidates/skill-backed-card.yaml", created_candidate_files)
+        self.assertIn("kb/main/skill-backed-card.yaml", created_main_files)
         self.assertTrue(connect_b_synced["ok"], connect_b_synced)
         self.assertNotEqual(
             connect_b_initial["settings"]["last_sync_commit"],

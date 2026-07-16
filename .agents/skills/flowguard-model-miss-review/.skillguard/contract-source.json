@@ -1,0 +1,224 @@
+{
+  "artifacts": [],
+  "checks": [
+    {
+      "check_id": "check:flowguard-model-miss-review:plane-boundary",
+      "coverage_rationale": "The check is the single declared owner for its mapped obligation set.",
+      "coverage_scope": "declared_obligations",
+      "covers_obligation_ids": [
+        "obligation:flowguard-model-miss-review:plane-boundary"
+      ],
+      "depends_on_check_ids": [],
+      "evidence_class": "hard",
+      "evidence_domain_id": "evidence-domain:check:flowguard-model-miss-review:plane-boundary",
+      "execution_owner_id": "owner:check:flowguard-model-miss-review:plane-boundary",
+      "input_selectors": [
+        {
+          "kind": "path",
+          "path": ".flowguard/model_miss_review/model.py"
+        }
+      ],
+      "kind": "model_assertion",
+      "semantic_check_id": "semantic:check:flowguard-model-miss-review:plane-boundary",
+      "timeout_seconds": 30
+    },
+    {
+      "args": [
+        ".flowguard/model_miss_review/run_checks.py"
+      ],
+      "check_id": "check:flowguard-model-miss-review:native-authority",
+      "command": "python",
+      "coverage_rationale": "The check is the single declared owner for its mapped obligation set.",
+      "coverage_scope": "declared_obligations",
+      "covers_obligation_ids": [
+        "obligation:flowguard-model-miss-review:native-authority"
+      ],
+      "cwd_token": "repository_root",
+      "depends_on_check_ids": [],
+      "evidence_class": "hard",
+      "evidence_domain_id": "evidence-domain:check:flowguard-model-miss-review:native-authority",
+      "execution_owner_id": "owner:check:flowguard-model-miss-review:native-authority",
+      "expected": {
+        "exit_code": 0
+      },
+      "input_selectors": [
+        {
+          "kind": "path",
+          "path": ".flowguard/model_miss_review/model.py"
+        },
+        {
+          "kind": "path",
+          "path": ".flowguard/model_miss_review/run_checks.py"
+        },
+        {
+          "kind": "role",
+          "role": "runtime_source"
+        },
+        {
+          "kind": "role",
+          "role": "documentation_model"
+        },
+        {
+          "kind": "role",
+          "role": "test_dev"
+        }
+      ],
+      "kind": "command",
+      "semantic_check_id": "semantic:check:flowguard-model-miss-review:native-authority",
+      "timeout_seconds": 180
+    },
+    {
+      "check_id": "check:flowguard-model-miss-review:evidence-closure",
+      "coverage_rationale": "The check is the single declared owner for its mapped obligation set.",
+      "coverage_scope": "declared_obligations",
+      "covers_obligation_ids": [
+        "obligation:flowguard-model-miss-review:evidence-closure"
+      ],
+      "depends_on_check_ids": [],
+      "evidence_class": "hard",
+      "evidence_domain_id": "evidence-domain:check:flowguard-model-miss-review:evidence-closure",
+      "execution_owner_id": "owner:check:flowguard-model-miss-review:evidence-closure",
+      "input_selectors": [
+        {
+          "kind": "path",
+          "path": ".flowguard/model_miss_review/model.py"
+        }
+      ],
+      "kind": "model_assertion",
+      "semantic_check_id": "semantic:check:flowguard-model-miss-review:evidence-closure",
+      "timeout_seconds": 30
+    }
+  ],
+  "claim_boundary": "Closure covers only the classified, generalized, currently evidenced failure class; a point fix, isolated test, or progress log cannot support broader confidence.",
+  "closure_profiles": [
+    {
+      "profile_id": "enforced",
+      "required_obligation_ids": [
+        "obligation:flowguard-model-miss-review:plane-boundary",
+        "obligation:flowguard-model-miss-review:native-authority",
+        "obligation:flowguard-model-miss-review:evidence-closure"
+      ]
+    }
+  ],
+  "confirmed": true,
+  "content_impact_policy": {
+    "full_admission_reason_codes": [
+      "explicit_final_gate",
+      "explicit_release_gate",
+      "impact_policy_or_compiler_changed",
+      "shared_validation_runtime_changed",
+      "all_owner_component_changed"
+    ],
+    "owner_receipt_root_ref": {
+      "path_token": "owner_evidence_root",
+      "relative_path": "check-executions"
+    },
+    "policy_id": "skillguard.content_impact_policy.current",
+    "unknown_mapping_disposition": "block"
+  },
+  "default_route_id": "route:model_miss_review",
+  "depth_profile": {
+    "schema_version": "skillguard.depth_profile.v2",
+    "profile_id": "profile:flowguard-model-miss-review:fixed-enforced-declared-check-supervision",
+    "target_skill_id": "flowguard-model-miss-review",
+    "integration_mode": "native-integrated",
+    "native_owner_id": "model_miss_review",
+    "native_route_ids": [
+      "route:model_miss_review"
+    ],
+    "native_check_ids": [
+      "check:flowguard-model-miss-review:plane-boundary",
+      "check:flowguard-model-miss-review:native-authority",
+      "check:flowguard-model-miss-review:evidence-closure"
+    ],
+    "skillguard_adds_domain_route": false,
+    "enforcement_level": "enforced",
+    "required_closure_profiles": [
+      "enforced"
+    ],
+    "provider_runtime": {
+      "provider_id": "skillguard-local-provider",
+      "required_runtime_contract_id": "skillguard-declared-check-supervision-current",
+      "required_capability_ids": [
+        "declared-check-inventory.v1",
+        "declared-check-receipt-reconciliation.v1",
+        "installation-receipt-binding.v1",
+        "installation-currentness-replay.v1",
+        "provider-runtime-enrollment.v1",
+        "single-flight-check-execution.v1"
+      ],
+      "required_enrollment_status": "enrolled",
+      "readiness_check_ids": [
+        "check:flowguard-model-miss-review:native-authority"
+      ]
+    },
+    "claim_boundary": "flowguard-model-miss-review owns every check's domain meaning; SkillGuard only reconciles the exact current declared-check inventory and terminal receipts in one fixed enforced closure."
+  },
+  "implementation_paths": [
+    ".agents/skills/flowguard-model-miss-review",
+    ".flowguard/model_miss_review",
+    ".flowguard/lightweight_model_miss_review",
+    "flowguard/recurring_model_miss.py",
+    "flowguard/skill_contract_model.py",
+    "tests/test_recurring_model_miss.py"
+  ],
+  "integration_mode": "native-integrated",
+  "judgment_rubrics": [],
+  "may_define_parallel_execution_route": false,
+  "may_define_skillguard_runtime_route": false,
+  "model_id": "flowguard.model_miss_review.skill_contract.v2",
+  "model_path": ".flowguard/model_miss_review/model.py",
+  "native_check_bindings": [
+    {
+      "authority": "target-native",
+      "check_id": "check:flowguard-model-miss-review:native-authority",
+      "owner_id": "model_miss_review"
+    }
+  ],
+  "native_route_bindings": [
+    {
+      "authority": "target-native",
+      "owner_id": "model_miss_review",
+      "route_id": "route:model_miss_review"
+    }
+  ],
+  "native_route_owner": "model_miss_review",
+  "release_eligible": false,
+  "schema_version": "skillguard.contract_source.v2",
+  "skill_id": "flowguard-model-miss-review",
+  "step_bindings": [
+    {
+      "action": {
+        "kind": "inventory",
+        "summary": "Identify the failed external promise and search its affected plane before creating a gap."
+      },
+      "check_ids": [
+        "check:flowguard-model-miss-review:plane-boundary"
+      ],
+      "output_artifact_ids": [],
+      "step_id": "step:flowguard-model-miss-review:intake"
+    },
+    {
+      "action": {
+        "kind": "native",
+        "summary": "Run the existing Model Miss owner to generalize, backfeed, and retain typed multi-plane context."
+      },
+      "check_ids": [
+        "check:flowguard-model-miss-review:native-authority"
+      ],
+      "output_artifact_ids": [],
+      "step_id": "step:flowguard-model-miss-review:execute"
+    },
+    {
+      "action": {
+        "kind": "verifier",
+        "summary": "Require owner code, replay, tests, and old-path disposition before scoped closure."
+      },
+      "check_ids": [
+        "check:flowguard-model-miss-review:evidence-closure"
+      ],
+      "output_artifact_ids": [],
+      "step_id": "step:flowguard-model-miss-review:verify"
+    }
+  ]
+}

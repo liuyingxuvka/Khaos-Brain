@@ -1,18 +1,36 @@
 from __future__ import annotations
 
+import ast
+from datetime import date, datetime
+import io
+import json
 import re
+import tokenize
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 
 from local_kb.adoption import card_exchange_hash
 from local_kb.org_sources import validate_organization_repo
+from local_kb.skill_sharing import skill_directory_content_hash
 from local_kb.store import load_yaml_file
 
 
-LOW_RISK_PREFIXES = ("kb/imports/", "kb/candidates/", "skills/candidates/")
-PROTECTED_PREFIXES = ("kb/main/", "kb/trusted/")
+LOW_RISK_PREFIXES = ("kb/imports/", "skills/candidates/")
+PROTECTED_PREFIXES = ("kb/main/",)
 PROTECTED_FILES = {"khaos_org_kb.yaml", "skills/registry.yaml"}
-TEXT_SUFFIXES = {".yaml", ".yml", ".md", ".json", ".txt"}
+TEXT_SUFFIXES = {
+    ".yaml",
+    ".yml",
+    ".md",
+    ".json",
+    ".txt",
+    ".py",
+    ".ps1",
+    ".sh",
+    ".js",
+    ".ts",
+    ".toml",
+}
 SKILL_REVIEW_STATES = {"candidate", "approved", "rejected"}
 SKILL_REQUIREMENTS = {"required", "recommended", "optional"}
 
@@ -37,6 +55,14 @@ RAW_MACHINE_KEYS = {
     "machine_id",
     "device_id",
     "local_installation_id",
+}
+SECRET_VALUE_KEYS = {
+    "password",
+    "secret",
+    "api_key",
+    "api-key",
+    "access_token",
+    "access-token",
 }
 CARD_HASH_MEANING_KEYS = {
     "title",
@@ -117,6 +143,129 @@ def _append_yaml_machine_key_errors(
             _append_yaml_machine_key_errors(item, path_label=path_label, errors=errors, key_path=f"{key_path}[{index}]")
 
 
+def _append_payload_secret_key_errors(
+    payload: Any,
+    *,
+    path_label: str,
+    errors: list[str],
+    key_path: str = "",
+) -> None:
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            text_key = str(key)
+            nested_key_path = f"{key_path}.{text_key}" if key_path else text_key
+            if text_key.lower() in SECRET_VALUE_KEYS and str(value or "").strip():
+                errors.append(f"{path_label}: secret-bearing field is not allowed at {nested_key_path}")
+            _append_payload_secret_key_errors(
+                value,
+                path_label=path_label,
+                errors=errors,
+                key_path=nested_key_path,
+            )
+    elif isinstance(payload, list):
+        for index, item in enumerate(payload):
+            _append_payload_secret_key_errors(
+                item,
+                path_label=path_label,
+                errors=errors,
+                key_path=f"{key_path}[{index}]",
+            )
+
+
+def _iter_payload_strings(payload: Any) -> Iterable[str]:
+    if isinstance(payload, dict):
+        for value in payload.values():
+            yield from _iter_payload_strings(value)
+    elif isinstance(payload, list):
+        for item in payload:
+            yield from _iter_payload_strings(item)
+    elif isinstance(payload, str):
+        yield payload
+
+
+def _payload_json_default(value: Any) -> str:
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, Path):
+        return str(value)
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
+def _python_sensitive_text(text: str, *, relative: str) -> str:
+    """Scan Python values/comments while excluding this scanner's path regex definitions."""
+
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return text
+    excluded_string_nodes: set[int] = set()
+    if relative == ".github/scripts/org_kb_check.py":
+        for node in tree.body:
+            if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+                continue
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            if not any(
+                isinstance(target, ast.Name) and target.id == "LOCAL_PATH_PATTERNS"
+                for target in targets
+            ):
+                continue
+            value = node.value
+            if value is not None:
+                excluded_string_nodes.update(
+                    id(child)
+                    for child in ast.walk(value)
+                    if isinstance(child, ast.Constant) and isinstance(child.value, str)
+                )
+    values = [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and id(node) not in excluded_string_nodes
+    ]
+    try:
+        values.extend(
+            token.string
+            for token in tokenize.generate_tokens(io.StringIO(text).readline)
+            if token.type == tokenize.COMMENT
+        )
+    except (IndentationError, tokenize.TokenError):
+        return text
+    return "\n".join(values)
+
+
+def validate_shareable_payload(
+    payload: dict[str, Any],
+    *,
+    path_label: str = "card",
+) -> dict[str, Any]:
+    """Fail closed before a local card is materialized into an organization outbox."""
+
+    errors: list[str] = []
+    text = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        default=_payload_json_default,
+    )
+    raw_values = list(_iter_payload_strings(payload))
+    for pattern in SECRET_PATTERNS:
+        if pattern.search(text) or any(pattern.search(value) for value in raw_values):
+            errors.append(f"{path_label}: possible secret or credential pattern")
+            break
+    for pattern in LOCAL_PATH_PATTERNS:
+        if pattern.search(text) or any(pattern.search(value) for value in raw_values):
+            errors.append(f"{path_label}: local machine path is not allowed")
+            break
+    _append_yaml_machine_key_errors(payload, path_label=path_label, errors=errors)
+    _append_payload_secret_key_errors(payload, path_label=path_label, errors=errors)
+    return {
+        "ok": not errors,
+        "errors": list(dict.fromkeys(errors)),
+        "path_label": path_label,
+    }
+
+
 def _load_yaml_for_check(path: Path, errors: list[str], repo_root: Path) -> dict[str, Any]:
     try:
         payload = load_yaml_file(path)
@@ -166,12 +315,17 @@ def _check_sensitive_content(root: Path, changed_files: list[str]) -> dict[str, 
         relative = path.relative_to(root).as_posix()
         scanned.append(relative)
         text = path.read_text(encoding="utf-8", errors="ignore")
+        scan_text = (
+            _python_sensitive_text(text, relative=relative)
+            if path.suffix.lower() == ".py"
+            else text
+        )
         for pattern in SECRET_PATTERNS:
-            if pattern.search(text):
+            if pattern.search(scan_text):
                 errors.append(f"{relative}: possible secret or credential pattern")
                 break
         for pattern in LOCAL_PATH_PATTERNS:
-            if pattern.search(text):
+            if pattern.search(scan_text):
                 errors.append(f"{relative}: local machine path is not allowed")
                 break
         if path.suffix.lower() in {".yaml", ".yml"}:
@@ -238,8 +392,6 @@ def _check_cards(root: Path) -> dict[str, Any]:
 
     for relative_root, expected_statuses in (
         ("kb/main", {"trusted", "approved", "candidate", "rejected", "deprecated"}),
-        ("kb/trusted", {"trusted", "approved", "deprecated"}),
-        ("kb/candidates", {"candidate", "rejected", "deprecated"}),
         ("kb/imports", {"candidate", "rejected", "deprecated"}),
     ):
         for path in _iter_yaml_files(root, [relative_root]):
@@ -273,6 +425,14 @@ def _check_cards(root: Path) -> dict[str, Any]:
                             errors.append(f"{relative}: skill dependency {skill_id} must include sha256 content_hash")
                         if not str(dependency.get("version_time") or "").strip():
                             errors.append(f"{relative}: skill dependency {skill_id} must include version_time")
+                        if not str(dependency.get("original_author") or "").strip():
+                            errors.append(f"{relative}: skill dependency {skill_id} must include original_author")
+                        if str(dependency.get("update_policy") or "").strip() != "original_author_only":
+                            errors.append(
+                                f"{relative}: skill dependency {skill_id} must use original_author_only update policy"
+                            )
+                        if dependency.get("readonly_when_imported") is not True:
+                            errors.append(f"{relative}: skill dependency {skill_id} must be readonly when imported")
                         bundle_path = str(dependency.get("bundle_path") or "").strip()
                         if not bundle_path:
                             errors.append(f"{relative}: skill dependency {skill_id} must include bundle_path")
@@ -280,8 +440,19 @@ def _check_cards(root: Path) -> dict[str, Any]:
                             normalized_bundle_path = normalize_changed_file(bundle_path)
                             if not normalized_bundle_path:
                                 errors.append(f"{relative}: skill dependency {skill_id} has invalid bundle_path")
-                            elif not (path.parent / normalized_bundle_path / "SKILL.md").exists():
-                                errors.append(f"{relative}: skill dependency {skill_id} bundle_path does not contain SKILL.md")
+                            else:
+                                bundle_dir = path.parent / normalized_bundle_path
+                                if not (bundle_dir / "SKILL.md").exists():
+                                    errors.append(
+                                        f"{relative}: skill dependency {skill_id} bundle_path does not contain SKILL.md"
+                                    )
+                                else:
+                                    expected_hash = str(dependency.get("content_hash") or "").strip()
+                                    actual_hash = skill_directory_content_hash(bundle_dir)
+                                    if expected_hash and actual_hash != expected_hash:
+                                        errors.append(
+                                            f"{relative}: skill dependency {skill_id} content_hash does not match bundle files"
+                                        )
                     if requirement not in SKILL_REQUIREMENTS:
                         errors.append(f"{relative}: skill dependency {skill_id} has invalid requirement: {requirement}")
 

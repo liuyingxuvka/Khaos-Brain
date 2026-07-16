@@ -13,11 +13,16 @@ maintain `main` cards and imported card content when the evidence supports
 the decision. Local machines still decide what to adopt and how strongly to rely
 on organization cards after import.
 
-Use kb/imports as the incoming lane and kb/main as the organization exchange
-surface. Legacy kb/trusted and kb/candidates repositories remain readable
-for compatibility, but reports must label that layout as compatibility-only,
-not the target structure. Local download/search reads organization cards from
-kb/main (or legacy fallback paths when no main exists), not from kb/imports.
+The shared card remains an exchange projection. Organization maintenance owns
+the organization repository's review state, not any machine's local LogicGuard
+model or ModelMesh. Local use or adoption must enter the receiving machine
+through its sole Sleep model publisher, and organization similarity or co-use
+never creates a local canonical mesh edge automatically.
+
+Use `kb/imports` as the sole incoming lane and `kb/main` as the sole organization
+exchange surface. Retired `kb/trusted` or `kb/candidates` roots are upgrade-only
+input and must make daily maintenance fail visibly. Local download/search reads
+organization cards only from `kb/main`, never from `kb/imports` or an old root.
 
 ## Authority
 
@@ -37,16 +42,16 @@ Current user instructions still override repository files.
 2. The entry point must first read .local/khaos_brain_desktop_settings.json.
 3. If organization mode is not validated or this machine has not opted into organization maintenance, exit successfully with a no-op result.
 4. Run KB preflight against system/knowledge-library/organization before inspecting organization candidates.
-5. Validate the organization manifest, expected paths, kb/imports incoming lane, kb/main exchange surface, legacy compatibility paths when present, Skill registry, and current Git state before proposing changes.
+5. Validate the exact current organization manifest, `kb/imports` incoming lane, `kb/main` exchange surface, absence of retired roots/keys, Skill registry, and current Git state before proposing changes.
 6. Read the shared maintenance-agent worldview and apply the exchange-layer Sleep model: organization `main` cards are maintainable content, not untouchable central truth.
-7. Run the organization card-surface map checkpoint. Summarize `main` trusted/candidate/rejected/deprecated counts plus import counts; low-confidence main trusted cards; duplicate/similar cards; stale rejected/deprecated cards; Skill-linked cards; legacy compatibility counts when applicable; and privacy/Skill risks before applying anything.
+7. Run the organization card-surface map checkpoint. Summarize `main` trusted/candidate/rejected/deprecated counts plus import counts; low-confidence main trusted cards; duplicate/similar cards; stale rejected/deprecated cards; Skill-linked cards; retired-layout residual count; and privacy/Skill risks before applying anything. A nonzero retired-layout residual is a blocker, not a readable surface.
 8. Run the organization candidate intake checkpoint. Review new imports for reusable scenario, action, prediction, confidence, route, provenance, and public sharing value; reviewed imports can move into `main` as `candidate` or `trusted`.
 9. Run the organization content-hash checkpoint. Use content hashes for duplicate analysis across `main`, imports, prior accepted uploads, and current proposals. Duplicate entry ids alone are not a maintenance blocker.
-10. Run the mandatory organization similar-card merge checkpoint. Inspect overlapping organization cards by scenario, action, prediction, route, evidence, and content hash. Decide whether to merge, propose a merge, supersede, or skip application with a concrete reason.
-11. Run the mandatory organization overloaded-card split checkpoint. Inspect broad, recurrent, or multi-branch organization cards and decide whether each is still a useful hub, should move toward a split proposal, or should skip application with a concrete reason.
+10. Run the mandatory organization similar-card merge checkpoint. Inspect overlapping organization cards by scenario, action, prediction, route, evidence, and content hash. Decide whether to merge, propose a merge, supersede, or keep/watch with a concrete reason. Uncertain similarity must remain a recorded watch decision, never an automatic merge.
+11. Run the mandatory organization overloaded-card split checkpoint. Inspect broad, recurrent, or multi-branch organization cards and decide whether each is still a useful hub, should move toward a split proposal, or should remain keep/watch with a concrete reason. Ambiguous branch boundaries must not be force-split.
 12. Run the organization card decision checkpoint. For each reviewed card bundle, including `main` cards, decide whether to keep, approve/promote, reject with reason, rewrite, adjust confidence, supersede, deprecate, merge, or split. Do not skip the decision checkpoint itself.
 13. Apply the organization maintenance worldview to card candidates, `main` card changes, card-and-Skill bundles, Skill registry changes, privacy boundaries, and GitHub auto-merge readiness. Use `organization-review` as a review lens when available, but do not block direct Sleep-style maintenance because the local Skill is absent.
-14. Run the organization Skill safety checkpoint. For every declared Skill dependency or Skill candidate, check card evidence, public usefulness, privacy boundaries, install risk, `bundle_id`, `sha256:` content hash, fallback behavior, read-only import behavior, and status.
+14. Run the organization Skill safety checkpoint. For every declared Skill dependency or Skill candidate, check card evidence, public usefulness, privacy boundaries, install risk, `bundle_id`, `sha256:` content hash, current `unavailable_skill_guidance`, read-only import behavior, and status.
 15. Run the organization Skill bundle version checkpoint. Group Skill bundles by `bundle_id`; approve only original-author updates on the same bundle, treat non-author changes as forks with new `bundle_id`, and select the latest approved version by `version_time` for organization distribution.
 16. Treat `candidate`, `approved`, and `rejected` as the first-pass Skill review states. Do not auto-install or recommend auto-install for candidate, rejected, unknown, unpinned, or non-hash-verified Skills.
 17. Build an organization Sleep decision set over the cleanup proposal. Record every action as selected-for-apply or watch with a reason.
@@ -59,7 +64,13 @@ Current user instructions still override repository files.
 
 ## Report
 
-Report the settings gate result, participation status, preflight entry ids, organization manifest status, layout policy, legacy compatibility notice when applicable, card-surface map, `main` status counts and import counts, main-card maintenance decisions, content-hash duplicate decisions, organization merge checkpoint decisions, organization split checkpoint decisions, card approval/rejection/rewrite/deprecation decisions, Sleep decision counts, selected action ids, apply result, post-apply check result, maintenance branch, PR, push, and auto-merge-label result, Skill dependency decisions, Skill bundle version decisions, GitHub merge-readiness result, organization-review guidance availability, recommendations, postflight record path, and any errors.
+Report the settings gate result, participation status, preflight entry ids, organization manifest status, current-layout policy, retired-layout residual count, card-surface map, `main` status counts and import counts, main-card maintenance decisions, content-hash duplicate decisions, organization merge checkpoint decisions, organization split checkpoint decisions, card approval/rejection/rewrite/deprecation decisions, Sleep decision counts, selected action ids, apply result, post-apply check result, maintenance branch, PR, push, and auto-merge-label result, Skill dependency decisions, Skill bundle version decisions, GitHub merge-readiness result, organization-review guidance availability, recommendations, postflight record path, and any errors.
+
+## SkillGuard completion boundary
+
+For a scheduled run, intake, planning, or proposal-only output is incomplete. Run `python scripts/run_kb_guarded_automation.py --skill kb-organization-maintenance --json`; do not call the child entrypoint directly. The guarded runner invokes the native organization-maintenance owner once, writes an immutable run receipt, and requires the sole current enforced SkillGuard closure receipt for that exact run. A settings-gated no-op counts only when the native gate receipt proves its terminal. Positive and shallow fixtures remain target-owned checks; SkillGuard supervises their exact receipts without interpreting their domain meaning. Fixture or capability evidence cannot replace the concrete scheduled run. The installed SkillGuard builder—not caller-authored fields—binds the trigger, execution id, current installation receipt id/hash plus portable receipt-root reference, and installed runtime fingerprint. SkillGuard does not create a parallel organization-maintenance executor.
+
+The current authority is `.skillguard/contract-source.json` plus its declared FlowGuard model. `.skillguard/compiled-contract.json` and `.skillguard/check-manifest.json` are generated projections. No former work contract, underscore manifest, flat run record, compatibility, conversion, renewal, retirement-receipt, alias, or fallback closure route may exist.
 
 <!-- BEGIN SKILLGUARD CONTRACT LAYER -->
 ## Purpose
@@ -80,6 +91,8 @@ Select the target-owned native route/check surface, run the SkillGuard contract 
 Do not skip phases, do not replace required evidence with prose, do not treat stale reports as current, do not weaken validation to pass, and do not claim completion when blockers remain.
 ## Output Requirements
 Report evidence, failures, blockers, skipped_checks with reasons, residual_risk, and claim_boundary; distinguish checked, unchecked, blocked, and uncertain.
+If the native owner or any validation child times out, the run is incomplete until the guarded launcher terminates the complete owned process tree, confirms zero remaining descendants, and records that cleanup under the ordered native-to-scheduled-to-aggregate timeout budget.
+
 ## SkillGuard Maintenance
-Keep `.skillguard` contracts, checks, evidence, and ledger current; rerun SkillGuard after entrypoint, route, evidence, or closure changes.
+Keep `.skillguard` contract sources and native bindings current. Reuse a current receipt when its execution identity and precise inputs still match; after an entrypoint, route, evidence, or closure change, run only the affected SkillGuard checks. Run full or release validation only for a stable integration snapshot or an explicit release.
 <!-- END SKILLGUARD CONTRACT LAYER -->

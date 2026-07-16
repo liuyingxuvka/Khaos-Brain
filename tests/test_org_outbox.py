@@ -7,6 +7,7 @@ from pathlib import Path
 from local_kb.adoption import ADOPTION_KEY, adoption_content_hash, card_exchange_hash, record_exchange_hash
 from local_kb.org_outbox import build_organization_outbox
 from local_kb.store import load_yaml_file, write_yaml_file
+from tests.current_runtime_helpers import activate_current_kb_runtime
 
 
 class OrganizationOutboxTests(unittest.TestCase):
@@ -59,6 +60,7 @@ class OrganizationOutboxTests(unittest.TestCase):
                 root / "kb" / "candidates" / "adopted" / "sandbox" / "diverged.yaml",
                 self._adopted_card("diverged-adopted", diverged=True),
             )
+            activate_current_kb_runtime(root)
 
             result = build_organization_outbox(root, organization_id="sandbox")
             created_ids = [item["entry_id"] for item in result["created"]]
@@ -82,12 +84,86 @@ class OrganizationOutboxTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             write_yaml_file(root / "kb" / "public" / "model.yaml", self._card("share-model"))
+            activate_current_kb_runtime(root)
 
             result = build_organization_outbox(root, organization_id="sandbox", dry_run=True)
 
             self.assertTrue(result["ok"])
             self.assertEqual(result["created_count"], 1)
             self.assertFalse((root / "kb" / "outbox").exists())
+
+    def test_outbox_blocks_machine_specific_payloads_before_materialization(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            secret = self._card("secret-card")
+            secret["action"] = {
+                "description": "Never publish this machine-bound payload.",
+                "api_key": "sk-abcdefghijklmnopqrstuvwxyz123456",
+                "workspace": r"C:\Users\alice\private-workspace",
+                "machine_id": "machine-123",
+            }
+            write_yaml_file(root / "kb" / "public" / "secret.yaml", secret)
+            activate_current_kb_runtime(root)
+
+            result = build_organization_outbox(root, organization_id="sandbox")
+
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["created_count"], 0)
+        self.assertEqual(result["privacy_checkpoint"]["reviewed_count"], 1)
+        self.assertEqual(result["privacy_checkpoint"]["blocked_sensitive_count"], 1)
+        self.assertFalse((root / "kb" / "outbox").exists())
+        reasons = result["skipped"][0]["reasons"]
+        self.assertTrue(any("secret" in reason.lower() for reason in reasons), reasons)
+        self.assertTrue(any("local machine path" in reason.lower() for reason in reasons), reasons)
+        self.assertTrue(any("machine identifier" in reason.lower() for reason in reasons), reasons)
+
+    def test_diverged_adoption_exports_feedback_without_local_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            adopted = self._adopted_card("diverged-local-source", diverged=True)
+            adopted[ADOPTION_KEY]["source_repo"] = r"C:\Users\alice\org-clone"
+            adopted[ADOPTION_KEY]["source_path"] = r"C:\Users\alice\org-clone\kb\main\card.yaml"
+            write_yaml_file(
+                root / "kb" / "candidates" / "adopted" / "sandbox" / "diverged.yaml",
+                adopted,
+            )
+            activate_current_kb_runtime(root)
+
+            result = build_organization_outbox(root, organization_id="sandbox")
+            payload = load_yaml_file(
+                root
+                / "kb"
+                / "outbox"
+                / "organization"
+                / "sandbox"
+                / "diverged-local-source.yaml"
+            )
+
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["created_count"], 1, result)
+        self.assertEqual(payload["organization_proposal"]["proposal_kind"], "adopted-feedback")
+        self.assertEqual(payload["organization_proposal"]["source_repo"], "")
+        self.assertNotIn(ADOPTION_KEY, payload)
+        self.assertNotIn(r"C:\Users\alice", str(payload))
+
+    def test_outbox_blocks_skill_dependency_without_usefulness_outcome_and_unavailable_guidance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            card = self._card("incomplete-skill-card")
+            card["required_skills"] = ["demo-skill"]
+            card["use"] = {"guidance": "The Skill may help."}
+            write_yaml_file(root / "kb" / "public" / "incomplete.yaml", card)
+            activate_current_kb_runtime(root)
+
+            result = build_organization_outbox(root, organization_id="sandbox")
+
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["created_count"], 0)
+        checkpoint = result["skill_bundle_checkpoint"]
+        self.assertEqual(checkpoint["dependency_evidence_reviewed_count"], 1)
+        self.assertEqual(checkpoint["dependency_evidence_blocked_count"], 1)
+        reasons = result["skipped"][0]["reasons"]
+        self.assertTrue(any("unavailable-skill-guidance" in reason for reason in reasons), reasons)
 
     def test_outbox_skips_hashes_already_exported_or_present_in_organization(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -103,6 +179,7 @@ class OrganizationOutboxTests(unittest.TestCase):
             import_duplicate["title"] = "existing-import title"
             write_yaml_file(root / "kb" / "public" / "import-duplicate.yaml", import_duplicate)
             sources = [{"path": str(org), "organization_id": "sandbox"}]
+            activate_current_kb_runtime(root)
 
             first = build_organization_outbox(root, organization_id="sandbox", organization_sources=sources)
             record_exchange_hash(
@@ -136,6 +213,7 @@ class OrganizationOutboxTests(unittest.TestCase):
                 source_path="kb/trusted/previously-downloaded.yaml",
                 entry_id="previously-downloaded",
             )
+            activate_current_kb_runtime(root)
 
             result = build_organization_outbox(root, organization_id="sandbox")
 

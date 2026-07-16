@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from local_kb.consolidate import consolidate_history
+from tests.current_runtime_helpers import consolidate_current_history as consolidate_history
 from local_kb.snapshots import build_rollback_manifest, restore_artifact
 from local_kb.store import write_yaml_file
 

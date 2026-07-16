@@ -15,6 +15,7 @@ from local_kb.taxonomy import (
 )
 from local_kb.common import parse_route_segments
 from tests.kb_fixtures import write_sample_kb_repo
+from tests.current_runtime_helpers import activate_current_kb_runtime
 
 
 SCRIPT_PATH = (
@@ -32,6 +33,7 @@ class KbTaxonomyTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.repo_root = Path(self._tmp.name)
         write_sample_kb_repo(self.repo_root)
+        activate_current_kb_runtime(self.repo_root)
 
     def tearDown(self) -> None:
         self._tmp.cleanup()

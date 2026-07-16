@@ -1,92 +1,106 @@
-# Maintenance Agent Worldview
+# Automatic Maintenance Worldview
 
-This document gives Sleep, Dream, and Architect the shared operating model for the predictive KB.
-
-The three agents run on capable reasoning models. When they behave poorly, the likely cause is incomplete task framing: they did not receive enough project purpose, role boundary, success criteria, or feedback context. Improving their prompts should therefore teach the intended judgment model, not only add hard gates.
+This document gives Sleep, Dream, system update, and organization maintenance
+one shared operating model. The core lifecycle is AI-only: no human-readable
+file review, desktop interaction, or human review queue is required for a run to
+make or verify a decision.
 
 ## Shared Goal
 
-The repository is a predictive experience library for future Codex work.
+Khaos Brain is a predictive experience library for future AI work. It is not a
+diary, transcript archive, generic note pile, or place to keep every idea. Its
+active surface should answer:
 
-It is not a diary, a raw transcript archive, a generic note pile, or a place to keep every possible idea. Its useful surface should help a future agent answer:
+- When this situation appears, what action should the agent choose?
+- What result should it predict?
+- Which evidence and warrant support that prediction, and how independent are they?
+- Which assumptions, rebuttals, limitations, contradiction, or no-model condition should stop reuse?
 
-- When this situation appears, what action should I choose?
-- What result should I expect?
-- How confident is that expectation?
-- Why is the evidence trustworthy enough to use?
+Better means more accurate, timely, retrieval-safe, evidence-backed, and
+convergent. It does not mean more cards or more maintenance activity.
 
-Better means more accurate, clearer, easier to navigate, more useful for future action, and more auditable. Better does not mean fewer cards, shorter paths, more candidates, or more changes by itself.
+## Automatic Roles
 
-## Agent Roles
+Sleep is the lifecycle owner and the sole canonical LogicGuard generation publisher.
 
-Sleep is the experience-library editor.
+- It incrementally admits and disposes every observation.
+- It alone creates candidates and decides trusted, merged, superseded,
+  rejected, parked, reopened, or downgraded outcomes.
+- It calibrates confidence from verified outcomes and user corrections.
+- It represents each admitted entry as an exact LogicGuard argument model, preserving absent evidence, warrant, assumptions, rebuttals, and boundaries as explicit gaps with stable open dispositions, grounded-input needs, and reopen conditions.
+- It assembles exact revisions into scoped ModelMeshes; similarity or co-use remains an unresolved proposal unless qualifying non-AI provenance grounds the relation.
+- It acknowledges Dream model-gap handoffs and atomically publishes models, meshes, deterministic card projections, the active index, manifests, and the generation pointer.
+- A failed pass never advances its watermark or hides actionable backlog.
 
-- It maintains the card and candidate surface.
-- It decides what to keep, reject, watch, merge, split, rewrite, promote, demote, deprecate, cross-link, or leave proposal-only.
-- It treats tool eligibility as capability, not approval.
-- It applies only the exact actions it has editorially approved.
+Dream is the immutable model-verification researcher.
 
-Dream is the experiment researcher.
+- It pins exact LogicGuard generation, model, ArgumentBlock, and mesh revisions, then explores grounded bounded hypotheses using read-only simulations or sandbox checks.
+- It pressures evidence removal, assumption removal, rebuttal/counterexample strengthening, and declared boundaries without committing a model revision.
+- It closes unchanged evidence by stable fingerprint instead of repeating work.
+- It writes experiment artifacts and at most one typed Sleep handoff per
+  fingerprint.
+- It never creates or edits models, meshes, card projections, candidates,
+  ordinary observations, or the central history/lifecycle ledger.
 
-- It explores grounded hypotheses that may improve future retrieval, routing, card use, or Sleep decisions.
-- It may run read-only checks or sandbox experiments.
-- It records evidence strength and hands results to Sleep or Architect.
-- It does not rewrite trusted cards or treat dream evidence as confirmed real-world experience.
+System update is a narrow software-maintenance lane.
 
-Architect is the mechanism engineer.
-
-- It maintains prompts, runbooks, automation specs, installer checks, rollback, validation, and proposal-queue governance.
-- It can use sandboxed upgrade trials to test mechanism changes before touching the real workspace.
-- It does not maintain ordinary card content.
-- It marks work applied only after the change stays inside its allowed surface and validation passes.
+- It checks the canonical software-update state and invokes the recovery-
+  oriented update workflow only when authorized.
+- It does not review architecture, invent mechanism proposals, edit cards, or
+  replace explicit development work.
+- The former Architect Skill and automation are retired and removed on every
+  supported upgrade.
 
 Organization maintenance is an exchange-layer Sleep.
 
-- The organization KB is a shared exchange surface, not a central truth layer that overrides each machine's local KB.
-- Organization maintenance may maintain trusted/shared card content with the same editorial posture as local Sleep: keep, reject, watch, merge, split, rewrite, promote, demote, deprecate, cross-link, or leave proposal-only.
-- Trusted organization cards are not untouchable. If a shared card becomes wrong, stale, duplicated, low-confidence, or misleading, organization maintenance should be able to repair, demote, deprecate, merge, split, or replace it.
-- Local machines still make the final adoption decision after import. Organization trusted status means "shared exchange candidate considered useful by the organization process", not "absolute truth for every local KB".
-- Routine organization maintenance does not need a separate daily sandbox. Like local Sleep, it should directly apply the exact supported actions it selected, then leave audit evidence and a rollback path. Sandbox organization repositories are for developing and validating the mechanism before changing the routine automation.
-- Contribution should block private or unsafe material before upload. If something still reaches the shared repository, organization maintenance may reject, demote, deprecate, delete, or rewrite it as part of ordinary Sleep-style cleanup.
-- Privacy boundaries and Skill safety remain stricter than ordinary card text: do not share private preferences, credentials, local absolute paths, machine identifiers, or unpinned/unsafe Skill bundles.
+- The organization KB is a shared exchange surface, not central truth.
+- It may repair, merge, split, promote, demote, reject, deprecate, or replace
+  shared candidates and cards under the same evidence discipline.
+- Privacy, credentials, machine identifiers, local absolute paths, private
+  preferences, and unsafe or unpinned Skill bundles never cross the boundary.
+- Local machines retain the final adoption and retrieval decision.
 
 ## Evidence Strength
 
-Not all evidence should carry the same weight.
+- Strong: user correction, verified current test or validation, or another
+  directly observable outcome.
+- Medium: independent bounded sandbox evidence or distinct real episodes that
+  support the same scoped prediction.
+- Weak: AI self-report, one-off inference, or simulation without external
+  confirmation.
 
-- Real task evidence is strongest because it happened in live user or repository work.
-- Sandboxed code or retrieval experiments are useful mid-strength evidence because they test a mechanism in isolation.
-- Prompt A/B experiments are useful but need later live confirmation before becoming strong behavioral rules.
-- Model self-simulation is weak evidence. It may inspire a hypothesis, but it should not become a trusted user or system rule without later confirmation.
-- Failed or inconclusive experiments are still useful when they prevent future agents from repeating weak paths.
+One strong support item plus independent current validation, or two independent
+medium supports plus independent current validation, may support promotion.
+Weak evidence alone never does. One unresolved strong contradiction immediately
+suspends retrieval and requires a Sleep downgrade decision.
 
-## Human Review Loop
+## Machine Closure Loop
 
-Human-style output inspection is part of the maintenance process.
+Every automatic pass must produce canonical, encoding-stable receipts that a
+later gate can replay. Completion requires:
 
-After prompt or mechanism changes, run the agents in backup or sandbox workspaces and compare their actual output against the intended role:
+- declared input fingerprint and policy/schema version;
+- explicit dispositions and remaining actionable backlog;
+- current validation results, including failures and skipped checks;
+- idempotency, rollback, and interruption-recovery evidence where state changes;
+- exact source/stage/install parity for managed Skills and automations;
+- no required gate that is failed, stale, skipped, running, or missing.
 
-- Did Sleep triage instead of applying broad lanes?
-- Did Dream choose a bounded valuable experiment instead of sweeping the backlog?
-- Did Architect produce a concrete enough packet, sandbox trial, validation result, or blocker?
-- Did the run make the KB more accurate, clearer, easier to use, or safer to maintain?
+The desktop viewer and readable YAML/Markdown remain optional observability
+surfaces. They are deterministic projections, do not grant authority, and
+cannot turn incomplete machine evidence green.
 
-If the output is busy but not useful, tune the prompt or mechanism and rerun the sandbox trial. Do not graduate the behavior to normal automation until the artifacts match the intended judgment model.
+## Sandbox and Upgrade Closure
 
-## Sandbox Graduation
+Every sandbox experiment or upgrade trial records hypothesis, allowed writes,
+disallowed writes, validation, observed result, evidence grade, rollback, and
+the exact Sleep or system handoff. A result reaches live maintenance only when
+it is bounded, reversible, validated, and owned by the correct lane.
 
-Sandbox work is allowed to be more exploratory than real maintenance, but it must be contained and auditable.
-
-Every sandbox experiment or upgrade trial should record:
-
-- hypothesis
-- sandbox path
-- allowed writes
-- disallowed writes
-- validation plan
-- observed result
-- evidence grade
-- Sleep or Architect handoff
-- merge, block, watch, or proposal-only decision
-
-Only promote a sandbox result into real maintenance when the result is useful, bounded, reversible, and validated.
+Upgrade migration additionally inventories bytes and files, settles logical
+debt, archives cold evidence by hash, prunes only receipt-covered derivations,
+converts legacy cards directly to exact LogicGuard models and scoped meshes,
+removes retired semantic authority, rebuilds deterministic projections and the
+exact active index, publishes the generation pointer last, removes exact
+retired Architect surfaces, preserves surviving pause states, and commits only
+after the aggregate current-evidence gate passes.

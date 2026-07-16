@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import shutil
 from pathlib import Path
 from typing import Any
@@ -32,8 +34,113 @@ ORG_LANE_POLICY = {
     "local_download_excluded_paths": ["kb/imports"],
     "contribution_writes": ["kb/imports"],
     "maintenance_moves_reviewed_cards_to": "kb/main",
-    "legacy_compatibility_paths": ["kb/trusted", "kb/candidates"],
+    "current_layout_only": True,
 }
+
+
+def _canonical_hash(payload: object) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            payload,
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def _materialized_change_manifest(
+    root: Path,
+    changed_files: list[str],
+) -> dict[str, Any]:
+    """Bind exact changed paths to the bytes that a later push would publish."""
+
+    root = Path(root).resolve()
+    declared: list[str] = []
+    expanded: dict[str, Path] = {}
+    issues: list[str] = []
+    for raw_path in changed_files:
+        relative = str(raw_path or "").strip().replace("\\", "/")
+        while relative.startswith("./"):
+            relative = relative[2:]
+        if not relative or Path(relative).is_absolute() or ".." in Path(relative).parts:
+            issues.append(f"unsafe-changed-path:{raw_path}")
+            continue
+        declared.append(relative)
+        target = (root / relative).resolve()
+        try:
+            target.relative_to(root)
+        except ValueError:
+            issues.append(f"changed-path-outside-root:{relative}")
+            continue
+        if target.is_dir():
+            for child in sorted(path for path in target.rglob("*") if path.is_file()):
+                child_relative = child.relative_to(root).as_posix()
+                expanded[child_relative] = child
+        elif target.is_file():
+            expanded[relative] = target
+        else:
+            expanded[relative] = target
+
+    rows: list[dict[str, Any]] = []
+    for relative, path in sorted(expanded.items()):
+        if not path.exists():
+            rows.append(
+                {
+                    "path": relative,
+                    "sha256": "",
+                    "bytes": 0,
+                    "deleted": True,
+                }
+            )
+            continue
+        digest = hashlib.sha256()
+        size = 0
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+                size += len(chunk)
+        rows.append(
+            {
+                "path": relative,
+                "sha256": digest.hexdigest(),
+                "bytes": size,
+                "deleted": False,
+            }
+        )
+
+    head_commit = ""
+    if (root / ".git").exists():
+        head = _run_git(["rev-parse", "HEAD"], cwd=root)
+        if head.returncode == 0:
+            head_commit = head.stdout.strip()
+        else:
+            issues.append("git-head-unavailable")
+    file_sha256 = {
+        str(row["path"]): (
+            str(row["sha256"])
+            if not row.get("deleted")
+            else "__deleted__"
+        )
+        for row in rows
+    }
+    content_body = {
+        "declared_changed_files": sorted(set(declared)),
+        "materialized_files": rows,
+        "file_sha256": file_sha256,
+    }
+    body = {
+        **content_body,
+        "head_commit": head_commit,
+    }
+    return {
+        "schema_version": "khaos-brain.organization-materialization.v1",
+        **body,
+        "manifest_hash": _canonical_hash(content_body),
+        "receipt_hash": _canonical_hash(body),
+        "ok": not issues and bool(rows),
+        "issues": issues,
+    }
 
 
 def _preflight(repo_root: Path, *, query: str) -> dict[str, Any]:
@@ -180,6 +287,7 @@ def _commit_and_push_organization_maintenance(
     remote: str = "origin",
     base_branch: str = "main",
     repo_url: str = "",
+    merge_readiness: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     org_root = Path(org_root)
     if not (org_root / ".git").exists():
@@ -203,6 +311,23 @@ def _commit_and_push_organization_maintenance(
     if not stage_files:
         return {"attempted": False, "ok": False, "reason": "no reviewed maintenance paths to stage"}
 
+    materialization = _materialized_change_manifest(org_root, stage_files)
+    organization_check = check_organization_repository(org_root, changed_files=stage_files)
+    checked_files = sorted(str(item) for item in organization_check.get("changed_files") or [])
+    if (
+        materialization.get("ok") is not True
+        or organization_check.get("ok") is not True
+        or checked_files != sorted(set(stage_files))
+    ):
+        return {
+            "attempted": True,
+            "ok": False,
+            "reason": "exact materialized maintenance files did not pass the final organization check",
+            "branch": branch,
+            "materialization_receipt": materialization,
+            "organization_check": organization_check,
+        }
+
     add = _run_git(["add", "--", *stage_files], cwd=org_root)
     if add.returncode != 0:
         return {"attempted": True, "ok": False, "errors": [add.stderr.strip() or add.stdout.strip()], "branch": branch}
@@ -223,8 +348,39 @@ def _commit_and_push_organization_maintenance(
         if "nothing to commit" not in message:
             return {"attempted": True, "ok": False, "errors": [message], "branch": branch}
 
+    committed_readback = _materialized_change_manifest(org_root, stage_files)
+    if (
+        committed_readback.get("ok") is not True
+        or committed_readback.get("manifest_hash") != materialization.get("manifest_hash")
+        or not str(committed_readback.get("head_commit") or "")
+    ):
+        return {
+            "attempted": True,
+            "ok": False,
+            "reason": "maintenance bytes or commit identity drifted after validation",
+            "branch": branch,
+            "materialization_receipt": materialization,
+            "pre_push_readback": committed_readback,
+            "organization_check": organization_check,
+        }
+
     push_result: dict[str, Any] = {"pushed": False, "pull_request_url": "", "errors": []}
     if push:
+        pre_push_readback = _materialized_change_manifest(org_root, stage_files)
+        if (
+            pre_push_readback.get("ok") is not True
+            or pre_push_readback.get("manifest_hash") != committed_readback.get("manifest_hash")
+            or pre_push_readback.get("head_commit") != committed_readback.get("head_commit")
+        ):
+            return {
+                "attempted": True,
+                "ok": False,
+                "reason": "maintenance materialization drifted immediately before push",
+                "branch": branch,
+                "materialization_receipt": materialization,
+                "pre_push_readback": pre_push_readback,
+                "organization_check": organization_check,
+            }
         push_result = push_organization_branch(org_root, branch, remote=remote, base_branch=base_branch)
         if not push_result.get("ok"):
             return {
@@ -234,7 +390,14 @@ def _commit_and_push_organization_maintenance(
                 "branch": branch,
                 "push": push_result,
             }
-        auto_merge_labels = ["org-kb:auto-merge"] if _maintenance_pr_auto_merge_eligible(stage_files) else []
+        readiness = merge_readiness if isinstance(merge_readiness, dict) else {}
+        auto_merge_labels = (
+            ["org-kb:auto-merge"]
+            if readiness.get("complete") is True
+            and readiness.get("eligible") is True
+            and _maintenance_pr_auto_merge_eligible(stage_files)
+            else []
+        )
         push_result["pull_request"] = create_github_pull_request_for_branch(
             repo_url,
             branch=branch,
@@ -275,6 +438,10 @@ def _commit_and_push_organization_maintenance(
         "push": push_result,
         "restore_base": restore_base,
         "pull_request_url": push_result.get("pull_request_url") or "",
+        "merge_readiness": merge_readiness or {},
+        "materialization_receipt": materialization,
+        "pre_push_readback": committed_readback,
+        "organization_check": organization_check,
     }
 
 
@@ -325,6 +492,43 @@ def _clear_organization_outbox(repo_root: Path, organization_id: str) -> dict[st
     return {"attempted": True, "ok": True, "path": str(outbox_dir)}
 
 
+def _record_contributed_proposals(
+    repo_root: Path,
+    proposal_files: list[Path],
+    *,
+    organization_id: str,
+    source: dict[str, Any],
+    uploaded: bool,
+) -> None:
+    for proposal_file in proposal_files:
+        payload = load_yaml_file(proposal_file)
+        proposal = payload.get("organization_proposal") if isinstance(payload.get("organization_proposal"), dict) else {}
+        content_hash = str(proposal.get("content_hash") or "").strip()
+        if not content_hash:
+            continue
+        record_exchange_hash(
+            repo_root,
+            content_hash,
+            direction="exported",
+            organization_id=organization_id,
+            source_repo=str(source.get("repo_url") or ""),
+            source_path=str(proposal.get("source_path") or ""),
+            local_path=str(proposal_file),
+            entry_id=str(payload.get("id") or proposal_file.stem),
+        )
+        if uploaded:
+            record_exchange_hash(
+                repo_root,
+                content_hash,
+                direction="uploaded",
+                organization_id=organization_id,
+                source_repo=str(source.get("repo_url") or ""),
+                source_path=str(proposal.get("source_path") or ""),
+                local_path=str(proposal_file),
+                entry_id=str(payload.get("id") or proposal_file.stem),
+            )
+
+
 def _maintenance_stage_paths(apply_result: dict[str, Any]) -> list[str]:
     paths: set[str] = set()
     for item in apply_result.get("applied") or []:
@@ -357,14 +561,24 @@ def run_organization_contribution(
     remote: str = "origin",
     base_branch: str = "main",
     record_postflight: bool = True,
+    run_id: str = "",
 ) -> dict[str, Any]:
     repo_root = Path(repo_root)
+    resolved_run_id = str(run_id or f"org-contribute-{utc_timestamp()}")
     source, sources, settings = _first_organization_source(repo_root)
     if not source:
+        reason = "organization mode is not connected to a validated repository"
         return {
             "ok": True,
             "skipped": True,
-            "reason": "organization mode is not connected to a validated repository",
+            "run_id": resolved_run_id,
+            "reason": reason,
+            "terminal_gate": {
+                "gate_id": "organization-settings",
+                "evaluated": True,
+                "applicable": False,
+                "reason": reason,
+            },
             "settings_gate": {
                 "available": False,
                 "mode": str(settings.get("mode") or "personal"),
@@ -379,7 +593,6 @@ def run_organization_contribution(
             "postflight_recorded": False,
         }
 
-    resolved_run_id = f"org-contribute-{utc_timestamp()}"
     lane_lock = acquire_lane_lock(repo_root, "kb-org-contribute", run_id=resolved_run_id)
     lock_released = False
     try:
@@ -390,6 +603,7 @@ def run_organization_contribution(
             result = {
                 "ok": False,
                 "skipped": False,
+                "run_id": resolved_run_id,
                 "settings_gate": {
                     "available": True,
                     "mode": str(settings.get("mode") or "personal"),
@@ -421,6 +635,7 @@ def run_organization_contribution(
         )
         branch_result: dict[str, Any] = {"attempted": False}
         pending_outbox_files = _outbox_proposal_files(repo_root, organization_id, sources)
+        outbox["pending_count"] = len(pending_outbox_files)
         if outbox.get("ok") and prepare_branch and not dry_run and pending_outbox_files:
             branch_result = prepare_organization_import_branch(
                 Path(str(source.get("path") or "")),
@@ -428,7 +643,7 @@ def run_organization_contribution(
                 contributor_id=contributor_id or installation_short_label(repo_root),
                 branch_name=branch_name,
                 commit=commit,
-                push=push,
+                push=False,
                 remote=remote,
                 base_branch=base_branch,
                 proposal_files=pending_outbox_files,
@@ -436,43 +651,57 @@ def run_organization_contribution(
             branch_result["attempted"] = True
             if branch_result.get("ok"):
                 branch_persisted = bool(branch_result.get("committed"))
-                if branch_persisted:
-                    for proposal_file in pending_outbox_files:
-                        payload = load_yaml_file(proposal_file)
-                        proposal = payload.get("organization_proposal") if isinstance(payload.get("organization_proposal"), dict) else {}
-                        content_hash = str(proposal.get("content_hash") or "").strip()
-                        if not content_hash:
-                            continue
-                        record_exchange_hash(
-                            repo_root,
-                            content_hash,
-                            direction="exported",
-                            organization_id=organization_id,
-                            source_repo=str(source.get("repo_url") or ""),
-                            source_path=str(proposal.get("source_path") or ""),
-                            local_path=str(proposal_file),
-                            entry_id=str(payload.get("id") or proposal_file.stem),
-                        )
-                        if (branch_result.get("push") or {}).get("pushed"):
-                            record_exchange_hash(
-                                repo_root,
-                                content_hash,
-                                direction="uploaded",
-                                organization_id=organization_id,
-                                source_repo=str(source.get("repo_url") or ""),
-                                source_path=str(proposal.get("source_path") or ""),
-                                local_path=str(proposal_file),
-                                entry_id=str(payload.get("id") or proposal_file.stem),
-                            )
                 created_files = [str(item) for item in branch_result.get("created_files") or []]
+                materialization = _materialized_change_manifest(
+                    Path(str(source.get("path") or "")),
+                    created_files,
+                )
                 org_check = check_organization_repository(Path(str(source.get("path") or "")), changed_files=created_files)
-                branch_result["organization_check"] = {
-                    "ok": bool(org_check.get("ok")),
-                    "auto_merge_eligible": bool(org_check.get("auto_merge_eligible")),
-                    "auto_merge_blockers": org_check.get("auto_merge_blockers") or [],
-                }
+                branch_result["materialization_receipt"] = materialization
+                branch_result["organization_check"] = org_check
+                checked_files = sorted(str(item) for item in org_check.get("changed_files") or [])
+                if (
+                    materialization.get("ok") is not True
+                    or not org_check.get("ok")
+                    or checked_files != sorted(set(created_files))
+                ):
+                    branch_result["ok"] = False
+                    branch_result.setdefault("errors", []).extend(
+                        org_check.get("errors")
+                        or materialization.get("issues")
+                        or ["exact materialized organization check failed"]
+                    )
+                elif push:
+                    pre_push_readback = _materialized_change_manifest(
+                        Path(str(source.get("path") or "")),
+                        created_files,
+                    )
+                    branch_result["pre_push_readback"] = pre_push_readback
+                    if (
+                        pre_push_readback.get("ok") is not True
+                        or pre_push_readback.get("manifest_hash")
+                        != materialization.get("manifest_hash")
+                        or pre_push_readback.get("head_commit")
+                        != materialization.get("head_commit")
+                    ):
+                        branch_result["ok"] = False
+                        branch_result.setdefault("errors", []).append(
+                            "organization contribution bytes or commit identity drifted before push"
+                        )
+                    else:
+                        branch_result["push"] = push_organization_branch(
+                            Path(str(source.get("path") or "")),
+                            str(branch_result.get("branch") or ""),
+                            remote=remote,
+                            base_branch=base_branch,
+                        )
+                        if not branch_result["push"].get("ok"):
+                            branch_result["ok"] = False
+                            branch_result.setdefault("errors", []).extend(
+                                branch_result["push"].get("errors") or ["failed to push organization contribution branch"]
+                            )
                 auto_merge_labels = ["org-kb:auto-merge"] if org_check.get("auto_merge_eligible") else []
-                if (branch_result.get("push") or {}).get("pushed"):
+                if branch_result.get("ok") and (branch_result.get("push") or {}).get("pushed"):
                     branch_result["pull_request"] = create_github_pull_request_for_branch(
                         str(source.get("repo_url") or ""),
                         branch=str(branch_result.get("branch") or ""),
@@ -496,7 +725,14 @@ def run_organization_contribution(
                 if not branch_result["restore_base"].get("ok"):
                     branch_result["ok"] = False
                     branch_result.setdefault("errors", []).extend(branch_result["restore_base"].get("errors") or [])
-                elif branch_persisted:
+                elif branch_persisted and branch_result.get("ok"):
+                    _record_contributed_proposals(
+                        repo_root,
+                        pending_outbox_files,
+                        organization_id=organization_id,
+                        source=source,
+                        uploaded=bool((branch_result.get("push") or {}).get("pushed")),
+                    )
                     branch_result["clear_outbox"] = _clear_organization_outbox(repo_root, organization_id)
                     if not branch_result["clear_outbox"].get("ok"):
                         branch_result["ok"] = False
@@ -527,6 +763,7 @@ def run_organization_contribution(
         result = {
             "ok": ok,
             "skipped": False,
+            "run_id": resolved_run_id,
             "settings_gate": {
                 "available": True,
                 "mode": str(settings.get("mode") or "personal"),
@@ -539,6 +776,11 @@ def run_organization_contribution(
             "preflight": preflight,
             "outbox": outbox,
             "branch": branch_result,
+            "requested_actions": {
+                "prepare_branch": bool(prepare_branch),
+                "commit": bool(commit),
+                "push": bool(push),
+            },
             "postflight_recorded": bool(postflight_path),
             "postflight_path": postflight_path,
         }
@@ -561,16 +803,32 @@ def run_organization_maintenance(
     remote: str = "origin",
     base_branch: str = "main",
     record_postflight: bool = True,
+    run_id: str = "",
 ) -> dict[str, Any]:
     repo_root = Path(repo_root)
+    resolved_run_id = str(run_id or f"org-maintenance-{utc_timestamp()}")
     settings = load_desktop_settings(repo_root)
     participation = maintenance_participation_status_from_settings(settings)
     sources = organization_sources_from_settings(settings)
     if not participation.get("available") or not sources:
+        reason = str(
+            participation.get("reason")
+            if not participation.get("available")
+            else "organization mode is not connected to a validated repository"
+        )
+        gated_participation = dict(participation)
+        gated_participation.update({"available": False, "reason": reason})
         return {
             "ok": True,
             "skipped": True,
-            "reason": str(participation.get("reason") or "organization maintenance participation is not available"),
+            "run_id": resolved_run_id,
+            "reason": reason,
+            "terminal_gate": {
+                "gate_id": "organization-maintenance-participation",
+                "evaluated": True,
+                "applicable": False,
+                "reason": reason,
+            },
             "settings_gate": {
                 "available": False,
                 "mode": str(settings.get("mode") or "personal"),
@@ -581,12 +839,11 @@ def run_organization_maintenance(
                 ),
                 "maintenance_requested": bool(participation.get("requested")),
             },
-            "participation": participation,
+            "participation": gated_participation,
             "preflight": {},
             "postflight_recorded": False,
         }
 
-    resolved_run_id = f"org-maintenance-{utc_timestamp()}"
     lane_lock = acquire_lane_lock(repo_root, "kb-org-maintenance", run_id=resolved_run_id)
     lock_released = False
     try:
@@ -597,6 +854,7 @@ def run_organization_maintenance(
             result = {
                 "ok": False,
                 "skipped": False,
+                "run_id": resolved_run_id,
                 "settings_gate": {
                     "available": True,
                     "mode": str(settings.get("mode") or "personal"),
@@ -619,7 +877,7 @@ def run_organization_maintenance(
         organization_id = str(source.get("organization_id") or "").strip()
         preflight = _preflight(
             repo_root,
-            query="organization maintenance review imports main exchange surface legacy compatibility skills merge split auto merge",
+        query="organization maintenance review imports main exchange surface current layout skills merge split auto merge",
         )
         report = build_organization_maintenance_report(
             Path(str(source.get("path") or "")),
@@ -641,6 +899,7 @@ def run_organization_maintenance(
                 remote=remote,
                 base_branch=base_branch,
                 repo_url=str(source.get("repo_url") or ""),
+                merge_readiness=(cleanup.get("github_merge_readiness") or {}),
             )
         postflight_path = ""
         if record_postflight:
@@ -651,7 +910,6 @@ def run_organization_maintenance(
                 outcome=(
                     f"main_active_count={report.get('main_active_count', 0)} "
                     f"imports_count={report.get('imports_count', 0)} "
-                    f"legacy_compatibility={bool(report.get('legacy_compatibility'))} "
                     f"skill_count={report.get('skill_count', 0)} "
                     f"recommendations={len(report.get('recommendations', []))} "
                     f"sleep_selected={((report.get('cleanup') or {}).get('review') or {}).get('selected_count', 0)} "
@@ -660,7 +918,7 @@ def run_organization_maintenance(
                 comment="Organization maintenance automation inspected the validated organization mirror, including the imports incoming lane and main exchange surface, then selected cleanup proposals and applied organization Sleep-style actions with audit evidence.",
                 action_taken="Read desktop organization maintenance settings, validated participation, inspected the organization KB mirror with the organization maintenance worldview, selected cleanup proposals, and moved reviewed material toward main when selected actions allowed it.",
                 observed_result=f"Report recommendations: {', '.join(report.get('recommendations', [])) or 'none'}.",
-                operational_use="Use this audit event to confirm scheduled organization maintenance runs only on opted-in machines, treats legacy trusted/candidates as compatibility paths, and closes the imports-to-main decision/apply loop for supported cleanup actions.",
+                operational_use="Use this audit event to confirm scheduled organization maintenance runs only on opted-in machines, rejects obsolete layouts, and closes the imports-to-main decision/apply loop for supported cleanup actions.",
                 agent_name="kb-organization-maintenance",
             )
 
@@ -671,10 +929,18 @@ def run_organization_maintenance(
         if post_apply_check:
             post_apply_ok = bool(post_apply_check.get("ok"))
         final_ok = bool(report.get("ok")) and apply_ok and post_apply_ok and bool(maintenance_branch.get("ok", True))
+        exact_apply = cleanup.get("exact_selected_apply") if isinstance(cleanup.get("exact_selected_apply"), dict) else {}
+        skill_safety = cleanup.get("skill_safety_checkpoint") if isinstance(cleanup.get("skill_safety_checkpoint"), dict) else {}
+        final_ok = (
+            final_ok
+            and exact_apply.get("exact") is True
+            and skill_safety.get("passed") is True
+        )
         write_lane_status(repo_root, "kb-org-maintenance", "completed" if final_ok else "failed", run_id=resolved_run_id)
         result = {
             "ok": final_ok,
             "skipped": False,
+            "run_id": resolved_run_id,
             "settings_gate": {
                 "available": True,
                 "mode": str(settings.get("mode") or "personal"),

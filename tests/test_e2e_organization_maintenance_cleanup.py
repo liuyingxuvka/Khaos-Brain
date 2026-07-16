@@ -23,8 +23,7 @@ class OrganizationMaintenanceCleanupE2ETests(unittest.TestCase):
                 "schema_version": 1,
                 "organization_id": "sandbox",
                 "kb": {
-                    "trusted_path": "kb/trusted",
-                    "candidates_path": "kb/candidates",
+                    "main_path": "kb/main",
                     "imports_path": "kb/imports",
                 },
                 "skills": {
@@ -34,11 +33,11 @@ class OrganizationMaintenanceCleanupE2ETests(unittest.TestCase):
             },
         )
         write_yaml_file(
-            root / "kb" / "trusted" / "canonical.yaml",
+            root / "kb" / "main" / "trusted" / "canonical.yaml",
             self._card("canonical-card", status="trusted", title="Canonical organization card"),
         )
         write_yaml_file(
-            root / "kb" / "candidates" / "weak-random.yaml",
+            root / "kb" / "main" / "candidates" / "weak-random.yaml",
             self._card(
                 "weak-random",
                 status="candidate",
@@ -114,7 +113,7 @@ class OrganizationMaintenanceCleanupE2ETests(unittest.TestCase):
             report = build_organization_maintenance_report(org, repo_root=local_repo)
             after_a = load_yaml_file(org / "kb" / "imports" / "alice" / "duplicate-a.yaml")
             after_b = load_yaml_file(org / "kb" / "imports" / "bob" / "duplicate-b.yaml")
-            weak_after = load_yaml_file(org / "kb" / "candidates" / "weak-random.yaml")
+            weak_after = load_yaml_file(org / "kb" / "main" / "candidates" / "weak-random.yaml")
 
         self.assertFalse(check["ok"], check)
         self.assertIn("duplicate card content hashes require organization maintenance", check["errors"])

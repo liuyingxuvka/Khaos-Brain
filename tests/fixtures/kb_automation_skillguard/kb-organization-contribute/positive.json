@@ -1,0 +1,21 @@
+{
+  "case_id": "case:kb-organization-contribute:positive-automation-depth",
+  "important_gap_obligation_id": "",
+  "mode": "target-native-complete",
+  "native_evaluator_id": "local_kb.automation_runtime.evaluate_native_payload",
+  "native_receipt_origin": "calibration-fixture",
+  "schema_version": "khaos-brain.target-native-depth-calibration.v1",
+  "skill_id": "kb-organization-contribute",
+  "target_obligation_ids": [
+    "obligation:kb-organization-contribute:settings-noop-gate",
+    "obligation:kb-organization-contribute:sync-preflight",
+    "obligation:kb-organization-contribute:privacy-shareability",
+    "obligation:kb-organization-contribute:content-hash-dedup",
+    "obligation:kb-organization-contribute:skill-bundle-author-version",
+    "obligation:kb-organization-contribute:branch-pr-auto-merge",
+    "obligation:kb-organization-contribute:postflight-terminal",
+    "obligation:kb-organization-contribute:lane-failure-recovery",
+    "obligation:kb-organization-contribute:timeout-tree-cleanup",
+    "obligation:kb-organization-contribute:depth-calibration"
+  ]
+}

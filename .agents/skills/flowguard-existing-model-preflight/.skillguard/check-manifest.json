@@ -1,0 +1,570 @@
+{
+  "check_declarations_hash": "770DBCE2E2EEAE15B1D09674A8437814D1C33665CC8C0DAF5E45A873D61423A1",
+  "checks": [
+    {
+      "args": [
+        ".flowguard/existing_model_preflight/model.py"
+      ],
+      "assertion_scope": "current_full_flowguard_model",
+      "check_id": "check:flowguard-existing-model-preflight:plane-boundary",
+      "command": "python",
+      "coverage_rationale": "The check is the single declared owner for its mapped obligation set.",
+      "coverage_scope": "declared_obligations",
+      "covers_obligation_ids": [
+        "obligation:flowguard-existing-model-preflight:plane-boundary"
+      ],
+      "cwd_token": "repository_root",
+      "depends_on_check_ids": [],
+      "evidence_class": "hard",
+      "evidence_domain_id": "evidence-domain:check:flowguard-existing-model-preflight:plane-boundary",
+      "execution_owner_id": "owner:check:flowguard-existing-model-preflight:plane-boundary",
+      "expected": {
+        "exit_code": 0
+      },
+      "input_component_ids": [
+        "component:documentation_model:60e742be8d53d29e",
+        "component:runtime_source:b81659fa8c8bfdb4"
+      ],
+      "input_selectors": [
+        {
+          "kind": "path",
+          "path": ".flowguard/existing_model_preflight/model.py"
+        }
+      ],
+      "kind": "model_assertion",
+      "owner_declaration_hash": "sha256:b4f0f2072e9ba403f738805a59204e342d47e83ec34e54cd1be3ada663adea33",
+      "owner_input_projection_hash": "sha256:ce42c608c76b08222f4ed2344cbb5a36175dac0e96fb09342a0c460bfc3a9fc6",
+      "projection_declaration_hash": "sha256:95f8b6b29c0d4c0406968ba6ac4b410182e9629bebb19bb53b3f66128a5c7a46",
+      "semantic_check_id": "semantic:check:flowguard-existing-model-preflight:plane-boundary",
+      "timeout_seconds": 30
+    },
+    {
+      "args": [
+        "-m",
+        "pytest",
+        "tests/test_existing_model_preflight.py",
+        "-q"
+      ],
+      "check_id": "check:flowguard-existing-model-preflight:native-authority",
+      "command": "python",
+      "coverage_rationale": "The check is the single declared owner for its mapped obligation set.",
+      "coverage_scope": "declared_obligations",
+      "covers_obligation_ids": [
+        "obligation:flowguard-existing-model-preflight:native-authority"
+      ],
+      "cwd_token": "repository_root",
+      "depends_on_check_ids": [],
+      "evidence_class": "hard",
+      "evidence_domain_id": "evidence-domain:check:flowguard-existing-model-preflight:native-authority",
+      "execution_owner_id": "owner:check:flowguard-existing-model-preflight:native-authority",
+      "expected": {
+        "exit_code": 0
+      },
+      "input_component_ids": [
+        "component:documentation_model:60e742be8d53d29e",
+        "component:documentation_model:6249dc8c79d66007",
+        "component:documentation_model:d7d06ce82e468e2b",
+        "component:runtime_source:299f94ea421bb31f",
+        "component:runtime_source:3a79fb960e5d5c82",
+        "component:runtime_source:b81659fa8c8bfdb4",
+        "component:test_dev:19f86a9dd810565d"
+      ],
+      "input_selectors": [
+        {
+          "kind": "path",
+          "path": ".flowguard/existing_model_preflight/model.py"
+        },
+        {
+          "kind": "path",
+          "path": "tests/test_existing_model_preflight.py"
+        },
+        {
+          "kind": "role",
+          "role": "documentation_model"
+        },
+        {
+          "kind": "role",
+          "role": "runtime_source"
+        },
+        {
+          "kind": "role",
+          "role": "test_dev"
+        }
+      ],
+      "kind": "command",
+      "owner_declaration_hash": "sha256:4f3aa6aabd66ef5ce6f07ed5ff77a696be33e612d5f749e6ae6a61a1e97ca455",
+      "owner_input_projection_hash": "sha256:40fe1da21d5d30c3a385af15d9b8fa0f56b0bafd9d5632f6f4e43f93cad331d6",
+      "projection_declaration_hash": "sha256:79d2cbd38040a67413af4f11166e2e255b7e7fd9c60ced34e8d3da22f8f0c3a9",
+      "semantic_check_id": "semantic:check:flowguard-existing-model-preflight:native-authority",
+      "timeout_seconds": 300
+    },
+    {
+      "args": [
+        ".flowguard/existing_model_preflight/model.py"
+      ],
+      "assertion_scope": "current_full_flowguard_model",
+      "check_id": "check:flowguard-existing-model-preflight:evidence-closure",
+      "command": "python",
+      "coverage_rationale": "The check is the single declared owner for its mapped obligation set.",
+      "coverage_scope": "declared_obligations",
+      "covers_obligation_ids": [
+        "obligation:flowguard-existing-model-preflight:evidence-closure"
+      ],
+      "cwd_token": "repository_root",
+      "depends_on_check_ids": [],
+      "evidence_class": "hard",
+      "evidence_domain_id": "evidence-domain:check:flowguard-existing-model-preflight:evidence-closure",
+      "execution_owner_id": "owner:check:flowguard-existing-model-preflight:evidence-closure",
+      "expected": {
+        "exit_code": 0
+      },
+      "input_component_ids": [
+        "component:documentation_model:60e742be8d53d29e",
+        "component:runtime_source:b81659fa8c8bfdb4"
+      ],
+      "input_selectors": [
+        {
+          "kind": "path",
+          "path": ".flowguard/existing_model_preflight/model.py"
+        }
+      ],
+      "kind": "model_assertion",
+      "owner_declaration_hash": "sha256:b177ded01a4c87a3ed9524d6e4ae8fcb9281a1a29caf7ecb755c955c54a3c8a9",
+      "owner_input_projection_hash": "sha256:ce42c608c76b08222f4ed2344cbb5a36175dac0e96fb09342a0c460bfc3a9fc6",
+      "projection_declaration_hash": "sha256:cb3d4906ae0bda813346760008671b8ebac8a69faeba555f07c1dd72aa626da3",
+      "semantic_check_id": "semantic:check:flowguard-existing-model-preflight:evidence-closure",
+      "timeout_seconds": 30
+    }
+  ],
+  "claim_boundary": "This manifest binds checks to exact model obligations. Passing checks do not by themselves prove target execution, user-visible quality, full closure, installation, or publication.",
+  "compiler_version": "skillguard.contract_compiler.v2",
+  "content_impact_plan": {
+    "all_owner_component_ids": [
+      "component:documentation_model:60e742be8d53d29e",
+      "component:runtime_source:b81659fa8c8bfdb4"
+    ],
+    "check_projections": [
+      {
+        "check_id": "check:flowguard-existing-model-preflight:plane-boundary",
+        "covers_obligation_ids": [
+          "obligation:flowguard-existing-model-preflight:plane-boundary"
+        ],
+        "evidence_class": "hard",
+        "execution_owner_id": "owner:check:flowguard-existing-model-preflight:plane-boundary",
+        "projection_declaration_hash": "sha256:95f8b6b29c0d4c0406968ba6ac4b410182e9629bebb19bb53b3f66128a5c7a46",
+        "semantic_check_id": "semantic:check:flowguard-existing-model-preflight:plane-boundary"
+      },
+      {
+        "check_id": "check:flowguard-existing-model-preflight:native-authority",
+        "covers_obligation_ids": [
+          "obligation:flowguard-existing-model-preflight:native-authority"
+        ],
+        "evidence_class": "hard",
+        "execution_owner_id": "owner:check:flowguard-existing-model-preflight:native-authority",
+        "projection_declaration_hash": "sha256:79d2cbd38040a67413af4f11166e2e255b7e7fd9c60ced34e8d3da22f8f0c3a9",
+        "semantic_check_id": "semantic:check:flowguard-existing-model-preflight:native-authority"
+      },
+      {
+        "check_id": "check:flowguard-existing-model-preflight:evidence-closure",
+        "covers_obligation_ids": [
+          "obligation:flowguard-existing-model-preflight:evidence-closure"
+        ],
+        "evidence_class": "hard",
+        "execution_owner_id": "owner:check:flowguard-existing-model-preflight:evidence-closure",
+        "projection_declaration_hash": "sha256:cb3d4906ae0bda813346760008671b8ebac8a69faeba555f07c1dd72aa626da3",
+        "semantic_check_id": "semantic:check:flowguard-existing-model-preflight:evidence-closure"
+      }
+    ],
+    "components": [
+      {
+        "classification_rule_ids": [
+          "skillguard.content_role_classifier.current:contract_schema"
+        ],
+        "component_hash": "sha256:53c84b761d76fe8e1f8d1547fbec9cc713c9aaf0b1c9cc0b806e9ba38a992ed5",
+        "component_id": "component:contract_schema:24b73eb6d0ff5af6",
+        "consumer_ids": [
+          "projection:contract-compile",
+          "projection:installation"
+        ],
+        "install_disposition": "copy",
+        "member_paths": [
+          ".agents/skills/flowguard-existing-model-preflight/.skillguard/contract-source.json"
+        ],
+        "role": "contract_schema"
+      },
+      {
+        "classification_rule_ids": [
+          "skillguard.content_role_classifier.current:documentation_model"
+        ],
+        "component_hash": "sha256:8b1a8a2ac6764fe41c43383ff41237f8606fbb79793c7b2b39577f06d32f4ed6",
+        "component_id": "component:documentation_model:6249dc8c79d66007",
+        "consumer_ids": [
+          "owner:check:flowguard-existing-model-preflight:native-authority",
+          "projection:installation"
+        ],
+        "install_disposition": "copy",
+        "member_paths": [
+          ".agents/skills/flowguard-existing-model-preflight/SKILL.md",
+          ".agents/skills/flowguard-existing-model-preflight/references/existing_model_preflight_protocol.md"
+        ],
+        "role": "documentation_model"
+      },
+      {
+        "classification_rule_ids": [
+          "skillguard.content_role_classifier.current:documentation_model"
+        ],
+        "component_hash": "sha256:dfd205f2b64257d0ac4c20e4862f62986dc420d05f67e734e09753c3be72b7c7",
+        "component_id": "component:documentation_model:60e742be8d53d29e",
+        "consumer_ids": [
+          "owner:check:flowguard-existing-model-preflight:evidence-closure",
+          "owner:check:flowguard-existing-model-preflight:native-authority",
+          "owner:check:flowguard-existing-model-preflight:plane-boundary",
+          "projection:contract-compile"
+        ],
+        "install_disposition": "source_only",
+        "member_paths": [
+          ".flowguard/existing_model_preflight/model.py"
+        ],
+        "role": "documentation_model"
+      },
+      {
+        "classification_rule_ids": [
+          "skillguard.content_role_classifier.current:documentation_model"
+        ],
+        "component_hash": "sha256:93882dea4b9bc80c527b88aea60073f073938655899eec4800c67b74088cb63b",
+        "component_id": "component:documentation_model:d7d06ce82e468e2b",
+        "consumer_ids": [
+          "owner:check:flowguard-existing-model-preflight:native-authority"
+        ],
+        "install_disposition": "source_only",
+        "member_paths": [
+          ".flowguard/existing_model_preflight/run_checks.py"
+        ],
+        "role": "documentation_model"
+      },
+      {
+        "classification_rule_ids": [
+          "skillguard.content_role_classifier.current:runtime_source"
+        ],
+        "component_hash": "sha256:050c24327f3396e637519bae7d2b4fd9c191eb44859627560d45163a3ea511aa",
+        "component_id": "component:runtime_source:299f94ea421bb31f",
+        "consumer_ids": [
+          "owner:check:flowguard-existing-model-preflight:native-authority",
+          "projection:installation"
+        ],
+        "install_disposition": "copy",
+        "member_paths": [
+          ".agents/skills/flowguard-existing-model-preflight/agents/openai.yaml"
+        ],
+        "role": "runtime_source"
+      },
+      {
+        "classification_rule_ids": [
+          "skillguard.content_role_classifier.current:runtime_source"
+        ],
+        "component_hash": "sha256:f840ca6b0ad40724f61d14999a93471c6cb72efd9fa6d8e4fbc904c403125cec",
+        "component_id": "component:runtime_source:b81659fa8c8bfdb4",
+        "consumer_ids": [
+          "owner:check:flowguard-existing-model-preflight:evidence-closure",
+          "owner:check:flowguard-existing-model-preflight:native-authority",
+          "owner:check:flowguard-existing-model-preflight:plane-boundary",
+          "projection:contract-compile"
+        ],
+        "install_disposition": "source_only",
+        "member_paths": [
+          "flowguard/skill_contract_model.py"
+        ],
+        "role": "runtime_source"
+      },
+      {
+        "classification_rule_ids": [
+          "skillguard.content_role_classifier.current:runtime_source"
+        ],
+        "component_hash": "sha256:632a9209e664ea4532d12e4c8d5fb3c2515236b8046a1531f5ed14df74c19acd",
+        "component_id": "component:runtime_source:3a79fb960e5d5c82",
+        "consumer_ids": [
+          "owner:check:flowguard-existing-model-preflight:native-authority"
+        ],
+        "install_disposition": "source_only",
+        "member_paths": [
+          "flowguard/behavior_commitment_lookup.py",
+          "flowguard/existing_model_preflight.py"
+        ],
+        "role": "runtime_source"
+      },
+      {
+        "classification_rule_ids": [
+          "skillguard.content_role_classifier.current:test_dev"
+        ],
+        "component_hash": "sha256:176f2c76ebba9d559632500c548a9b396e3829add42879db289ec38201fdfac3",
+        "component_id": "component:test_dev:19f86a9dd810565d",
+        "consumer_ids": [
+          "owner:check:flowguard-existing-model-preflight:native-authority"
+        ],
+        "install_disposition": "source_only",
+        "member_paths": [
+          "tests/test_existing_model_preflight.py"
+        ],
+        "role": "test_dev"
+      }
+    ],
+    "full_admission_reason_codes": [
+      "explicit_final_gate",
+      "explicit_release_gate",
+      "impact_policy_or_compiler_changed",
+      "shared_validation_runtime_changed",
+      "all_owner_component_changed"
+    ],
+    "health": {
+      "ambiguous_role_paths": [],
+      "dependency_parse_errors": [],
+      "duplicate_owner_ids": [],
+      "invalid_dependency_edges": [],
+      "owner_cycles": [],
+      "unmapped_paths": []
+    },
+    "impact_graph_hash": "sha256:e350dfc65b77c93aabeca6bc95d46b039cc8b0619b18c9a6a0a3b73ba26a9550",
+    "inventory": [
+      {
+        "classification_rule_id": "skillguard.content_role_classifier.current:contract_schema",
+        "content_hash": "sha256:731d261b6e54b1d54595cff9ab7d54b7f2b54eae1c38a734c55caa8a223489f4",
+        "install_disposition": "copy",
+        "path": ".agents/skills/flowguard-existing-model-preflight/.skillguard/contract-source.json",
+        "role": "contract_schema"
+      },
+      {
+        "classification_rule_id": "skillguard.content_role_classifier.current:documentation_model",
+        "content_hash": "sha256:edc29a2cb912e57bf2309941e42fcb09b461e1950c755d68894916800e166379",
+        "install_disposition": "copy",
+        "path": ".agents/skills/flowguard-existing-model-preflight/SKILL.md",
+        "role": "documentation_model"
+      },
+      {
+        "classification_rule_id": "skillguard.content_role_classifier.current:runtime_source",
+        "content_hash": "sha256:84d1063c26c4425fdb1003e86bf06b6a0b32091e057622577d96aadee3f4801a",
+        "install_disposition": "copy",
+        "path": ".agents/skills/flowguard-existing-model-preflight/agents/openai.yaml",
+        "role": "runtime_source"
+      },
+      {
+        "classification_rule_id": "skillguard.content_role_classifier.current:documentation_model",
+        "content_hash": "sha256:3a3ec9a33e9bcb9a69baca6a493a5fb10c66d4f4164a2e0ff3a472c219663bff",
+        "install_disposition": "copy",
+        "path": ".agents/skills/flowguard-existing-model-preflight/references/existing_model_preflight_protocol.md",
+        "role": "documentation_model"
+      },
+      {
+        "classification_rule_id": "skillguard.content_role_classifier.current:documentation_model",
+        "content_hash": "sha256:d06b239ad09ba7856ac6fecd1e16a138222e5e65d25cee06f8434d8e98c87440",
+        "install_disposition": "source_only",
+        "path": ".flowguard/existing_model_preflight/model.py",
+        "role": "documentation_model"
+      },
+      {
+        "classification_rule_id": "skillguard.content_role_classifier.current:documentation_model",
+        "content_hash": "sha256:ca9908cc2c0b6c0afb3083bb8aceaee2ff306f4e0e3bbe1a2f097108eba17879",
+        "install_disposition": "source_only",
+        "path": ".flowguard/existing_model_preflight/run_checks.py",
+        "role": "documentation_model"
+      },
+      {
+        "classification_rule_id": "skillguard.content_role_classifier.current:runtime_source",
+        "content_hash": "sha256:89b5a892c25f5542ca625dd71f3803f89d4dc02108332eaeabea9144b6fc79f7",
+        "install_disposition": "source_only",
+        "path": "flowguard/behavior_commitment_lookup.py",
+        "role": "runtime_source"
+      },
+      {
+        "classification_rule_id": "skillguard.content_role_classifier.current:runtime_source",
+        "content_hash": "sha256:ffcc9a87194b4a8ce6f5c8117f81db8dd3d491c9c12a30eaa9bbb6666161b063",
+        "install_disposition": "source_only",
+        "path": "flowguard/existing_model_preflight.py",
+        "role": "runtime_source"
+      },
+      {
+        "classification_rule_id": "skillguard.content_role_classifier.current:runtime_source",
+        "content_hash": "sha256:950be5371110546ec94ae5c0c3d6818cf378a4ed706e1e2410ddadc4fa0148d5",
+        "install_disposition": "source_only",
+        "path": "flowguard/skill_contract_model.py",
+        "role": "runtime_source"
+      },
+      {
+        "classification_rule_id": "skillguard.content_role_classifier.current:test_dev",
+        "content_hash": "sha256:c90f8568b40cea10ab0fe76a490af937a712b57b189152d53c6749d00d228801",
+        "install_disposition": "source_only",
+        "path": "tests/test_existing_model_preflight.py",
+        "role": "test_dev"
+      }
+    ],
+    "inventory_hash": "sha256:60603226e0b91314b9d40f38fb57eaf10358a78f5847d34c18712dbfd8dd4693",
+    "member_root_path": ".agents/skills/flowguard-existing-model-preflight",
+    "owner_receipt_root_ref": {
+      "path_token": "owner_evidence_root",
+      "relative_path": "check-executions"
+    },
+    "owners": [
+      {
+        "check_ids": [
+          "check:flowguard-existing-model-preflight:evidence-closure"
+        ],
+        "depends_on_owner_ids": [],
+        "evidence_domain_id": "evidence-domain:check:flowguard-existing-model-preflight:evidence-closure",
+        "execution_owner_id": "owner:check:flowguard-existing-model-preflight:evidence-closure",
+        "input_component_ids": [
+          "component:documentation_model:60e742be8d53d29e",
+          "component:runtime_source:b81659fa8c8bfdb4"
+        ],
+        "input_selectors": [
+          {
+            "kind": "path",
+            "path": ".flowguard/existing_model_preflight/model.py"
+          }
+        ],
+        "owner_declaration_hash": "sha256:b177ded01a4c87a3ed9524d6e4ae8fcb9281a1a29caf7ecb755c955c54a3c8a9",
+        "owner_input_projection_hash": "sha256:ce42c608c76b08222f4ed2344cbb5a36175dac0e96fb09342a0c460bfc3a9fc6"
+      },
+      {
+        "check_ids": [
+          "check:flowguard-existing-model-preflight:native-authority"
+        ],
+        "depends_on_owner_ids": [],
+        "evidence_domain_id": "evidence-domain:check:flowguard-existing-model-preflight:native-authority",
+        "execution_owner_id": "owner:check:flowguard-existing-model-preflight:native-authority",
+        "input_component_ids": [
+          "component:documentation_model:60e742be8d53d29e",
+          "component:documentation_model:6249dc8c79d66007",
+          "component:documentation_model:d7d06ce82e468e2b",
+          "component:runtime_source:299f94ea421bb31f",
+          "component:runtime_source:3a79fb960e5d5c82",
+          "component:runtime_source:b81659fa8c8bfdb4",
+          "component:test_dev:19f86a9dd810565d"
+        ],
+        "input_selectors": [
+          {
+            "kind": "path",
+            "path": ".flowguard/existing_model_preflight/model.py"
+          },
+          {
+            "kind": "path",
+            "path": "tests/test_existing_model_preflight.py"
+          },
+          {
+            "kind": "role",
+            "role": "documentation_model"
+          },
+          {
+            "kind": "role",
+            "role": "runtime_source"
+          },
+          {
+            "kind": "role",
+            "role": "test_dev"
+          }
+        ],
+        "owner_declaration_hash": "sha256:4f3aa6aabd66ef5ce6f07ed5ff77a696be33e612d5f749e6ae6a61a1e97ca455",
+        "owner_input_projection_hash": "sha256:40fe1da21d5d30c3a385af15d9b8fa0f56b0bafd9d5632f6f4e43f93cad331d6"
+      },
+      {
+        "check_ids": [
+          "check:flowguard-existing-model-preflight:plane-boundary"
+        ],
+        "depends_on_owner_ids": [],
+        "evidence_domain_id": "evidence-domain:check:flowguard-existing-model-preflight:plane-boundary",
+        "execution_owner_id": "owner:check:flowguard-existing-model-preflight:plane-boundary",
+        "input_component_ids": [
+          "component:documentation_model:60e742be8d53d29e",
+          "component:runtime_source:b81659fa8c8bfdb4"
+        ],
+        "input_selectors": [
+          {
+            "kind": "path",
+            "path": ".flowguard/existing_model_preflight/model.py"
+          }
+        ],
+        "owner_declaration_hash": "sha256:b4f0f2072e9ba403f738805a59204e342d47e83ec34e54cd1be3ada663adea33",
+        "owner_input_projection_hash": "sha256:ce42c608c76b08222f4ed2344cbb5a36175dac0e96fb09342a0c460bfc3a9fc6"
+      }
+    ],
+    "policy_id": "skillguard.content_impact_policy.current",
+    "portfolio_target_edges": [],
+    "projection_consumers": [
+      {
+        "consumer_id": "projection:contract-compile",
+        "consumer_projection_hash": "sha256:364b069f158e636ba9aa25c54762d3c9fc684ec9c9cc7b4e38dad43b829378a6",
+        "impact_plan_schema_version": "skillguard.content_impact_plan.current",
+        "impact_policy_id": "skillguard.content_impact_policy.current",
+        "input_component_ids": [
+          "component:contract_schema:24b73eb6d0ff5af6",
+          "component:documentation_model:60e742be8d53d29e",
+          "component:runtime_source:b81659fa8c8bfdb4"
+        ],
+        "input_projection_hash": "sha256:f8853d77c01d7b4405b8be3367ad0086e5ddec99a1860282304d7bd62db1dce2",
+        "kind": "contract_compile",
+        "projection_declaration_hash": "sha256:53f31aa55dcd3ea029ac6ac0cfa1a6e064a469c096fb9074bf2a35ef6b9122ff"
+      },
+      {
+        "consumer_id": "projection:global-router",
+        "consumer_projection_hash": "sha256:c05984df180fa719bed1a62a48db6052b1a7e03b87e7a9e6eda3430a1905cf86",
+        "impact_plan_schema_version": "skillguard.content_impact_plan.current",
+        "impact_policy_id": "skillguard.content_impact_policy.current",
+        "input_component_ids": [],
+        "input_projection_hash": "sha256:37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "kind": "global_router",
+        "projection_declaration_hash": "sha256:667973c38b6c505040402a17baf7ebb4fb1ebe562415b046f317c029a3861f2a"
+      },
+      {
+        "consumer_id": "projection:installation",
+        "consumer_projection_hash": "sha256:8695cecfd41b9f21d77ee3d36a0774193f8c4c5870d671cea33f8e7f3c714e45",
+        "impact_plan_schema_version": "skillguard.content_impact_plan.current",
+        "impact_policy_id": "skillguard.content_impact_policy.current",
+        "input_component_ids": [
+          "component:contract_schema:24b73eb6d0ff5af6",
+          "component:documentation_model:6249dc8c79d66007",
+          "component:runtime_source:299f94ea421bb31f"
+        ],
+        "input_projection_hash": "sha256:22d117c0b92add9669d795e33ec7b95fc391e5591f375e84ab5a6ddb4d8e0110",
+        "kind": "installation",
+        "projection_declaration_hash": "sha256:5b9e7489c2d4d38e03f336049396a2b40bf9863e78a45d0f8f1facbc8ea389f9"
+      },
+      {
+        "consumer_id": "projection:portfolio",
+        "consumer_projection_hash": "sha256:9829573143198c085bf05b11cfa1f5d2f0b51f7dcf833f143c0b53b00bf4bbae",
+        "impact_plan_schema_version": "skillguard.content_impact_plan.current",
+        "impact_policy_id": "skillguard.content_impact_policy.current",
+        "input_component_ids": [],
+        "input_projection_hash": "sha256:37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "kind": "portfolio",
+        "projection_declaration_hash": "sha256:9194e37d395a5756ddd87565ee97fe8dcdae46c150b4b03754291a80060b8b26"
+      },
+      {
+        "consumer_id": "projection:source-maintenance",
+        "consumer_projection_hash": "sha256:13be01e10a981898727db9510b3c43dc1fddb727f0fd9bbb8c5009db65106e6c",
+        "impact_plan_schema_version": "skillguard.content_impact_plan.current",
+        "impact_policy_id": "skillguard.content_impact_policy.current",
+        "input_component_ids": [],
+        "input_projection_hash": "sha256:37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "kind": "source_maintenance",
+        "projection_declaration_hash": "sha256:b55f389a1ff76e45148a5e9c63699fe47970e1d99e9b1d3805bec3f98aafa235"
+      }
+    ],
+    "schema_version": "skillguard.content_impact_plan.current",
+    "unknown_mapping_disposition": "block"
+  },
+  "contract_hash": "35AC6F039B22823BA1E9864E5C3B54CB9AB6A2EAD2BADA24E29A0736ACF916FA",
+  "manifest_hash": "9C0D039640F1C70DACF69F389187E53819902A08B514DE58B442B26616C3346E",
+  "model_id": "flowguard.existing_model_preflight.skill_contract.v2",
+  "schema_version": "skillguard.check_manifest.v2",
+  "skill_id": "flowguard-existing-model-preflight",
+  "source_fingerprints": {
+    "binding": "731D261B6E54B1D54595CFF9AB7D54B7F2B54EAE1C38A734C55CAA8A223489F4",
+    "entrypoint": "EDC29A2CB912E57BF2309941E42FCB09B461E1950C755D68894916800E166379",
+    "implementation:.agents/skills/flowguard-existing-model-preflight": "BE4E5370BBC0AD34839AF5EDE63F1D2A50A6CFC952B6B738F7FECE430FBBC70D",
+    "implementation:.flowguard/existing_model_preflight": "1955F2134CA203488B7EC401D78B89E02ABDD77E363FDF3A69146D0648D26FDA",
+    "implementation:flowguard/behavior_commitment_lookup.py": "89B5A892C25F5542CA625DD71F3803F89D4DC02108332EAEABEA9144B6FC79F7",
+    "implementation:flowguard/existing_model_preflight.py": "FFCC9A87194B4A8CE6F5C8117F81DB8DD3D491C9C12A30EAA9BBB6666161B063",
+    "implementation:flowguard/skill_contract_model.py": "950BE5371110546EC94AE5C0C3D6818CF378A4ED706E1E2410DDADC4FA0148D5",
+    "implementation:tests/test_existing_model_preflight.py": "C90F8568B40CEA10AB0FE76A490AF937A712B57B189152D53C6749D00D228801",
+    "model": "D06B239AD09BA7856AC6FECD1E16A138222E5E65D25CEE06F8434D8E98C87440",
+    "model_export": "F580381A64D9776FEDC92984FF7D794A6E589A42B7AC02F8BC4D329EFC62AF4C"
+  }
+}

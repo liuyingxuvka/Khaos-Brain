@@ -1,79 +1,50 @@
 ---
 name: kb-sleep-maintenance
-description: Run the repository-managed local KB Sleep maintenance pass. Use only when a user or automation explicitly asks for KB Sleep, sleep maintenance, local KB consolidation, or the scheduled KB Sleep automation; do not use for ordinary task preflight or active-task KB writes.
+description: Run the repository-managed automatic incremental KB Sleep pass. Use only for explicit Sleep maintenance or the scheduled KB Sleep automation, not ordinary retrieval or active-task write-back.
 ---
 
 # KB Sleep Maintenance
 
-Run one dedicated Sleep maintenance pass for this predictive KB repository.
+Sleep is the sole knowledge-decision and canonical model-generation owner. It consumes new evidence incrementally, gives every admitted observation a bounded machine-readable disposition, settles the candidate lifecycle, converts every admitted entry into an exact LogicGuard model revision, groups exact revisions into grounded scoped ModelMeshes, consumes Dream model-gap handoffs, and atomically publishes the complete model generation. Readable cards and the active index are deterministic projections of that authority.
 
-Sleep is the experience-library editor, not a candidate factory. Optimize for accuracy, clarity, future usability, and logical route structure, not for fewer cards or more generated candidates.
+## Authority and entrypoint
 
-## Authority
+Work from the repository root. Read `PROJECT_SPEC.md`, `docs/maintenance_agent_worldview.md`, `docs/maintenance_runbook.md`, and `.agents/skills/local-kb-retrieve/MAINTENANCE_PROMPT.md`. Current user instructions override repository defaults.
 
-Work from the repository root. Treat these files as authoritative and read them before stateful maintenance:
+Run:
 
-- PROJECT_SPEC.md
-- docs/maintenance_agent_worldview.md
-- docs/maintenance_runbook.md
-- .agents/skills/local-kb-retrieve/MAINTENANCE_PROMPT.md
+`python .agents/skills/local-kb-retrieve/scripts/kb_sleep.py --json`
 
-Current user instructions still override repository files.
+The native lifecycle implementation owns all mutation. SkillGuard supervises its declared route and checks; it must not create a parallel Sleep implementation or a second model writer.
 
-## Execution Contract
+## Required behavior
 
-1. Before the first stateful command, run python .agents/skills/local-kb-retrieve/scripts/kb_lane_status.py --lane kb-sleep --status running --wait-clear --poll-seconds 300 --json. If another core maintenance lane is running, wait and recheck every 5 minutes until the lane is free; do not skip merely because another lane is active.
-2. Write a visible execution plan before the first stateful command after the lane guard, with checkpoint statuses.
-3. Read the shared maintenance-agent worldview and use it as the judgment model for accuracy, clarity, usefulness, evidence strength, and human-reviewable output quality.
-4. Run the sleep self-preflight search against system/knowledge-library/maintenance.
-5. Inspect taxonomy, route gaps, route navigation when needed, and proposal-mode consolidation output.
-6. Track the current maintenance run id from the consolidation output or chosen `--run-id`; reuse that same run id in the final lane status completion command.
-7. Before choosing any apply lane, summarize high-volume proposal output as a compact editorial sample pack: action counts, apply eligibility, top route clusters, duplicate candidate clusters, strong examples, weak/noisy examples, Architect-only items, Dream-only items, low-risk navigation examples, and hub-card review examples. Use that map before deep-reading large raw JSON.
-8. Treat candidate backlog as a maintenance object: decide what should be kept, rewritten, merged, rejected, watched, or left proposal-only before adding more candidates.
-9. Treat mechanical apply eligibility as capability only. Do not run a broad apply mode over every eligible action; keep the pass proposal-only unless a compact reviewed set of action keys is explicitly selected.
-10. Run the mandatory similar-card merge checkpoint. Inspect cards surfaced by maintenance output for overlapping scenario, action, prediction, route, or evidence. Decide whether to merge, propose a merge, or skip application with a concrete reason.
-11. Run the mandatory overloaded-card split checkpoint. Inspect recurrent, broad, or `split_review_suggestion` cards and decide whether each one is still a hub card, should move toward a split proposal, or should skip application with a concrete reason.
-12. Run the organization Skill bundle consolidation checkpoint. For imported read-only organization Skills, group by `bundle_id`, keep only the latest approved version by `version_time`, preserve source-card references, and keep all local cards pointing at the same `bundle_id`.
-13. Do not skip the merge, split, or Skill bundle consolidation checkpoint itself. It is acceptable to skip applying a merge, split, or Skill replacement when evidence, safety, tooling, or scope is insufficient, but the inspection and recorded decision must still happen.
-14. Prefer functional, reusable domain paths over project-name route roots when reviewing candidates.
-15. Continue through every safe checkpoint instead of stopping after a short proposal.
-16. Apply only clearly eligible low-risk lanes supported by current tooling: new-candidates, related-cards, cross-index, AI-authored semantic-review, and AI-authored zh-CN i18n. Tool eligibility is not editorial approval; compare the whole eligible set with the editorial map before applying.
-17. Do not create new candidates merely because the tooling can; use new-candidates only when backlog triage shows the scaffold would improve future retrieval.
-18. If an apply mode contains both approved and unapproved actions, use selected action keys instead of skipping the whole lane: `--action-key <approved-action-key>` may be repeated. Skip only when the approved set cannot be named by exact action key.
-19. Limit semantic-review to at most 3 trusted-card modifications per run.
-20. Run a canonical-interface checkpoint before translation apply: top-level card fields, route values, CLI machine JSON, automation payload keys, and installer checks remain canonical machine surfaces; Chinese stays in `i18n.zh-CN`, route display labels, and UI view models.
-21. Run exactly one final AI-authored zh-CN display completion checkpoint after candidate/card creation, semantic text changes, and route review are done. This single checkpoint covers card display fields and route/path display labels, writes missing route labels through the i18n plan, and replaces separate mid-run translation cleanup.
-22. Keep taxonomy rewrites proposal-only unless current tooling cleanly supports the exact change.
-23. Inspect rollback artifacts when needed, including history-events, related-card-entries, cross-index-entries, and semantic-review-entries when present.
-24. Attempt supported low-risk repairs and rerun the relevant validation when a command exposes a fixable issue.
-25. Run a final sleep postflight check.
-26. Append one structured maintenance observation when the pass exposed a reusable lesson, route gap, card weakness, merge signal, split signal, Skill bundle update, interface-boundary gap, or process hazard.
-27. Run python .agents/skills/local-kb-retrieve/scripts/kb_lane_status.py --lane kb-sleep --status completed --run-id <run_id> --json.
-28. Stop after that final observation. Do not immediately consolidate the observation just written.
+1. Acquire the shared `kb-sleep` maintenance lane and preserve the same run id through closure.
+2. Start from the last committed input watermark and read only the next bounded increment for decision work.
+3. Admit every new observation before classification and give it exactly one current disposition in the same successful pass.
+4. Create or reuse one stable candidate only when a bounded scenario-action-result relation and sufficient evidence exist. Represent it immediately as a LogicGuard model revision with a root Claim, explicit Context and Method, typed support or challenge nodes, and explicit gaps. Never invent Evidence, Warrant, Assumption, Rebuttal, or Limitation merely to fill the model.
+5. Keep trusted promotion evidence-dependent. Require current independent validation; weak or duplicated evidence never satisfies promotion.
+6. Park unresolved candidates with a machine-evaluable reopen condition and a seven-day decision boundary. Reopen exactly once only after a material qualifying evidence delta.
+7. Immediately exclude strong contradictory trusted knowledge and complete its downgrade review in this Sleep pass.
+8. Consume each typed Dream model-gap handoff exactly once, record one acknowledgement, and let Dream remain an immutable simulation owner only.
+9. Assemble exact model revisions into physically separated public, private, and candidate ModelMeshes. Admit a canonical cross-model relation only when qualifying non-AI provenance supports it. Co-use, lexical similarity, and retired `related_cards` values remain unresolved grounding proposals, never edges.
+10. Audit each important model for missing context, action, evidence, warrant, assumption, opposition/rebuttal, and boundary conditions. Give every absence one stable open disposition, required grounded input, and machine-readable reopen condition; never invent the missing content.
+11. Publish models, meshes, deterministic readable projections, generation manifests, and the generation pointer as one rollbackable transaction. Rebuild and validate the active index against that exact generation before the pointer and watermark can close. The pointer is written last. A failed publication restores the entire prior generation.
+12. Exclude rejected, merged, superseded, parked, retired, deprecated, history-only, provenance-incomplete, and contradicted records from retrieval projection.
+13. Commit the new watermark only after dispositions, model/mesh publication, lifecycle review, handoff acknowledgements, and exact index validation are durable. On failure keep the previous watermark and emit a blocked receipt.
+14. Do not require a human to read files, choose cards, or approve ordinary maintenance decisions. Escalate only a real safety or authority boundary.
+15. Mark the lane completed only when the receipt is complete; otherwise mark it failed and leave other automations paused.
 
-## Report
+## Closure report
 
-Report the run id, checkpoint status, self-preflight entries, what became more accurate, clearer, or easier to retrieve, observation counts reviewed, candidates created or deliberately not created, weak/noisy material rejected or kept history-only, route adjustments or concerns, similar-card merge checkpoint decisions, overloaded-card split checkpoint decisions, organization Skill bundle consolidation decisions, semantic-review decisions applied or skipped, canonical-interface checkpoint status, final zh-CN display completion status for cards and routes, translations updated or still missing, validations run, repaired or proposal-only issues, maintenance decisions, postflight observation status, undeclared taxonomy gaps, hub-vs-overloaded card reviews, and next proposal-only targets.
+Return the run id, consumed range and digest, opening/new/terminal/parked/closing backlog counts, candidate create/reuse counts, promotions, downgrades, reopen decisions, Dream acknowledgements, exact LogicGuard generation/model/mesh counts, unresolved relation proposals, model-gap counts, active-index receipt and validation, rollback status, blockers, and final run state. Never infer success from prose when a required receipt is missing.
 
-<!-- BEGIN SKILLGUARD CONTRACT LAYER -->
-## Purpose
-Bind each kb run to the declared integration mode, evidence, blockers, residual_risk, and claim_boundary.
-## Entrypoint Scope
-Covers kb-sleep-maintenance plus explicitly routed local materials; no unrelated repos, private files, external services, publication, or release claims unless requested and routed.
-## Local Material Routing
-Use workspace, skill directory, user files, or configured project paths; keep private machine paths local and public instructions portable.
-## Entrypoint Acceptance Map
-Use SkillGuard as the runtime contract executor attached to the native route/check owner: Predictive KB launcher, local KB records, and KB maintenance workflow. It enforces contract gates through that native owner before progress or closure; duplicate SkillGuard-owned execution paths are invalid. Declared gates/routes: recall or maintenance, evidence update, validation, closure.
-## Use When
-Use when the request matches kb-sleep-maintenance and needs this governed workflow, materials, checks, or handoff behavior.
-## Do Not Use When
-Do not use outside the domain, without required materials, when a more specific skill owns the work, or for tiny direct answers.
-## Required Workflow
-Select the target-owned native route/check surface, run the SkillGuard contract gates around the native workflow, collect evidence, run checks, fix failures, then report.
-## Hard Gates
-Do not skip phases, do not replace required evidence with prose, do not treat stale reports as current, do not weaken validation to pass, and do not claim completion when blockers remain.
-## Output Requirements
-Report evidence, failures, blockers, skipped_checks with reasons, residual_risk, and claim_boundary; distinguish checked, unchecked, blocked, and uncertain.
-## SkillGuard Maintenance
-Keep `.skillguard` contracts, checks, evidence, and ledger current; rerun SkillGuard after entrypoint, route, evidence, or closure changes.
-<!-- END SKILLGUARD CONTRACT LAYER -->
+## SkillGuard completion boundary
+
+For a scheduled run, intake, planning, or proposal-only output is incomplete. Run `python scripts/run_kb_guarded_automation.py --skill kb-sleep-maintenance --json`; do not call the child entrypoint directly. The guarded runner invokes the native Sleep owner once, writes an immutable run receipt, and requires the sole current enforced SkillGuard closure receipt for that exact run. A declared no-op counts only when the native gate receipt proves its terminal. Positive and shallow fixtures remain target-owned checks; SkillGuard supervises their exact receipts without interpreting their domain meaning. Fixture or capability evidence cannot replace the concrete scheduled run. The installed SkillGuard builder—not caller-authored fields—binds the trigger, execution id, current installation receipt id/hash plus portable receipt-root reference, and installed runtime fingerprint. SkillGuard does not create a parallel Sleep executor.
+
+If the native owner or any validation child times out, the run is incomplete until the guarded launcher terminates the complete owned process tree, confirms zero remaining descendants, and records that cleanup under the ordered native-to-scheduled-to-aggregate timeout budget.
+
+## SkillGuard boundary
+
+The current authority is `.skillguard/contract-source.json` plus its declared FlowGuard model. `.skillguard/compiled-contract.json` and `.skillguard/check-manifest.json` are generated projections. No former work contract, underscore manifest, flat run record, compatibility, conversion, renewal, retirement-receipt, alias, or fallback closure route may exist. SkillGuard attaches to the native Sleep owner, preserves current evidence and failure visibility, and cannot manufacture knowledge decisions.

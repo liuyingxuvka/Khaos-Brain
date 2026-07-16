@@ -7,9 +7,12 @@ route_segment_labels:
   agent-lifecycle: Agent 生命周期
   ai-recommendation-quality: AI 推荐质量
   ai-screening: AI 筛选
+  application-materials: 申请材料
   applications: 申请
   architecture: 架构
+  architecture-planning: 架构规划
   async: 异步
+  audit: 审计
   automation: 自动化
   automation-bootstrap: 自动化引导
   automations: 自动化
@@ -18,6 +21,7 @@ route_segment_labels:
   bilingual: 双语
   branding: 品牌
   breaking-change: 破坏性变更
+  browser-control: 浏览器控制
   browser-prefill: 浏览器预填
   browser-state: 浏览器状态
   business: 业务
@@ -31,6 +35,7 @@ route_segment_labels:
   cleanup-review: 清理复核
   closure: 关闭
   codex: Codex
+  codex.workflow.flowguard.model-mesh: Codex 工作流 / FlowGuard / 模型网格
   coding: 编码
   coding.flowguard.release: FlowGuard 发布
   coding.release.skills: 编码发布 Skill
@@ -82,12 +87,15 @@ route_segment_labels:
   flowguard-structure-mesh: FlowGuard 结构网格
   flowpilot: FlowPilot
   flowpilot.automation.supervisor: FlowPilot 自动化主管
+  flowpilot; flowguard; background checks; multi-agent: FlowPilot / FlowGuard / 背景检查
+    / 多智能体
   funding: 资助
   geodata: 地理数据
   github: GitHub
   github-preflight: GitHub 预检
   github-publishing: GitHub 发布
   github-release: GitHub 发布
+  github-sandbox: GitHub 沙盒
   greenhouse-docx: Greenhouse DOCX
   greenhouse-form: Greenhouse 表单
   greenhouse-upload: Greenhouse 上传
@@ -112,6 +120,7 @@ route_segment_labels:
   job-search: 求职搜索
   kb: KB
   kb-checkpoints: KB 检查点
+  kb-preflight: KB 预检
   knowledge-browser: 知识浏览器
   knowledge-library: 知识库
   language: 语言
@@ -122,6 +131,10 @@ route_segment_labels:
   localization: 本地化
   logicguard: LogicGuard
   logicguard-writing: LogicGuard 写作
+  logicguard; repository: LogicGuard / 仓库
+  logicguard; skills: LogicGuard / Skills
+  longform: 长篇
+  longform-revision: 长篇修订
   machine-interface: 机器接口
   machine-output: 机器输出
   maintenance: 维护
@@ -173,8 +186,10 @@ route_segment_labels:
   prompt-following: Prompt 遵循
   prompt-governance: 提示治理
   prompt-guidance: Prompt 指南
+  prompt-guidance; repository: Prompt 指南 / 仓库
   prompt-refresh-control: Prompt 刷新控制
   prompting: Prompting
+  prompts: 提示词
   promptstore: PromptStore
   protocol: 协议
   public-docs-ui: 公开文档 UI
@@ -189,6 +204,7 @@ route_segment_labels:
   quality: 质量
   readme: README
   readme-presentation: README 展示
+  readme-presentation; guard-family: README 展示 / Guard 系列
   recovery: 恢复
   recovery-state: 恢复状态
   recursive-route: 递归路由
@@ -197,9 +213,11 @@ route_segment_labels:
   release: 发布
   release-honesty: 发布诚实性
   release-hygiene: 发布卫生
+  release-hygiene; skills: 发布卫生 / Skills
   release-iteration-workflow: 发布迭代流程
   release-proof: 发布证明
   release-smoke: 发布烟测
+  release-verification: 发布验证
   repair-chain: 修复链
   repo: 仓库
   repo-maintenance: 仓库维护
@@ -208,6 +226,7 @@ route_segment_labels:
   repos.flowpilot.maintenance.structure: FlowPilot 结构维护
   repository: 仓库
   repository-cleanup: 仓库清理
+  repository-split-audit: 仓库拆分审计
   repository-workflows: 仓库工作流
   resume-queue: 恢复队列
   retrieval: 检索
@@ -226,6 +245,7 @@ route_segment_labels:
   runtime-contracts: 运行时契约
   runtime-control: 运行时控制
   runtime-migration: 运行时迁移
+  runtime-progress: 运行进度
   runtime-state: 运行时状态
   screenshots: 截图
   scroll: 滚动
@@ -249,6 +269,8 @@ route_segment_labels:
   shutdown: 关闭
   simplification: 简化
   single-round-cycle: 单轮循环
+  skillguard: SkillGuard
+  skillguard; openspec: SkillGuard / OpenSpec
   skills: Skills
   snapshots: 快照
   software: 软件
@@ -259,6 +281,8 @@ route_segment_labels:
   state: 状态
   state-boundary: 状态边界
   state-machines: 状态机
+  storyline: 故事线
+  storyline-design: StorylineDesign
   structural-refactor: 结构重构
   structure: 结构
   structure-mesh: 结构网格
@@ -289,6 +313,7 @@ route_segment_labels:
   verification: 验证
   version-change: 版本变更
   versioning: 版本管理
+  versioning; writing: 版本管理 / 写作
   waermecheck: WaermeCheck
   wait-audit: 等待审计
   watchdog: 看护
@@ -301,4 +326,4 @@ route_segment_labels:
   workspace-navigation: 工作区导航
   writing: 写作
   writing-depth: 写作深度
-updated_at: '2026-06-14'
+updated_at: '2026-07-10'

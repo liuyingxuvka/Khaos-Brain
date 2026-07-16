@@ -7,8 +7,21 @@ from pathlib import Path
 
 import yaml
 
-from local_kb.dream import run_dream_maintenance
+from local_kb.dream import (
+    _logicguard_dream_probe,
+    run_dream_maintenance as _run_dream_maintenance,
+)
+from local_kb.logicguard_models import GroundedModelRelation, canonical_digest
 from local_kb.maintenance_lanes import acquire_lane_lock, lane_lock_path
+from local_kb.model_maintenance import publish_sleep_model_generation
+from local_kb.model_projection import binding_from_projection
+from local_kb.store import load_yaml_file
+from tests.current_runtime_helpers import activate_current_kb_runtime
+
+
+def run_dream_maintenance(*, repo_root: Path, **kwargs: object) -> dict:
+    activate_current_kb_runtime(repo_root)
+    return _run_dream_maintenance(repo_root=repo_root, **kwargs)
 
 
 def write_jsonl(path: Path, events: list[dict]) -> None:
@@ -49,6 +62,111 @@ def write_dream_process_entry(repo_root: Path) -> None:
 
 
 class DreamMaintenanceTests(unittest.TestCase):
+    def test_dream_probe_covers_model_roles_cross_edge_and_neighbor_pin(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            root_card = {
+                "id": "dream-root",
+                "title": "Dream root",
+                "type": "model",
+                "scope": "public",
+                "domain_path": ["system", "dream", "model"],
+                "if": {"notes": "When a complete model needs stress testing."},
+                "action": {"description": "Run the bounded perturbation suite."},
+                "predict": {
+                    "expected_result": "Every applicable model boundary is tested.",
+                    "alternatives": [],
+                },
+                "use": {"guidance": "Hand structural gaps to Sleep."},
+                "evidence": [{"text": "Observed support", "origin": "test"}],
+                "assumptions": ["The declared scope remains stable."],
+                "rebuttals": ["A counterexample can overturn the claim."],
+                "limitations": ["The claim excludes unrelated routes."],
+                "confidence": 0.7,
+                "source": [{"origin": "test", "date": "2026-07-14"}],
+                "status": "candidate",
+                "updated_at": "2026-07-14",
+            }
+            neighbor_card = {
+                **root_card,
+                "id": "dream-neighbor",
+                "title": "Dream neighbor",
+                "predict": {
+                    "expected_result": "The neighbor supplies exact context.",
+                    "alternatives": [],
+                },
+            }
+            created = publish_sleep_model_generation(
+                repo_root,
+                reason="test:dream-probe-create",
+                card_upserts={
+                    "kb/candidates/dream-root.yaml": root_card,
+                    "kb/candidates/dream-neighbor.yaml": neighbor_card,
+                },
+            )
+            self.assertTrue(created["ok"], created)
+            neighbor_card["predict"] = {
+                "expected_result": "The revised neighbor supplies exact context.",
+                "alternatives": [],
+            }
+            revised = publish_sleep_model_generation(
+                repo_root,
+                reason="test:dream-probe-revise-neighbor",
+                card_upserts={
+                    "kb/candidates/dream-neighbor.yaml": neighbor_card,
+                },
+            )
+            self.assertTrue(revised["ok"], revised)
+            root_path = repo_root / "kb" / "candidates" / "dream-root.yaml"
+            neighbor_path = repo_root / "kb" / "candidates" / "dream-neighbor.yaml"
+            root_binding = binding_from_projection(load_yaml_file(root_path))
+            neighbor_binding = binding_from_projection(load_yaml_file(neighbor_path))
+            linked = publish_sleep_model_generation(
+                repo_root,
+                reason="test:dream-probe-link",
+                relations=(
+                    GroundedModelRelation(
+                        relation_id="edge-dream-root-neighbor",
+                        source=root_binding,
+                        target=neighbor_binding,
+                        edge_type="supports",
+                        explanation="Test-grounded exact neighbor relation.",
+                        provenance=(
+                            {
+                                "origin_kind": "user_attestation",
+                                "source_id": "test:dream-root-neighbor",
+                                "content_hash": "sha256:"
+                                + canonical_digest("dream-root-neighbor"),
+                                "actor": "test",
+                            },
+                        ),
+                    ),
+                ),
+            )
+            self.assertTrue(linked["ok"], linked)
+
+            projection = load_yaml_file(root_path)
+            probe = _logicguard_dream_probe(repo_root, projection)
+
+            self.assertEqual(
+                probe["executed_perturbation_kinds"],
+                [
+                    "evidence-removal",
+                    "assumption-removal",
+                    "rebuttal-strengthening",
+                    "boundary-pressure",
+                    "cross-edge-removal",
+                    "neighbor-pin-replacement",
+                ],
+            )
+            self.assertEqual(probe["perturbation_count"], 6)
+            self.assertTrue(
+                all(
+                    row["simulation_receipt"]["authority"] == "simulation-only"
+                    for row in probe["perturbations"]
+                )
+            )
+
     def test_dream_selector_prefers_dream_adjacent_over_sleep_eligible(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)
@@ -249,7 +367,8 @@ class DreamMaintenanceTests(unittest.TestCase):
 
             self.assertEqual(result["status"], "completed")
             self.assertEqual(result["selected_experiment_count"], 2)
-            self.assertEqual(result["created_candidate_count"], 2)
+            self.assertEqual(result["created_candidate_count"], 0)
+            self.assertEqual(len(result["emitted_handoff_ids"]), 2)
             self.assertEqual([item["sequence_index"] for item in result["experiments"]], [1, 2])
             self.assertEqual(
                 [item["route_ref"] for item in result["experiments"]],
@@ -269,7 +388,7 @@ class DreamMaintenanceTests(unittest.TestCase):
             self.assertEqual(checkpoint_statuses["experiment-selection"], "completed")
             self.assertEqual(checkpoint_statuses["validation"], "completed")
 
-    def test_dream_run_creates_candidate_from_single_adjacent_observation(self) -> None:
+    def test_dream_hands_single_adjacent_observation_to_sleep(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)
             history_path = repo_root / "kb" / "history" / "events.jsonl"
@@ -332,18 +451,8 @@ class DreamMaintenanceTests(unittest.TestCase):
             )
 
             self.assertEqual(result["status"], "completed")
-            self.assertEqual(result["created_candidate_count"], 1)
-            candidate_path = repo_root / result["created_candidates"][0]["entry_path"]
-            self.assertTrue(candidate_path.exists())
-
-            candidate_payload = yaml.safe_load(candidate_path.read_text(encoding="utf-8"))
-            self.assertEqual(
-                candidate_payload["domain_path"],
-                ["engineering", "agent-behavior", "postflight"],
-            )
-            self.assertIn("dream-generated", candidate_payload["tags"])
-            self.assertIn("live-task confirmation", candidate_payload["use"]["guidance"])
-            self.assertEqual(candidate_payload["source"][0]["origin"], "dream exploration")
+            self.assertEqual(result["created_candidate_count"], 0)
+            self.assertEqual(len(result["emitted_handoff_ids"]), 1)
 
             report_path = repo_root / result["artifact_paths"]["report_path"]
             self.assertTrue(report_path.exists())
@@ -353,7 +462,7 @@ class DreamMaintenanceTests(unittest.TestCase):
             self.assertEqual(preflight_payload["kind"], "local-kb-dream-preflight")
             self.assertIn("model-dream-process", preflight_payload["matched_entry_ids"])
             self.assertIn("model-dream-process", result["preflight"]["matched_entry_ids"])
-            self.assertTrue(result["run_observation_event_id"])
+            self.assertEqual(result["run_observation_event_id"], "")
 
             plan_path = repo_root / result["artifact_paths"]["plan_path"]
             plan_payload = json.loads(plan_path.read_text(encoding="utf-8"))
@@ -362,9 +471,10 @@ class DreamMaintenanceTests(unittest.TestCase):
 
             experiments_path = repo_root / result["artifact_paths"]["experiments_path"]
             experiments_payload = json.loads(experiments_path.read_text(encoding="utf-8"))
-            self.assertEqual(experiments_payload["experiments"][0]["classification"], "candidate-created")
+            self.assertEqual(experiments_payload["experiments"][0]["classification"], "adjacent-support")
             self.assertEqual(experiments_payload["experiments"][0]["sandbox_mode"], "retrieval-ab")
-            self.assertEqual(experiments_payload["experiments"][0]["safety_tier"], "workspace-only")
+            self.assertEqual(experiments_payload["experiments"][0]["safety_tier"], "read-only")
+            self.assertTrue(experiments_payload["experiments"][0]["sleep_handoff_id"])
             self.assertIn("validation_plan", experiments_payload["experiments"][0])
 
             execution_plan_path = repo_root / result["artifact_paths"]["execution_plan_path"]
@@ -375,8 +485,7 @@ class DreamMaintenanceTests(unittest.TestCase):
             checkpoint_statuses = {item["id"]: item["status"] for item in execution_plan_payload["checkpoints"]}
             self.assertEqual(checkpoint_statuses["experiment-selection"], "completed")
             self.assertEqual(checkpoint_statuses["validation"], "completed")
-            self.assertEqual(checkpoint_statuses["experiment-observation"], "completed")
-            self.assertEqual(checkpoint_statuses["run-observation"], "completed")
+            self.assertEqual(checkpoint_statuses["sleep-handoff"], "completed")
             self.assertEqual(checkpoint_statuses["report"], "completed")
 
             history_events = [
@@ -384,18 +493,8 @@ class DreamMaintenanceTests(unittest.TestCase):
                 for line in history_path.read_text(encoding="utf-8").splitlines()
                 if line.strip()
             ]
-            self.assertEqual(history_events[-3]["event_type"], "candidate-created")
-            self.assertEqual(history_events[-3]["source"]["kind"], "dream-apply")
-            self.assertEqual(history_events[-2]["event_type"], "observation")
-            self.assertEqual(history_events[-2]["source"]["kind"], "dream-maintenance")
-            self.assertIn("Dream experiment", history_events[-2]["target"]["task_summary"])
-            self.assertEqual(history_events[-1]["event_type"], "observation")
-            self.assertEqual(history_events[-1]["source"]["kind"], "dream-maintenance")
-            self.assertEqual(history_events[-1]["event_id"], result["run_observation_event_id"])
-            self.assertEqual(
-                history_events[-1]["target"]["route_hint"],
-                ["system", "knowledge-library", "agent-lifecycle", "exploration"],
-            )
+            self.assertEqual(len(history_events), 1)
+            self.assertEqual(history_events[0]["event_id"], "dream-obs-1")
 
     def test_dream_selection_uses_bounded_route_deduped_batch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -437,7 +536,7 @@ class DreamMaintenanceTests(unittest.TestCase):
             execution_plan_path = repo_root / result["artifact_paths"]["execution_plan_path"]
             execution_plan_payload = json.loads(execution_plan_path.read_text(encoding="utf-8"))
             self.assertEqual(execution_plan_payload["policy"]["max_selected_experiments"], 4)
-            self.assertIn("At most one selected experiment", execution_plan_payload["policy"]["dedupe_rule"])
+            self.assertIn("stable decision-relevant evidence fingerprint", execution_plan_payload["policy"]["dedupe_rule"])
 
     def test_dream_prefers_existing_candidate_validation_over_adjacent_candidate_creation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -503,9 +602,9 @@ class DreamMaintenanceTests(unittest.TestCase):
             self.assertEqual(result["created_candidate_count"], 0)
             self.assertEqual(result["selected_experiment_count"], 2)
             self.assertEqual(result["experiments"][0]["kind"], "entry-validation")
-            self.assertEqual(result["experiments"][0]["permitted_write_back"], "history-only")
+            self.assertEqual(result["experiments"][0]["permitted_write_back"], "experiment-evidence-and-sleep-handoff")
             self.assertEqual(result["experiments"][1]["classification"], "candidate-backlog")
-            self.assertEqual(result["experiments"][1]["permitted_write_back"], "history-only")
+            self.assertEqual(result["experiments"][1]["permitted_write_back"], "experiment-evidence-and-sleep-handoff")
             self.assertIn("Sleep to merge", result["experiments"][1]["comment"])
 
     def test_dream_run_can_validate_existing_candidate_entry(self) -> None:
@@ -530,9 +629,19 @@ class DreamMaintenanceTests(unittest.TestCase):
                     "action": {"description": "Validate the candidate against local retrieval evidence."},
                     "predict": {"expected_result": "Dream can inspect the card without mutating trusted memory.", "alternatives": []},
                     "use": {"guidance": "Keep validation read-only and write a history note."},
+                    "evidence": [
+                        {
+                            "text": "A bounded replay previously improved the decision.",
+                            "origin": "test replay",
+                        }
+                    ],
+                    "assumptions": ["The task remains inside the declared architecture boundary."],
+                    "rebuttals": ["A conflicting dependency may invalidate the refactor."],
+                    "limitations": ["The guidance does not cover cross-repository migrations."],
                     "confidence": 0.4,
                     "source": [{"origin": "test", "date": "2026-04-24"}],
                     "status": "candidate",
+                    "retrieval_eligible": True,
                     "updated_at": "2026-04-24",
                 },
             )
@@ -573,7 +682,28 @@ class DreamMaintenanceTests(unittest.TestCase):
             self.assertEqual(result["experiments"][0]["kind"], "entry-validation")
             self.assertEqual(result["experiments"][0]["safety_tier"], "read-only")
             self.assertTrue(result["experiments"][0]["is_executable"])
-            self.assertEqual(result["experiments"][0]["classification"], "validated")
+            self.assertEqual(result["experiments"][0]["classification"], "model-gap")
+            simulation = result["experiments"][0]["logicguard_simulation"]
+            self.assertEqual(simulation["authority"], "simulation-only")
+            self.assertFalse(simulation["canonical_authority_mutated"])
+            self.assertTrue(simulation["simulation_receipt"]["receipt_id"])
+            self.assertEqual(
+                simulation["executed_perturbation_kinds"],
+                [
+                    "evidence-removal",
+                    "assumption-removal",
+                    "rebuttal-strengthening",
+                    "boundary-pressure",
+                ],
+            )
+            self.assertEqual(simulation["perturbation_count"], 4)
+            self.assertTrue(
+                all(
+                    item["simulation_receipt"]["receipt_id"]
+                    for item in simulation["perturbations"]
+                )
+            )
+            self.assertTrue(result["authority_pin"]["unchanged_after_run"])
             self.assertEqual(result["experiments"][0]["source_entry_id"], "cand-entry-validation")
             self.assertEqual(result["experiments"][0]["sandbox_mode"], "scenario-replay")
             self.assertEqual(result["experiments"][0]["evidence_grade"], "strong")
@@ -586,7 +716,8 @@ class DreamMaintenanceTests(unittest.TestCase):
             self.assertIn("sandbox_path", result["experiments"][0])
             self.assertIn("allowed_writes", result["experiments"][0])
             self.assertIn("scenario-replay", result["experiments"][0]["sleep_handoff"])
-            self.assertIn("Architect", result["experiments"][0]["architect_handoff"])
+            self.assertNotIn("architect_handoff", result["experiments"][0])
+            self.assertTrue(result["experiments"][0]["sleep_handoff_id"])
             self.assertEqual(result["created_candidate_count"], 0)
 
             sandbox_path = repo_root / result["experiments"][0]["sandbox_path"]
@@ -617,24 +748,8 @@ class DreamMaintenanceTests(unittest.TestCase):
                 for line in history_path.read_text(encoding="utf-8").splitlines()
                 if line.strip()
             ]
-            experiment_event = history_events[-2]
-            self.assertEqual(experiment_event["source"]["kind"], "dream-maintenance")
-            self.assertEqual(experiment_event["context"]["suggested_action"], "update-card")
-            self.assertEqual(experiment_event["target"]["entry_ids"], ["cand-entry-validation"])
-            dream_validation = experiment_event["context"]["dream_validation"]
-            self.assertEqual(dream_validation["classification"], "validated")
-            self.assertEqual(dream_validation["evidence_grade"], "strong")
-            self.assertEqual(dream_validation["validation_status"], "passed")
-            self.assertEqual(dream_validation["entry_status"], "candidate")
-            self.assertEqual(dream_validation["entry_confidence"], 0.4)
-            self.assertFalse(dream_validation["trusted_card_mutation"])
-            self.assertEqual(dream_validation["handoff_action"], "update-card")
-            self.assertIn("scenario-replay", dream_validation["sleep_handoff"])
-            self.assertTrue(dream_validation["sleep_handoff_detail"]["sleep_review_ready"])
-            self.assertEqual(dream_validation["scenario_replay"]["decision_delta"]["candidate_rank"], 1)
-            contrastive = experiment_event["context"]["predictive_observation"]["contrastive_evidence"]
-            self.assertIn("without the tested card", contrastive["previous_action"])
-            self.assertIn("with the tested card", contrastive["revised_action"])
+            self.assertEqual(len(history_events), 1)
+            self.assertEqual(history_events[0]["event_id"], "candidate-replay-source")
 
             execution_plan_path = repo_root / result["artifact_paths"]["execution_plan_path"]
             execution_plan_payload = json.loads(execution_plan_path.read_text(encoding="utf-8"))
@@ -680,6 +795,7 @@ class DreamMaintenanceTests(unittest.TestCase):
                     "confidence": 0.4,
                     "source": [{"origin": "test", "date": "2026-04-24"}],
                     "status": "candidate",
+                    "retrieval_eligible": True,
                     "updated_at": "2026-04-24",
                 },
             )
@@ -690,17 +806,49 @@ class DreamMaintenanceTests(unittest.TestCase):
             self.assertEqual(first["selected_experiment_count"], 1)
             self.assertEqual(first["experiments"][0]["validation_result"]["status"], "passed")
             self.assertEqual(second["selected_experiment_count"], 0)
-            self.assertGreaterEqual(second["skipped_prior_sandbox_success_count"], 1)
+            self.assertGreaterEqual(second["no_delta_closed_count"], 1)
 
             opportunities_path = repo_root / second["artifact_paths"]["opportunities_path"]
             opportunities_payload = json.loads(opportunities_path.read_text(encoding="utf-8"))
             skipped = [
                 item
                 for item in opportunities_payload["opportunities"]
-                if item.get("selection_status") == "skipped-prior-sandbox-success"
+                if item.get("selection_status") == "no_delta_closed"
             ]
             self.assertGreaterEqual(len(skipped), 1)
-            self.assertEqual(skipped[0]["prior_sandbox_success"]["run_id"], "kb-dream-entry-validation-a")
+            self.assertEqual(skipped[0]["prior_closure"]["run_id"], "kb-dream-entry-validation-a")
+
+            history_before = (
+                history_path.read_text(encoding="utf-8") if history_path.exists() else ""
+            )
+            candidate_path = repo_root / "kb" / "candidates" / "cand-entry-validation.yaml"
+            changed = yaml.safe_load(candidate_path.read_text(encoding="utf-8"))
+            changed["use"]["guidance"] = (
+                "New independent evidence requires a fresh bounded validation."
+            )
+            publication = publish_sleep_model_generation(
+                repo_root,
+                reason="test:dream-evidence-delta",
+                card_upserts={
+                    candidate_path.relative_to(repo_root).as_posix(): changed,
+                },
+            )
+            self.assertTrue(publication["ok"], publication)
+            third = run_dream_maintenance(
+                repo_root=repo_root,
+                run_id="kb-dream-entry-validation-c",
+            )
+
+            self.assertEqual(third["selected_experiment_count"], 1)
+            self.assertEqual(len(third["emitted_handoff_ids"]), 1)
+            self.assertNotEqual(
+                first["experiments"][0]["evidence_fingerprint"],
+                third["experiments"][0]["evidence_fingerprint"],
+            )
+            self.assertEqual(
+                history_path.read_text(encoding="utf-8") if history_path.exists() else "",
+                history_before,
+            )
 
     def test_dream_run_noops_when_no_opportunity_clears_value_gate(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -743,7 +891,7 @@ class DreamMaintenanceTests(unittest.TestCase):
             checkpoint_statuses = {item["id"]: item["status"] for item in execution_plan_payload["checkpoints"]}
             self.assertEqual(checkpoint_statuses["experiment-selection"], "completed")
             self.assertEqual(checkpoint_statuses["validation"], "skipped")
-            self.assertEqual(checkpoint_statuses["experiment-observation"], "skipped")
+            self.assertEqual(checkpoint_statuses["sleep-handoff"], "skipped")
 
     def test_dream_run_recovers_stale_lane_lock_instead_of_skipping(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -762,11 +910,15 @@ class DreamMaintenanceTests(unittest.TestCase):
             )
 
             self.assertEqual(result["status"], "completed")
-            history_events = [
-                json.loads(line)
-                for line in history_path.read_text(encoding="utf-8").splitlines()
-                if line.strip()
-            ]
+            history_events = (
+                [
+                    json.loads(line)
+                    for line in history_path.read_text(encoding="utf-8").splitlines()
+                    if line.strip()
+                ]
+                if history_path.exists()
+                else []
+            )
             self.assertFalse(any(event.get("event_type") == "dream-skipped" for event in history_events))
 
     def test_dream_run_records_history_only_for_taxonomy_gap(self) -> None:
@@ -828,15 +980,9 @@ class DreamMaintenanceTests(unittest.TestCase):
             self.assertEqual(result["experiments"][0]["kind"], "taxonomy-gap")
             self.assertEqual(result["experiments"][0]["classification"], "history-only")
 
-            history_events = [
-                json.loads(line)
-                for line in history_path.read_text(encoding="utf-8").splitlines()
-                if line.strip()
-            ]
-            self.assertEqual(history_events[-2]["event_type"], "observation")
-            self.assertEqual(history_events[-2]["context"]["suggested_action"], "taxonomy-change")
-            self.assertEqual(history_events[-1]["event_type"], "observation")
-            self.assertEqual(history_events[-1]["event_id"], result["run_observation_event_id"])
+            self.assertEqual(result["history_event_ids"], [])
+            self.assertEqual(result["run_observation_event_id"], "")
+            self.assertEqual(len(result["emitted_handoff_ids"]), 1)
 
 
 if __name__ == "__main__":

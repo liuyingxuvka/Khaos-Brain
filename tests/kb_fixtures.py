@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from local_kb.store import write_yaml_file
+from tests.current_runtime_helpers import activate_current_kb_runtime
 
 
 def _entry(
@@ -133,3 +134,4 @@ def write_sample_kb_repo(root: Path) -> None:
             trigger_keywords=["automation", "debugging", "spec", "drift"],
         ),
     )
+    activate_current_kb_runtime(root)

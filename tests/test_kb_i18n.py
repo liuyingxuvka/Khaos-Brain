@@ -21,6 +21,7 @@ from local_kb.i18n_maintenance import build_i18n_actions, collect_route_segment_
 from local_kb.search import render_entry
 from local_kb.store import write_yaml_file
 from local_kb.ui_data import build_route_view_payload
+from tests.current_runtime_helpers import activate_current_kb_runtime
 
 
 def _sample_entry() -> dict[str, object]:
@@ -74,6 +75,7 @@ class KbI18nTests(unittest.TestCase):
             repo_root = Path(tmp_dir)
             entry_path = repo_root / "kb" / "public" / "system" / "knowledge-library" / "retrieval" / "model-i18n.yaml"
             write_yaml_file(entry_path, _sample_entry())
+            activate_current_kb_runtime(repo_root)
             plan_path = repo_root / "kb" / "history" / "consolidation" / "i18n-test" / "i18n_zh-CN_plan.yaml"
             write_yaml_file(
                 plan_path,
@@ -127,6 +129,7 @@ class KbI18nTests(unittest.TestCase):
             entry["i18n"] = {"zh-CN": {"title": "仓库任务前先扫描本地 KB"}}
             entry_path = repo_root / "kb" / "public" / "system" / "knowledge-library" / "retrieval" / "model-i18n.yaml"
             write_yaml_file(entry_path, entry)
+            activate_current_kb_runtime(repo_root)
 
             payload = build_route_view_payload(
                 repo_root,
@@ -171,6 +174,7 @@ class KbI18nTests(unittest.TestCase):
             entry["cross_index"] = ["codex/workflow/unmapped-cross"]
             entry_path = repo_root / "kb" / "public" / "system" / "new-branch" / "custom-leaf" / "model-route-i18n.yaml"
             write_yaml_file(entry_path, entry)
+            activate_current_kb_runtime(repo_root)
 
             gaps = collect_route_segment_label_gaps(repo_root, "zh-CN")
             gap_segments = {item["segment"] for item in gaps}
@@ -192,6 +196,7 @@ class KbI18nTests(unittest.TestCase):
             entry["domain_path"] = ["system", "new-branch", "custom-leaf"]
             entry_path = repo_root / "kb" / "public" / "system" / "new-branch" / "custom-leaf" / "model-route-i18n-action.yaml"
             write_yaml_file(entry_path, entry)
+            activate_current_kb_runtime(repo_root)
 
             actions = build_i18n_actions(repo_root, "zh-CN")
             route_actions = [action for action in actions if action["action_type"] == "review-route-i18n"]
@@ -214,6 +219,7 @@ class KbI18nTests(unittest.TestCase):
             entry["domain_path"] = ["system", "new-branch", "custom-leaf"]
             entry_path = repo_root / "kb" / "public" / "system" / "new-branch" / "custom-leaf" / "model-route-i18n-apply.yaml"
             write_yaml_file(entry_path, entry)
+            activate_current_kb_runtime(repo_root)
             plan_path = repo_root / "kb" / "history" / "consolidation" / "route-i18n" / "i18n_zh-CN_plan.yaml"
             write_yaml_file(
                 plan_path,

@@ -43,6 +43,8 @@ from local_kb.consolidate_suggestions import (
     describe_apply_eligibility,
 )
 from local_kb.history import build_history_event, record_history_event
+from local_kb.model_maintenance import publish_sleep_model_generation
+from local_kb.model_projection import projection_scope_for_path
 from local_kb.i18n import (
     ZH_CN,
     merge_i18n_payload,
@@ -69,11 +71,32 @@ from local_kb.semantic_review import (
     semantic_review_needs_i18n_followup,
     semantic_review_updated_fields,
 )
-from local_kb.store import candidate_dir, write_yaml_file
+from local_kb.store import candidate_dir
 from local_kb.taxonomy import build_taxonomy_gap_report
 
 
 SLEEP_REVIEW_BATCH_LIMIT = 30
+
+
+def _publish_card_mutation(
+    repo_root: Path,
+    *,
+    reason: str,
+    upserts: dict[str, dict[str, Any]],
+    deletes: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    result = publish_sleep_model_generation(
+        repo_root,
+        reason=reason,
+        card_upserts=upserts,
+        card_deletes=deletes,
+    )
+    if not result.get("ok"):
+        raise RuntimeError(
+            "Sleep model mutation failed: "
+            + str(result.get("error") or result.get("status"))
+        )
+    return result
 
 
 def consolidation_run_dir(repo_root: Path, run_id: str) -> Path:
@@ -679,7 +702,11 @@ def apply_new_candidate_actions(
             )
             continue
 
-        write_yaml_file(target_path, entry)
+        _publish_card_mutation(
+            repo_root,
+            reason=f"consolidation:new-candidate:{run_id}:{entry['id']}",
+            upserts={relative_target_path: entry},
+        )
         missing_i18n = missing_i18n_fields(entry, ZH_CN)
         if missing_i18n:
             i18n_followup_entries.append(
@@ -783,7 +810,7 @@ def _apply_single_related_card_action(
     action: dict[str, Any],
     update_context: dict[str, Any],
     run_id: str,
-    updated_at: str,
+    publication: dict[str, Any],
 ) -> dict[str, Any]:
     previous_entry = dict(update_context["payload"])
     payload = dict(previous_entry)
@@ -792,17 +819,9 @@ def _apply_single_related_card_action(
     target_path = update_context["target_path"]
     entry_id = str(update_context["entry_id"])
 
-    if suggested_related_cards:
-        payload["related_cards"] = suggested_related_cards
-    else:
-        payload.pop("related_cards", None)
-    payload["updated_at"] = updated_at
-
     relative_target_path = relative_repo_path(repo_root, target_path)
-    write_yaml_file(target_path, payload)
-
     history_event = build_history_event(
-        "related-cards-updated",
+        "related-cards-proposed",
         source={
             "kind": "consolidation-apply",
             "agent": "kb-consolidate",
@@ -822,7 +841,13 @@ def _apply_single_related_card_action(
             "event_ids": list(action.get("event_ids", [])),
             "auto_apply_mode": APPLY_MODE_RELATED_CARDS,
             "previous_related_cards": current_related_cards,
-            "updated_related_cards": suggested_related_cards,
+            "suggested_related_cards": suggested_related_cards,
+            "canonical_edge_created": False,
+            "model_generation": str(
+                publication.get("receipt", {}).get("generation_id")
+                or publication.get("generation_id")
+                or ""
+            ),
         },
     )
     record_history_event(repo_root, history_event)
@@ -830,9 +855,14 @@ def _apply_single_related_card_action(
         "action_key": action["action_key"],
         "entry_id": entry_id,
         "entry_path": relative_target_path,
-        "previous_entry": previous_entry,
-        "previous_related_cards": current_related_cards,
-        "updated_related_cards": suggested_related_cards,
+        "previous_grounded_related_cards": current_related_cards,
+        "suggested_target_ids": suggested_related_cards,
+        "canonical_edge_created": False,
+        "model_generation": str(
+            publication.get("receipt", {}).get("generation_id")
+            or publication.get("generation_id")
+            or ""
+        ),
         "event_ids": list(action.get("event_ids", [])),
     }
 
@@ -886,7 +916,11 @@ def _apply_single_cross_index_action(
     payload["updated_at"] = updated_at
 
     relative_target_path = relative_repo_path(repo_root, target_path)
-    write_yaml_file(target_path, payload)
+    _publish_card_mutation(
+        repo_root,
+        reason=f"consolidation:cross-index:{run_id}:{entry_id}",
+        upserts={relative_target_path: payload},
+    )
 
     history_event = build_history_event(
         "cross-index-updated",
@@ -932,9 +966,8 @@ def apply_related_card_actions(
 ) -> dict[str, Any]:
     entry_lookup = build_entry_lookup(repo_root)
     entry_path_lookup = build_entry_path_lookup(repo_root)
-    updated_entries: list[dict[str, Any]] = []
+    proposal_contexts: list[tuple[dict[str, Any], dict[str, Any]]] = []
     skipped_actions: list[dict[str, Any]] = []
-    updated_at = generated_at[:10]
 
     for action in actions:
         if action.get("action_type") != "review-related-cards":
@@ -955,23 +988,55 @@ def apply_related_card_actions(
             skipped_actions.append(_build_skipped_apply_action(action, skip_reason))
             continue
 
-        updated_entries.append(
+        proposal_contexts.append((action, update_context))
+
+    publication: dict[str, Any] = {}
+    relationship_proposals: list[dict[str, Any]] = []
+    if proposal_contexts:
+        unresolved_relationships = tuple(
+            {
+                "authority_scope": projection_scope_for_path(
+                    repo_root, context["target_path"]
+                ),
+                "source_card_id": str(context["entry_id"]),
+                "suggested_target_ids": list(context["suggested_related_cards"]),
+                "disposition": "sleep-grounding-required",
+                "evidence_event_ids": list(action.get("event_ids", [])),
+                "reason": "Sleep suggestion lacks qualifying non-AI relationship provenance.",
+            }
+            for action, context in proposal_contexts
+        )
+        publication = publish_sleep_model_generation(
+            repo_root,
+            reason=f"consolidation:relation-proposals:{run_id}",
+            unresolved_relationships=unresolved_relationships,
+        )
+        if not publication.get("ok"):
+            raise RuntimeError(
+                "Sleep relation proposal publication failed: "
+                + str(publication.get("error") or publication.get("status"))
+            )
+        relationship_proposals = [
             _apply_single_related_card_action(
                 repo_root=repo_root,
                 action=action,
-                update_context=update_context,
+                update_context=context,
                 run_id=run_id,
-                updated_at=updated_at,
+                publication=publication,
             )
-        )
+            for action, context in proposal_contexts
+        ]
 
     return {
         "apply_mode": APPLY_MODE_RELATED_CARDS,
         "created_candidate_count": 0,
-        "updated_entry_count": len(updated_entries),
+        "updated_entry_count": 0,
+        "relationship_proposal_count": len(relationship_proposals),
         "skipped_action_count": len(skipped_actions),
         "created_candidates": [],
-        "updated_entries": updated_entries,
+        "updated_entries": [],
+        "relationship_proposals": relationship_proposals,
+        "model_generation": publication.get("receipt", {}) if publication else {},
         "skipped_actions": skipped_actions,
     }
 
@@ -1157,7 +1222,11 @@ def apply_i18n_actions(
         merged_payload["updated_at"] = updated_at
         target_path = entry_path_lookup[entry_id]
         relative_target_path = relative_repo_path(repo_root, target_path)
-        write_yaml_file(target_path, merged_payload)
+        _publish_card_mutation(
+            repo_root,
+            reason=f"consolidation:i18n:{run_id}:{entry_id}",
+            upserts={relative_target_path: merged_payload},
+        )
 
         history_event = build_history_event(
             "i18n-updated",
@@ -1630,9 +1699,14 @@ def apply_semantic_review_actions(
             )
             continue
 
-        write_yaml_file(target_path, updated_payload)
-        if target_path != current_path and current_path.exists():
-            current_path.unlink()
+        relative_target = relative_repo_path(repo_root, target_path)
+        relative_current = relative_repo_path(repo_root, current_path)
+        _publish_card_mutation(
+            repo_root,
+            reason=f"consolidation:semantic-review:{run_id}:{entry_id}",
+            upserts={relative_target: updated_payload},
+            deletes=(relative_current,) if target_path != current_path else (),
+        )
 
         entry_lookup[entry_id] = updated_payload
         entry_path_lookup[entry_id] = target_path

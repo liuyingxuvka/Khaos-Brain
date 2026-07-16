@@ -89,4 +89,13 @@ def build_observation(
 
 
 def record_observation(repo_root, observation: dict[str, Any]):
-    return record_history_event(repo_root, observation)
+    history_path = record_history_event(repo_root, observation)
+    # The append-only history remains the intake authority.  Lifecycle
+    # admission is idempotent, and Sleep can recover it from history after an
+    # interruption, so an observation can never disappear behind a watermark.
+    from local_kb.lifecycle import admit_observation
+    from local_kb.maintenance_standard import maintenance_standard_is_active
+
+    if maintenance_standard_is_active(repo_root):
+        admit_observation(repo_root, observation)
+    return history_path

@@ -1,76 +1,43 @@
 ---
 name: khaos-brain-update
-description: Apply a clean repository-managed Khaos Brain software update. Use only when a user, UI request, or Architect pass explicitly authorizes an update; this recovery-oriented skill force-closes the desktop UI, preserves local KB state, fast-forwards source code, and refreshes installer-managed Codex integration.
+description: Apply an explicitly prepared, recovery-oriented Chaos Brain software update. Use for a user/UI-authorized update or the repository-managed system update automation; never decide on the user's behalf that an unprepared update is wanted.
 ---
 
 # Khaos Brain Update
 
-Apply one clean software update for this Khaos Brain repository.
+This is the narrow system-maintenance path. It updates software and installer-managed Codex integration; it does not maintain cards and it does not replace Sleep or Dream.
 
-This Skill is intentionally narrow. It updates the software and Codex-side integration; it does not decide whether an update is wanted. Version discovery, user intent, UI state display, and scheduling belong to KB Architect or the UI.
+## Recovery boundary
 
-## Recovery Boundary
+The update must still work when retrieval, desktop settings, organization state, or the UI is unhealthy. Preserve `.local/`, private/history/candidate/outbox KB state, organization caches and Skill bundles, exchange ledgers, user-created untracked files, and user-owned Codex configuration outside managed paths.
 
-Do not require KB preflight, desktop settings reads, organization repository reads, or card retrieval before applying this Skill. The update path must still work when the local KB, desktop settings, UI, or organization cache is broken.
+## Apply contract
 
-If a normal healthy Architect pass invoked this Skill, Architect may already have done KB preflight. This Skill itself must not make the update depend on those higher-level systems.
-
-## Preserve
-
-Treat these as local state that must survive an update:
-
-- .local/, including khaos_brain_desktop_settings.json, organization caches, exchange hash ledgers, import records, screenshots, and install identity files.
-- kb/private/, kb/history/, kb/candidates/, kb/outbox/, and other ignored local KB state.
-- User-created untracked files unless the user explicitly asked to remove them.
-- Installed organization Skills, downloaded organization Skill bundles, and local Skill review state.
-- $CODEX_HOME/predictive-kb/install.json and user-owned Codex configuration outside the repository-managed blocks.
-
-The installer may refresh repository-managed global skills, repository-managed automations, and repository-managed global AGENTS blocks.
-
-## Apply Contract
-
-1. Work from the repository root. Confirm it contains PROJECT_SPEC.md, scripts/install_codex_kb.py, and .agents/skills/khaos-brain-update/SKILL.md.
-2. Mark the UI-blocking state before changing files:
-   python scripts/khaos_brain_update.py --mark upgrading --json
-3. Force-close Khaos Brain desktop UI processes before changing files. Do not wait for a graceful close. On Windows, target only Khaos Brain UI processes, such as `Khaos Brain.exe`, `KhaosBrain.exe`, windows titled `Khaos Brain`, or Python command lines running kb_desktop.py or open_khaos_brain_ui.py. Do not broadly kill unrelated `python`, `node`, `electron`, or `codex` processes.
-4. Inspect tracked working-tree state with Git. If tracked source files are dirty and the user did not explicitly authorize updating over local source edits, stop before fetching or pulling and report the dirty paths. Ignored private KB state is not a blocker.
-5. Fetch from the configured upstream with tags and pruning.
-6. Update only by fast-forward. Prefer the current branch's upstream; if no upstream exists and the repository is on `main`, use origin/main. Do not run `git reset --hard`, force checkout, rebase, or tag moves.
-7. Run python scripts/install_codex_kb.py --json.
-8. Run python scripts/install_codex_kb.py --check --json.
-9. If the desktop package or shortcut changed and the installer exposes a supported refresh path, use that supported path. Do not invent a packaging step during update.
-10. Mark successful completion:
-    python scripts/khaos_brain_update.py --mark current --json
-
-## Failure Rules
-
-- If the fast-forward fails because local source changes exist, the branch diverged, or the remote is unavailable, stop cleanly and leave local state untouched.
-- If the installer or install check fails after source update, mark failure with python scripts/khaos_brain_update.py --mark failed --error "<short error>" --json, report the exact failing command, and leave rollback to a separate explicit recovery action.
-- Do not delete local KB cards, organization caches, hash ledgers, Skill bundles, or settings as part of update failure handling.
+1. The native scheduled owner is `python scripts/run_khaos_brain_system_update.py --json`; it begins with the system check and continues only when the update was explicitly prepared and the result says `apply_ready=true`.
+2. Mark the UI-blocking state as upgrading and close only identified Khaos Brain UI processes. Never broadly terminate Python, Node, Codex, or unrelated apps.
+3. Inspect tracked source state. Do not overwrite dirty user/peer work or run reset, force checkout, rebase, or tag moves.
+4. Fetch the configured upstream and update by fast-forward only.
+5. Run the versioned maintenance migration for Chaos Brain. It must inventory and settle historical knowledge debt, archive retained evidence before pruning, remove derived copies, build exact LogicGuard model revisions and scoped ModelMeshes, write deterministic card projections and the exact active index, and publish the generation pointer last. It must resume idempotently after interruption.
+   The migration is the only owner allowed to read an exact retired managed format. It must rewrite every valid legacy card directly into the sole current LogicGuard authority, remove old semantic authority including `then` and authoritative `related_cards`, and prove zero residuals. Readable YAML after migration is projection only. A discovered incompatible residual is an unfinished upgrade-AI work item: inspect the captured evidence, add or select one bounded direct-to-current migration decision, rerun the transaction, and continue until the residual is zero. Unknown, incomplete, cross-scope, or unbound model state rolls back the entire generation and keeps the five retained automations paused; it never creates a compatibility layer, projection fallback, alternate reader, or silent downgrade and never counts as a completed upgrade.
+   If exact old and current fields conflict, deterministic software must block. The upgrade AI may then select only a value present in those exact inputs, state its reason, and commit the selected value plus both source values and hashes in the one-time migration receipt. Daily code never performs that judgment.
+6. Run `python scripts/install_codex_kb.py --json`. The installer must stage complete managed Skill and automation trees, compile/check repository-owned current SkillGuard contracts, compare complete manifests, block downgrade or concurrent drift, keep rollback copies, and activate all managed trees as one recovery-bound transaction.
+7. The migration must precisely retire legacy `kb-architect-pass` and `kb-architect` managed surfaces, including machines with missing or old install manifests. Similar user-created names are outside scope.
+8. Preserve every surviving automation's prior ACTIVE/PAUSED status and independent `user_paused` value. Pause all five surviving automations before mutation; the retired automation never resumes.
+9. End the native update at `awaiting-skillguard` with all five survivors still paused. The first SkillGuard run selects only the authorization route and proves the exact native receipt; this authorizes preparation, not completion or restoration.
+10. While live automations remain paused, derive a deterministic restoration plan containing the preserved target status, target `user_paused`, current source hashes, and exact target `automation.toml` hashes. Run the deferred install check and bind the plan, native receipt, non-terminal declared-check authorization receipt, and snapshot into an immutable finalization receipt.
+11. Run fresh composed SkillGuard supervision over both `authorize` and `finalize`. Only the sole current `enforced` closure, full obligation coverage, exact declared-check receipts, and both native-output artifacts may authorize the staged plan. Do not invent a placeholder finalization witness.
+12. After that closure passes, apply only the authorized target hashes, immediately read back every status, `user_paused`, and file hash, run the normal installation check, then mark CURRENT and write the immutable activation receipt. Any planning, supervision, apply, readback, or final-check failure marks FAILED and returns all five survivors to PAUSED.
 
 ## Report
 
-Report the previous revision, target revision, whether the UI was force-closed, Git update result, installer result, install-check result, update-state path if written, and any remaining manual action.
+Return previous and target revisions, preserved state inventory, migration version/receipt, retired surfaces, source/staged/installed manifest digests, the non-terminal declared-check authorization receipt and final enforced SkillGuard closure, staged restoration plan and hashes, activation readback receipt, transaction and rollback receipt, both deferred and normal install checks, blockers, and final status.
 
-<!-- BEGIN SKILLGUARD CONTRACT LAYER -->
-## Purpose
-Bind each kb run to the declared integration mode, evidence, blockers, residual_risk, and claim_boundary.
-## Entrypoint Scope
-Covers khaos-brain-update plus explicitly routed local materials; no unrelated repos, private files, external services, publication, or release claims unless requested and routed.
-## Local Material Routing
-Use workspace, skill directory, user files, or configured project paths; keep private machine paths local and public instructions portable.
-## Entrypoint Acceptance Map
-Use SkillGuard as the runtime contract executor attached to the native route/check owner: Predictive KB launcher, local KB records, and KB maintenance workflow. It enforces contract gates through that native owner before progress or closure; duplicate SkillGuard-owned execution paths are invalid. Declared gates/routes: recall or maintenance, evidence update, validation, closure.
-## Use When
-Use when the request matches khaos-brain-update and needs this governed workflow, materials, checks, or handoff behavior.
-## Do Not Use When
-Do not use outside the domain, without required materials, when a more specific skill owns the work, or for tiny direct answers.
-## Required Workflow
-Select the target-owned native route/check surface, run the SkillGuard contract gates around the native workflow, collect evidence, run checks, fix failures, then report.
-## Hard Gates
-Do not skip phases, do not replace required evidence with prose, do not treat stale reports as current, do not weaken validation to pass, and do not claim completion when blockers remain.
-## Output Requirements
-Report evidence, failures, blockers, skipped_checks with reasons, residual_risk, and claim_boundary; distinguish checked, unchecked, blocked, and uncertain.
-## SkillGuard Maintenance
-Keep `.skillguard` contracts, checks, evidence, and ledger current; rerun SkillGuard after entrypoint, route, evidence, or closure changes.
-<!-- END SKILLGUARD CONTRACT LAYER -->
+## SkillGuard completion boundary
+
+For a scheduled run, intake, planning, or proposal-only output is incomplete. An install-only output or staged plan without an enforced SkillGuard closure receipt is also incomplete. Run `python scripts/run_kb_guarded_automation.py --skill khaos-brain-update --json`; do not call only the child system check. The guarded runner invokes the native full update owner once and writes its immutable receipt. For `prepared-update`, the authorize route first produces a non-terminal declared-check reconciliation receipt with `overall_complete=false`; it emits no closure. While every live task remains paused, a fresh composed `authorize+finalize` run must obtain the sole `enforced` closure over the exact native and staged-restoration receipts. Only `no-update`, `waiting-for-user`, and `ui-running` may close directly as enforced successful terminal no-op branches; `already-upgrading`, `failed-awaiting-user`, `concurrent-update`, and unknown blockers remain incomplete. Positive and shallow fixtures remain target-owned checks; SkillGuard supervises their exact receipts without interpreting their domain meaning. The installed SkillGuard builder—not caller-authored fields—binds the trigger, execution id, current installation receipt id/hash plus portable receipt-root reference, and installed runtime fingerprint. Terminal no-op and composed finalization execute `stage_depth` followed by `close` on the same request, target root, and run; close consumes the exact staged declared-check receipt and must not rerun target checks. SkillGuard supervises evidence and authorization; the native executor alone performs the later exact hash apply, readback, normal install check, and CURRENT transition.
+
+If the native owner or any validation child times out, the run is incomplete until the guarded launcher terminates the complete owned process tree, confirms zero remaining descendants, and records that cleanup under the ordered native-to-scheduled-to-aggregate-to-installer timeout budget.
+
+## SkillGuard boundary
+
+The current authority is `.skillguard/contract-source.json` plus its declared FlowGuard model. `.skillguard/compiled-contract.json` and `.skillguard/check-manifest.json` are generated projections. No former work contract, underscore manifest, flat run record, compatibility, conversion, renewal, retirement-receipt, alias, or fallback closure route may exist. SkillGuard supervises the native update owner and cannot authorize an unrequested update, partial installation, downgrade, or early resume.

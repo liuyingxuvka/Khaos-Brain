@@ -12,15 +12,17 @@ from local_kb.adoption import (
     card_exchange_hash,
 )
 from local_kb.skill_sharing import skill_directory_content_hash
+from local_kb.model_maintenance import publish_sleep_model_generation
 from local_kb.search import render_search_payload, search_multi_source_entries
 from local_kb.store import load_yaml_file, write_yaml_file
 from local_kb.ui_data import build_search_payload
+from tests.current_runtime_helpers import activate_current_kb_runtime
 
 
 class OrganizationAdoptionTests(unittest.TestCase):
     def _write_org_card(self, org: Path) -> None:
         write_yaml_file(
-            org / "kb" / "trusted" / "org-card.yaml",
+            org / "kb" / "main" / "org-card.yaml",
             {
                 "id": "org-card",
                 "title": "Organization shared card",
@@ -45,6 +47,7 @@ class OrganizationAdoptionTests(unittest.TestCase):
             org = root / "org"
             self._write_org_card(org)
             sources = [{"path": str(org), "organization_id": "sandbox", "repo_url": "https://example.invalid/org.git"}]
+            activate_current_kb_runtime(root)
             search_payload = build_search_payload(root, "shared organization", organization_sources=sources)
 
             result = adopt_organization_entry_by_source_info(
@@ -69,11 +72,12 @@ class OrganizationAdoptionTests(unittest.TestCase):
             root = Path(tmp)
             org = root / "org"
             self._write_org_card(org)
-            local_payload = load_yaml_file(org / "kb" / "trusted" / "org-card.yaml")
+            local_payload = load_yaml_file(org / "kb" / "main" / "org-card.yaml")
             local_payload["id"] = "local-card"
             local_payload["i18n"] = {"zh-CN": {"title": "本地已有同内容卡"}}
             write_yaml_file(root / "kb" / "public" / "local.yaml", local_payload)
             sources = [{"path": str(org), "organization_id": "sandbox"}]
+            activate_current_kb_runtime(root)
 
             result = adopt_organization_entry_by_source_info(
                 root,
@@ -99,6 +103,7 @@ class OrganizationAdoptionTests(unittest.TestCase):
             org = root / "org"
             self._write_org_card(org)
             sources = [{"path": str(org), "organization_id": "sandbox"}]
+            activate_current_kb_runtime(root)
             initial = build_search_payload(root, "shared organization", organization_sources=sources)
             adopt_organization_entry_by_source_info(
                 root,
@@ -122,6 +127,7 @@ class OrganizationAdoptionTests(unittest.TestCase):
             org = root / "org"
             self._write_org_card(org)
             sources = [{"path": str(org), "organization_id": "sandbox"}]
+            activate_current_kb_runtime(root)
             initial = build_search_payload(root, "shared organization", organization_sources=sources)
             result = adopt_organization_entry_by_source_info(
                 root,
@@ -129,7 +135,13 @@ class OrganizationAdoptionTests(unittest.TestCase):
                 sources,
                 source_info=initial["results"][0]["source_info"],
             )
-            Path(result["path"]).unlink()
+            adopted_path = Path(result["path"])
+            publication = publish_sleep_model_generation(
+                root,
+                reason="test-organization-adoption-delete",
+                card_deletes=(adopted_path.relative_to(root).as_posix(),),
+            )
+            self.assertTrue(publication["ok"], publication)
 
             payload = render_search_payload(
                 search_multi_source_entries(root, "shared organization", organization_sources=sources, top_k=5),
@@ -143,14 +155,14 @@ class OrganizationAdoptionTests(unittest.TestCase):
             root = Path(tmp)
             org = root / "org"
             self._write_org_card(org)
-            skill_dir = org / "kb" / "trusted" / "skills" / "bundle-demo" / "skill"
+            skill_dir = org / "kb" / "main" / "skills" / "bundle-demo" / "skill"
             skill_dir.mkdir(parents=True)
             (skill_dir / "SKILL.md").write_text(
                 "---\nname: demo-skill\ndescription: Shared Skill.\n---\n\nUse shared Skill.",
                 encoding="utf-8",
             )
             expected_hash = skill_directory_content_hash(skill_dir)
-            card = load_yaml_file(org / "kb" / "trusted" / "org-card.yaml")
+            card = load_yaml_file(org / "kb" / "main" / "org-card.yaml")
             card["organization_proposal"] = {
                 "skill_dependencies": [
                     {
@@ -166,8 +178,9 @@ class OrganizationAdoptionTests(unittest.TestCase):
                     }
                 ]
             }
-            write_yaml_file(org / "kb" / "trusted" / "org-card.yaml", card)
+            write_yaml_file(org / "kb" / "main" / "org-card.yaml", card)
             sources = [{"path": str(org), "organization_id": "sandbox"}]
+            activate_current_kb_runtime(root)
             initial = build_search_payload(root, "shared organization", organization_sources=sources)
 
             result = adopt_organization_entry_by_source_info(
@@ -190,6 +203,7 @@ class OrganizationAdoptionTests(unittest.TestCase):
             org = root / "org"
             self._write_org_card(org)
             sources = [{"path": str(org), "organization_id": "sandbox"}]
+            activate_current_kb_runtime(root)
             initial = build_search_payload(root, "shared organization", organization_sources=sources)
             adopt_organization_entry_by_source_info(
                 root,
@@ -197,9 +211,9 @@ class OrganizationAdoptionTests(unittest.TestCase):
                 sources,
                 source_info=initial["results"][0]["source_info"],
             )
-            changed = load_yaml_file(org / "kb" / "trusted" / "org-card.yaml")
+            changed = load_yaml_file(org / "kb" / "main" / "org-card.yaml")
             changed["use"]["guidance"] = "Organization published a new content version."
-            write_yaml_file(org / "kb" / "trusted" / "org-card.yaml", changed)
+            write_yaml_file(org / "kb" / "main" / "org-card.yaml", changed)
 
             payload = render_search_payload(
                 search_multi_source_entries(root, "shared organization", organization_sources=sources, top_k=5),
@@ -216,6 +230,7 @@ class OrganizationAdoptionTests(unittest.TestCase):
             org = root / "org"
             self._write_org_card(org)
             sources = [{"path": str(org), "organization_id": "sandbox"}]
+            activate_current_kb_runtime(root)
             initial = build_search_payload(root, "shared organization", organization_sources=sources)
             first = adopt_organization_entry_by_source_info(
                 root,
@@ -244,6 +259,7 @@ class OrganizationAdoptionTests(unittest.TestCase):
             org = root / "org"
             self._write_org_card(org)
             sources = [{"path": str(org), "organization_id": "sandbox"}]
+            activate_current_kb_runtime(root)
             initial = build_search_payload(root, "shared organization", organization_sources=sources)
             result = adopt_organization_entry_by_source_info(
                 root,

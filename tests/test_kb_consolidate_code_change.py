@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from local_kb.consolidate import consolidate_history
+from tests.current_runtime_helpers import consolidate_current_history as consolidate_history
 
 
 class ConsolidateCodeChangeTests(unittest.TestCase):

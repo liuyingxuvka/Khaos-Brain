@@ -5,9 +5,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from local_kb.consolidate import consolidate_history
+from tests.current_runtime_helpers import consolidate_current_history as consolidate_history
 from local_kb.consolidate_apply import action_stub_filename
 from local_kb.store import write_yaml_file
+from tests.current_runtime_helpers import activate_current_kb_runtime
 
 
 class ConsolidateActionStubTests(unittest.TestCase):
@@ -590,6 +591,7 @@ class ConsolidateActionStubTests(unittest.TestCase):
                     "updated_at": "2026-05-15",
                 },
             )
+            activate_current_kb_runtime(repo_root)
             history_path = repo_root / "kb" / "history" / "events.jsonl"
             history_path.parent.mkdir(parents=True, exist_ok=True)
             event = {

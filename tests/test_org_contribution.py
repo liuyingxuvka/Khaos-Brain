@@ -18,8 +18,7 @@ class OrganizationContributionTests(unittest.TestCase):
                 "schema_version": 1,
                 "organization_id": "sandbox",
                 "kb": {
-                    "trusted_path": "kb/trusted",
-                    "candidates_path": "kb/candidates",
+                    "main_path": "kb/main",
                     "imports_path": "kb/imports",
                 },
                 "skills": {
@@ -28,8 +27,7 @@ class OrganizationContributionTests(unittest.TestCase):
                 },
             },
         )
-        write_yaml_file(root / "kb" / "trusted" / "model.yaml", {"id": "trusted", "status": "trusted"})
-        (root / "kb" / "candidates").mkdir(parents=True)
+        write_yaml_file(root / "kb" / "main" / "model.yaml", {"id": "trusted", "status": "trusted"})
         (root / "kb" / "imports").mkdir(parents=True)
         write_yaml_file(root / "skills" / "registry.yaml", {"skills": []})
         (root / "skills" / "candidates").mkdir(parents=True)

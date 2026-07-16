@@ -1,70 +1,47 @@
 ---
 name: kb-dream-pass
-description: Run one bounded repository-managed local KB Dream exploration pass. Use only when a user or automation explicitly asks for KB Dream, dream mode, bounded KB exploration, or the scheduled KB Dream automation; do not use for Sleep consolidation, Architect mechanism work, ordinary preflight, or trusted-card maintenance.
+description: Run one repository-managed automatic bounded KB Dream evidence pass. Use only for explicit Dream maintenance or the scheduled KB Dream automation, not Sleep consolidation, ordinary retrieval, or trusted-card maintenance.
 ---
 
 # KB Dream Pass
 
-Run one bounded Dream pass for this predictive KB repository.
+Dream is a bounded immutable model-verification producer. It pins an exact LogicGuard generation, pressures its declared support and boundaries through simulations, and sends material model-gap deltas to Sleep; it does not own durable knowledge decisions or canonical model writes.
 
-Dream is valuable exploration, not candidate harvesting. A successful run may create no candidates when it clarifies that evidence should stay history-only.
+## Authority and entrypoint
 
-## Authority
+Work from the repository root. Read `PROJECT_SPEC.md`, `docs/maintenance_agent_worldview.md`, `docs/dream_runbook.md`, and `.agents/skills/local-kb-retrieve/DREAM_PROMPT.md`. Current user instructions override repository defaults.
 
-Work from the repository root. Treat these files as authoritative and read them before stateful dream work:
+Run:
 
-- PROJECT_SPEC.md
-- docs/maintenance_agent_worldview.md
-- docs/dream_runbook.md
-- .agents/skills/local-kb-retrieve/DREAM_PROMPT.md
+`python .agents/skills/local-kb-retrieve/scripts/kb_dream.py --json`
 
-Current user instructions still override repository files.
+The native Dream runner owns simulations and experiments. SkillGuard supervises its declared route and checks; it must not create a second experiment, maintenance, or model-write path.
 
-## Execution Contract
+## Required behavior
 
-1. Read the shared maintenance-agent worldview and use it as the judgment model for Dream's role, sandbox evidence strength, and human-reviewable output quality.
-2. Keep Dream separate from Sleep and Architect.
-3. Run the dedicated dream runner:
-   python .agents/skills/local-kb-retrieve/scripts/kb_dream.py --json
-4. Inspect generated artifacts under kb/history/dream/<run-id>/, including preflight, plan, opportunity, experiment, execution-plan, and report files.
-5. Select a small route-deduped batch of genuinely valuable grounded evidence gaps that clear the value gate, and only when each one can clarify a future retrieval, routing, card-use, or Sleep-consolidation decision.
-6. If no valuable grounded gap exists, report a no-op instead of manufacturing an experiment or candidate.
-7. List selected experiments in execution order, then validate them sequentially.
-8. Require experiment design, validation plan, safety tier, rollback plan, and explicit success/failure/inconclusive criteria before each execution.
-9. Write local sandbox experiment artifacts only under kb/history/dream/<run-id>/sandbox/.
-10. Record `evidence_grade`, `sandbox_path`, `allowed_writes`, `validation_result`, `sleep_handoff`, and `architect_handoff` for each executed sandbox experiment.
-11. Skip route-and-mode experiments that already passed with strong or moderate sandbox evidence in a prior Dream report; use the prior result as Sleep handoff instead of repeating it.
-12. After experiments, write one run-level Dream-process observation when the run exposed a reusable process lesson; keep it separate from route-specific evidence.
-13. Keep write-back history-only by default; create a candidate only when history-only is insufficient and the result has route, scenario, action, observed result, and concrete operational use.
-14. If nearby search results are mostly existing candidates or low-confidence scaffolds, prefer read-only validation or Sleep handoff instead of creating another adjacent candidate.
-15. Keep external-system experiments proposal-only unless a human explicitly approves them in an active task.
-16. Do not rewrite trusted cards or taxonomy.
-17. Do not repeat route-gap or taxonomy-change observations that merely confirm a known gap; add value by clarifying whether Sleep should ignore, reject, narrow, consolidate, or watch the signal.
-18. Treat dream-created candidates as provisional until later live-task evidence confirms them.
+1. Acquire the shared `kb-dream` lane and run only when the maintenance lock is clear.
+2. Pin the exact canonical generation, model revision, root node/ArgumentBlock, and ModelMesh revision before selection. Never substitute a floating head or readable-card projection when an exact binding is missing.
+3. Build each evidence fingerprint from the pinned LogicGuard identities, canonical route, hypothesis, source identifiers and content digests, and prior applicable outcome. Run id, time, AI model name, thread id, and prompt wording must not make unchanged evidence appear new.
+4. Load prior closure outcomes before broad work. If the fingerprint is already closed and no decision-relevant evidence changed, return or reuse `no_delta_closed` without another experiment, history entry, candidate, observation, or handoff.
+5. Select only a small route-deduplicated set that clears the value and executability gates. A no-op is a valid convergent result.
+6. For each selected model, plan one bounded suite covering evidence-removal, assumption-removal, rebuttal-strengthening or counterexample, boundary-pressure, cross-edge-removal, and neighbor-pin-replacement. Execute every applicable path separately. Each simulation is an overlay over the pinned immutable model, not a proposed canonical revision.
+7. Record design, validation plan, safety tier, rollback plan, success/failure/inconclusive criteria, tested node and edge ids, expected invariant, and bounded sandbox path before execution.
+8. Write only Dream-owned bounded runtime receipts and experiment evidence under the Dream run root.
+9. For a material result, emit one typed idempotent Sleep handoff containing exact generation/model/mesh bindings, gap kind, affected node or edge ids, evidence fingerprint, result digest, provenance, and requested disposition.
+10. Before closure, prove that the canonical generation pointer and pinned model/mesh revisions are unchanged.
+11. Never directly write or modify models, meshes, readable card projections, candidates, confidence, lifecycle status, predictive observations, or central KB history.
+12. Do not require a human to read files or select routine experiments. Keep external or irreversible actions outside Dream unless separately authorized in an active task.
 
-## Report
+## Closure report
 
-Report the run id, retrieved preflight entries, selected evidence gaps or why no valuable gap was selected, future retrieval/use decisions clarified, experiments executed in order if any, execution-plan checkpoint status, safety tier and rollback plan, result classifications, sandbox paths, evidence grades, validation results, history events written, candidates created if any with why history-only was insufficient, Sleep/Architect handoff, and anything still needing live-task confirmation.
+Return the run id, pinned generation/model/mesh identities, evaluated fingerprints, tested perturbation paths, evidence deltas, model gaps, suppressed duplicate and no-delta counts, selected experiments, safety and rollback data, canonical-generation-unchanged proof, validation classifications, emitted handoff ids, input digest, blockers, and final state. Repeated unchanged runs must converge without growing knowledge history.
 
-<!-- BEGIN SKILLGUARD CONTRACT LAYER -->
-## Purpose
-Bind each kb run to the declared integration mode, evidence, blockers, residual_risk, and claim_boundary.
-## Entrypoint Scope
-Covers kb-dream-pass plus explicitly routed local materials; no unrelated repos, private files, external services, publication, or release claims unless requested and routed.
-## Local Material Routing
-Use workspace, skill directory, user files, or configured project paths; keep private machine paths local and public instructions portable.
-## Entrypoint Acceptance Map
-Use SkillGuard as the runtime contract executor attached to the native route/check owner: Predictive KB launcher, local KB records, and KB maintenance workflow. It enforces contract gates through that native owner before progress or closure; duplicate SkillGuard-owned execution paths are invalid. Declared gates/routes: recall or maintenance, evidence update, validation, closure.
-## Use When
-Use when the request matches kb-dream-pass and needs this governed workflow, materials, checks, or handoff behavior.
-## Do Not Use When
-Do not use outside the domain, without required materials, when a more specific skill owns the work, or for tiny direct answers.
-## Required Workflow
-Select the target-owned native route/check surface, run the SkillGuard contract gates around the native workflow, collect evidence, run checks, fix failures, then report.
-## Hard Gates
-Do not skip phases, do not replace required evidence with prose, do not treat stale reports as current, do not weaken validation to pass, and do not claim completion when blockers remain.
-## Output Requirements
-Report evidence, failures, blockers, skipped_checks with reasons, residual_risk, and claim_boundary; distinguish checked, unchecked, blocked, and uncertain.
-## SkillGuard Maintenance
-Keep `.skillguard` contracts, checks, evidence, and ledger current; rerun SkillGuard after entrypoint, route, evidence, or closure changes.
-<!-- END SKILLGUARD CONTRACT LAYER -->
+## SkillGuard completion boundary
+
+For a scheduled run, intake, planning, or proposal-only output is incomplete. Run `python scripts/run_kb_guarded_automation.py --skill kb-dream-pass --json`; do not call the child entrypoint directly. The guarded runner invokes the native Dream owner once, writes an immutable run receipt, and requires the sole current enforced SkillGuard closure receipt for that exact run. A declared no-op counts only when the native gate receipt proves its terminal. Positive and shallow fixtures remain target-owned checks; SkillGuard supervises their exact receipts without interpreting their domain meaning. Fixture or capability evidence cannot replace the concrete scheduled run. The installed SkillGuard builder—not caller-authored fields—binds the trigger, execution id, current installation receipt id/hash plus portable receipt-root reference, and installed runtime fingerprint. SkillGuard does not create a parallel Dream executor.
+
+If the native owner or any validation child times out, the run is incomplete until the guarded launcher terminates the complete owned process tree, confirms zero remaining descendants, and records that cleanup under the ordered native-to-scheduled-to-aggregate timeout budget.
+
+## SkillGuard boundary
+
+The current authority is `.skillguard/contract-source.json` plus its declared FlowGuard model. `.skillguard/compiled-contract.json` and `.skillguard/check-manifest.json` are generated projections. No former work contract, underscore manifest, flat run record, compatibility, conversion, renewal, retirement-receipt, alias, or fallback closure route may exist. SkillGuard attaches to the native Dream owner and cannot turn Dream evidence into durable knowledge.

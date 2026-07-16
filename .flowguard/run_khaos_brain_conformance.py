@@ -17,7 +17,7 @@ from local_kb.software_update import (
     UPDATE_STATUS_FAILED,
     UPDATE_STATUS_PREPARED,
     UPDATE_STATUS_UPGRADING,
-    architect_update_check,
+    system_update_check,
     save_update_state,
 )
 from local_kb.store import load_organization_entries, write_yaml_file
@@ -76,9 +76,9 @@ def replay_update_gate(failures: list[str]) -> None:
                 "latest_version": "0.4.4",
             },
         )
-        blocked = architect_update_check(root, check_remote=False, ui_processes=[{"Name": "KhaosBrain.exe"}])
+        blocked = system_update_check(root, check_remote=False, ui_processes=[{"Name": "KhaosBrain.exe"}])
         _check(not bool(blocked.get("apply_ready")), "update waits while UI is running", failures, str(blocked))
-        allowed = architect_update_check(root, check_remote=False, ui_processes=[])
+        allowed = system_update_check(root, check_remote=False, ui_processes=[])
         _check(bool(allowed.get("apply_ready")), "update applies when prepared and UI closed", failures, str(allowed))
         _check(allowed.get("state", {}).get("status") == UPDATE_STATUS_UPGRADING, "update marks upgrading", failures)
 
@@ -94,7 +94,7 @@ def replay_update_gate(failures: list[str]) -> None:
                 "latest_version": "0.4.4",
             },
         )
-        failed = architect_update_check(root, check_remote=False, ui_processes=[])
+        failed = system_update_check(root, check_remote=False, ui_processes=[])
         _check(not bool(failed.get("apply_ready")), "failed update waits for user", failures, str(failed))
         _check(failed.get("reason") == "failed-awaiting-user", "failed update reason", failures, str(failed))
 

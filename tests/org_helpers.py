@@ -5,8 +5,11 @@ from pathlib import Path
 from typing import Any
 
 from local_kb.org_sources import _run_git, connect_organization_source
+from local_kb.logicguard_models import authority_generation_pointer_path
+from local_kb.model_maintenance import publish_sleep_model_generation
 from local_kb.settings import ORGANIZATION_MODE, load_desktop_settings, organization_sources_from_settings, save_desktop_settings
 from local_kb.store import load_yaml_file, write_yaml_file
+from tests.current_runtime_helpers import activate_current_kb_runtime
 
 
 ORGANIZATION_ID = "sandbox"
@@ -41,6 +44,9 @@ def base_card(
     }
     if required_skills:
         payload["required_skills"] = required_skills
+        payload["use"]["unavailable_skill_guidance"] = (
+            "If the Skill is unavailable, stop and report the missing governed dependency."
+        )
     return payload
 
 
@@ -104,8 +110,7 @@ def write_valid_org_repo(root: Path, *, include_sandbox_cards: bool = True) -> N
             "schema_version": 1,
             "organization_id": ORGANIZATION_ID,
             "kb": {
-                "trusted_path": "kb/trusted",
-                "candidates_path": "kb/candidates",
+                "main_path": "kb/main",
                 "imports_path": "kb/imports",
             },
             "skills": {
@@ -116,19 +121,49 @@ def write_valid_org_repo(root: Path, *, include_sandbox_cards: bool = True) -> N
     )
     if include_sandbox_cards:
         cards = organization_sandbox_cards()
-        write_yaml_file(root / "kb" / "trusted" / "overlap-scan.yaml", cards["overlap_scan"])
-        write_yaml_file(root / "kb" / "trusted" / "overlap-release.yaml", cards["overlap_release"])
-        write_yaml_file(root / "kb" / "candidates" / "unique-merge.yaml", cards["unique_merge"])
-        write_yaml_file(root / "kb" / "candidates" / "unique-skill.yaml", cards["unique_skill"])
+        write_yaml_file(root / "kb" / "main" / "trusted" / "overlap-scan.yaml", cards["overlap_scan"])
+        write_yaml_file(root / "kb" / "main" / "trusted" / "overlap-release.yaml", cards["overlap_release"])
+        write_yaml_file(root / "kb" / "main" / "candidates" / "unique-merge.yaml", cards["unique_merge"])
+        write_yaml_file(root / "kb" / "main" / "candidates" / "unique-skill.yaml", cards["unique_skill"])
     else:
-        write_yaml_file(root / "kb" / "trusted" / "seed.yaml", {"id": "seed", "status": "trusted"})
-        (root / "kb" / "candidates").mkdir(parents=True, exist_ok=True)
-    (root / "kb" / "candidates" / ".gitkeep").write_text("", encoding="utf-8")
+        write_yaml_file(root / "kb" / "main" / "seed.yaml", {"id": "seed", "status": "trusted"})
+    (root / "kb" / "main" / ".gitkeep").write_text("", encoding="utf-8")
     (root / "kb" / "imports").mkdir(parents=True, exist_ok=True)
     (root / "kb" / "imports" / ".gitkeep").write_text("", encoding="utf-8")
     write_yaml_file(root / "skills" / "registry.yaml", {"skills": []})
     (root / "skills" / "candidates").mkdir(parents=True, exist_ok=True)
     (root / "skills" / "candidates" / ".gitkeep").write_text("", encoding="utf-8")
+
+
+def write_legacy_org_repo(root: Path, *, include_sandbox_cards: bool = True) -> None:
+    """Exact retired format used only to prove the one-time migration boundary."""
+    write_yaml_file(
+        root / "khaos_org_kb.yaml",
+        {
+            "kind": "khaos-organization-kb",
+            "schema_version": 1,
+            "organization_id": ORGANIZATION_ID,
+            "kb": {
+                "trusted_path": "kb/trusted",
+                "candidates_path": "kb/candidates",
+                "imports_path": "kb/imports",
+            },
+            "skills": {
+                "registry_path": "skills/registry.yaml",
+                "candidates_path": "skills/candidates",
+            },
+        },
+    )
+    cards = organization_sandbox_cards()
+    if include_sandbox_cards:
+        write_yaml_file(root / "kb" / "trusted" / "overlap-scan.yaml", cards["overlap_scan"])
+        write_yaml_file(root / "kb" / "candidates" / "unique-merge.yaml", cards["unique_merge"])
+    else:
+        write_yaml_file(root / "kb" / "trusted" / "seed.yaml", {"id": "seed", "status": "trusted"})
+        (root / "kb" / "candidates").mkdir(parents=True, exist_ok=True)
+    (root / "kb" / "imports").mkdir(parents=True, exist_ok=True)
+    write_yaml_file(root / "skills" / "registry.yaml", {"skills": []})
+    (root / "skills" / "candidates").mkdir(parents=True, exist_ok=True)
 
 
 def init_git_repo(root: Path, *, message: str = "seed") -> None:
@@ -166,6 +201,7 @@ def connect_profile_to_org(profile_root: Path, org_repo: Path) -> tuple[dict[str
         },
     )
     settings = load_desktop_settings(profile_root)
+    activate_current_kb_runtime(profile_root)
     return result, organization_sources_from_settings(settings)
 
 
@@ -182,32 +218,45 @@ def write_local_skill(repo_root: Path, skill_id: str = "demo-skill", *, body: st
 def write_local_skill_backed_card(repo_root: Path, entry_id: str = "skill-backed-card") -> Path:
     write_local_skill(repo_root)
     path = repo_root / "kb" / "public" / f"{entry_id}.yaml"
-    write_yaml_file(
-        path,
-        base_card(
-            entry_id,
-            "Skill backed organization contribution",
-            "Export the card and its Skill bundle together for organization review.",
-            confidence=0.82,
-            route=["codex", "workflow", "skills"],
-            required_skills=["demo-skill"],
-            author="machine-a",
-        ),
+    payload = base_card(
+        entry_id,
+        "Skill backed organization contribution",
+        "Export the card and its Skill bundle together for organization review.",
+        confidence=0.82,
+        route=["codex", "workflow", "skills"],
+        required_skills=["demo-skill"],
+        author="machine-a",
     )
+    if authority_generation_pointer_path(repo_root).exists():
+        publication = publish_sleep_model_generation(
+            repo_root,
+            reason="test-local-skill-backed-card",
+            card_upserts={path.relative_to(repo_root).as_posix(): payload},
+        )
+        if not publication.get("ok"):
+            raise RuntimeError(f"Unable to publish model-native test card: {publication}")
+    else:
+        write_yaml_file(path, payload)
+        activate_current_kb_runtime(repo_root)
     return path
 
 
-def publish_outbox_to_org_candidates(org_root: Path, outbox_dir: Path, *, message: str = "Publish accepted organization candidates") -> list[str]:
+def publish_accepted_outbox_to_org_main(
+    org_root: Path,
+    outbox_dir: Path,
+    *,
+    message: str = "Publish accepted organization knowledge",
+) -> list[str]:
     org_root = Path(org_root)
     outbox_dir = Path(outbox_dir)
     created: list[str] = []
-    candidate_dir = org_root / "kb" / "candidates"
-    candidate_dir.mkdir(parents=True, exist_ok=True)
+    main_dir = org_root / "kb" / "main"
+    main_dir.mkdir(parents=True, exist_ok=True)
     for path in sorted(outbox_dir.rglob("*")):
         if not path.is_file():
             continue
         relative = path.relative_to(outbox_dir)
-        target = candidate_dir / relative
+        target = main_dir / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, target)
         created.append(target.relative_to(org_root).as_posix())

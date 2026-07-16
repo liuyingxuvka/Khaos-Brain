@@ -22,6 +22,7 @@ from local_kb.store import resolve_repo_root  # noqa: E402
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Inspect an organization KB mirror for maintainer review.")
     parser.add_argument("--repo-root", default="auto")
+    parser.add_argument("--run-id", default="")
     parser.add_argument("--org-root", default="", help="Organization KB mirror path. Omit to use validated desktop settings.")
     parser.add_argument(
         "--automation",
@@ -36,7 +37,11 @@ def main() -> None:
     args = build_parser().parse_args()
     repo_root = resolve_repo_root(args.repo_root)
     if args.automation:
-        result = run_organization_maintenance(repo_root, record_postflight=not args.no_postflight)
+        result = run_organization_maintenance(
+            repo_root,
+            record_postflight=not args.no_postflight,
+            run_id=args.run_id,
+        )
         print_json(result)
         if not result.get("ok"):
             raise SystemExit(2)

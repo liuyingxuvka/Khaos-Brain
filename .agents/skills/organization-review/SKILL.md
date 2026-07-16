@@ -21,7 +21,8 @@ Treat the review unit as a bundle, not a standalone file:
 
 Do not approve a Skill only because it exists. A Skill becomes organization
 knowledge only when cards explain when it is useful, what outcome it predicts,
-what fallback exists, and what evidence supports it.
+what hard-stop behavior applies when its required Skill is unavailable, and
+what evidence supports it.
 
 Treat the organization KB as a shared exchange layer, not as a central truth
 layer. Organization `main` cards may be maintained with the same

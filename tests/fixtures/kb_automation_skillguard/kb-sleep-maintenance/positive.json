@@ -1,0 +1,20 @@
+{
+  "case_id": "case:kb-sleep-maintenance:positive-automation-depth",
+  "important_gap_obligation_id": "",
+  "mode": "target-native-complete",
+  "native_evaluator_id": "local_kb.automation_runtime.evaluate_native_payload",
+  "native_receipt_origin": "calibration-fixture",
+  "schema_version": "khaos-brain.target-native-depth-calibration.v1",
+  "skill_id": "kb-sleep-maintenance",
+  "target_obligation_ids": [
+    "obligation:kb-sleep-maintenance:lane-delta-intake",
+    "obligation:kb-sleep-maintenance:observation-disposition",
+    "obligation:kb-sleep-maintenance:candidate-outcomes",
+    "obligation:kb-sleep-maintenance:evidence-calibration",
+    "obligation:kb-sleep-maintenance:dream-handoff-once",
+    "obligation:kb-sleep-maintenance:index-watermark-commit",
+    "obligation:kb-sleep-maintenance:failure-fail-closed",
+    "obligation:kb-sleep-maintenance:timeout-tree-cleanup",
+    "obligation:kb-sleep-maintenance:depth-calibration"
+  ]
+}

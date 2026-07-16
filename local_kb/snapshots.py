@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Any
 
 from local_kb.consolidate import consolidation_run_dir, sanitize_run_id
-from local_kb.store import history_events_path, load_yaml_file, write_yaml_file
+from local_kb.model_maintenance import publish_sleep_model_generation
+from local_kb.store import history_events_path, load_yaml_file
 
 
 SCHEMA_VERSION = 1
@@ -17,7 +18,6 @@ ROLLBACK_MANIFEST_KIND = "local-kb-rollback-manifest"
 SUPPORTED_RESTORE_ARTIFACTS = (
     "history-events",
     "semantic-review-entries",
-    "related-card-entries",
     "cross-index-entries",
 )
 
@@ -170,12 +170,6 @@ def _semantic_review_restore_entries(apply_payload: dict[str, Any] | None) -> li
 
 
 FIELD_RESTORE_SPECS = {
-    "related-cards": {
-        "artifact_id": "related-card-entries",
-        "kind": "related-card-entry-files",
-        "field_name": "related_cards",
-        "previous_field": "previous_related_cards",
-    },
     "cross-index": {
         "artifact_id": "cross-index-entries",
         "kind": "cross-index-entry-files",
@@ -295,7 +289,7 @@ def build_rollback_manifest(repo_root: Path, run_dir: Path) -> dict[str, Any]:
     semantic_review_artifact = _build_semantic_review_entries_artifact(repo_root, run_dir, apply_payload)
     if semantic_review_artifact:
         artifacts.append(semantic_review_artifact)
-    for apply_mode in ("related-cards", "cross-index"):
+    for apply_mode in ("cross-index",):
         field_artifact = _build_field_entries_artifact(repo_root, run_dir, apply_payload, apply_mode)
         if field_artifact:
             artifacts.append(field_artifact)
@@ -347,7 +341,7 @@ def restore_artifact(
 
     if artifact_id == "semantic-review-entries":
         return restore_semantic_review_entries(repo_root, manifest, artifact, dry_run=dry_run)
-    if artifact_id in {"related-card-entries", "cross-index-entries"}:
+    if artifact_id == "cross-index-entries":
         return restore_field_update_entries(repo_root, manifest, artifact, dry_run=dry_run)
 
     source_path = resolve_repo_path(repo_root, str(artifact.get("source_path", "") or ""))
@@ -406,6 +400,8 @@ def restore_semantic_review_entries(
         raise ValueError(f"Apply payload does not contain semantic-review previous entry payloads: {source_path}")
 
     restored_entries: list[dict[str, Any]] = []
+    model_upserts: dict[str, dict[str, Any]] = {}
+    model_deletes: list[str] = []
     for entry in entries:
         previous_entry_path = resolve_repo_path(repo_root, str(entry["previous_entry_path"]))
         updated_entry_path = resolve_repo_path(repo_root, str(entry.get("updated_entry_path", "") or entry["previous_entry_path"]))
@@ -422,9 +418,24 @@ def restore_semantic_review_entries(
         )
         if dry_run:
             continue
-        write_yaml_file(previous_entry_path, entry["previous_entry"])
-        if updated_entry_path != previous_entry_path and updated_entry_path.exists():
-            updated_entry_path.unlink()
+        model_upserts[relative_repo_path(repo_root, previous_entry_path)] = dict(
+            entry["previous_entry"]
+        )
+        if updated_entry_path != previous_entry_path:
+            model_deletes.append(relative_repo_path(repo_root, updated_entry_path))
+
+    if not dry_run and (model_upserts or model_deletes):
+        publication = publish_sleep_model_generation(
+            repo_root,
+            reason=f"snapshot-restore:semantic-review:{manifest.get('run_id', '')}",
+            card_upserts=model_upserts,
+            card_deletes=tuple(model_deletes),
+        )
+        if not publication.get("ok"):
+            raise RuntimeError(
+                "Semantic-review model restore failed: "
+                + str(publication.get("error") or publication.get("status"))
+            )
 
     return {
         "run_id": str(manifest.get("run_id", "") or ""),
@@ -463,6 +474,7 @@ def restore_field_update_entries(
         raise ValueError(f"Apply payload does not contain {artifact_id} restore entries: {source_path}")
 
     restored_entries: list[dict[str, Any]] = []
+    model_upserts: dict[str, dict[str, Any]] = {}
     for entry in entries:
         entry_path = resolve_repo_path(repo_root, str(entry["entry_path"]))
         if not _path_within_repo(repo_root, entry_path):
@@ -476,7 +488,9 @@ def restore_field_update_entries(
         if dry_run:
             continue
         if "previous_entry" in entry:
-            write_yaml_file(entry_path, entry["previous_entry"])
+            model_upserts[relative_repo_path(repo_root, entry_path)] = dict(
+                entry["previous_entry"]
+            )
             continue
         payload = load_yaml_file(entry_path)
         previous_field_value = list(entry.get("previous_field_value", []))
@@ -485,7 +499,19 @@ def restore_field_update_entries(
             payload[field_name] = previous_field_value
         else:
             payload.pop(field_name, None)
-        write_yaml_file(entry_path, payload)
+        model_upserts[relative_repo_path(repo_root, entry_path)] = payload
+
+    if not dry_run and model_upserts:
+        publication = publish_sleep_model_generation(
+            repo_root,
+            reason=f"snapshot-restore:{artifact_id}:{manifest.get('run_id', '')}",
+            card_upserts=model_upserts,
+        )
+        if not publication.get("ok"):
+            raise RuntimeError(
+                f"{artifact_id} model restore failed: "
+                + str(publication.get("error") or publication.get("status"))
+            )
 
     return {
         "run_id": str(manifest.get("run_id", "") or ""),

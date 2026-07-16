@@ -57,8 +57,8 @@ GENERALIZATION_PROJECT_LOCAL_MARKERS = (
     "this project only",
     "repo-managed",
     "repository-managed",
-    "sleep/dream/architect",
-    "sleep dream architect",
+    "sleep/dream/system-maintenance",
+    "sleep dream system maintenance",
     "maintenance lane",
 )
 GENERALIZATION_SKILL_MARKERS = (
@@ -391,7 +391,7 @@ def _normalize_dream_validation(event: dict[str, Any]) -> dict[str, Any]:
         "entry_confidence": validation.get("entry_confidence", ""),
         "entry_ids": normalize_entry_ids(validation.get("entry_ids", [])),
         "sleep_handoff": str(validation.get("sleep_handoff", "") or "").strip(),
-        "architect_handoff": str(validation.get("architect_handoff", "") or "").strip(),
+        "system_follow_up": str(validation.get("system_follow_up", "") or "").strip(),
         "handoff_action": str(validation.get("handoff_action", "") or "").strip(),
     }
 

@@ -15,7 +15,6 @@ ORG_KB_KIND = "khaos-organization-kb"
 SUPPORTED_SCHEMA_VERSION = 1
 ORG_MAIN_ACTIVE_STATUSES = {"trusted", "candidate"}
 ORG_TARGET_LAYOUT = "main-imports"
-ORG_LEGACY_LAYOUT = "legacy-trusted-candidates"
 ORG_RECOMMENDED_MAIN_PATH = "kb/main"
 ORG_RECOMMENDED_IMPORTS_PATH = "kb/imports"
 
@@ -186,6 +185,31 @@ def connect_organization_source(
         }
         return {"ok": False, "settings": settings, "clone": clone_result, "validation": {}}
 
+    from local_kb.org_migration import migrate_organization_repo_to_current
+
+    migration = migrate_organization_repo_to_current(mirror_path)
+    if not migration.get("ok"):
+        migration_error = str(migration.get("error") or "Organization repository migration failed.")
+        migration_status = "invalid" if migration_error == "missing organization manifest" else "migration_blocked"
+        settings = {
+            "repo_url": repo_url,
+            "local_mirror_path": str(mirror_path),
+            "organization_id": "",
+            "validated": False,
+            "validation_status": migration_status,
+            "validation_message": migration_error,
+            "last_validated_at": now,
+            "last_sync_commit": "",
+            "last_sync_at": "",
+        }
+        return {
+            "ok": False,
+            "settings": settings,
+            "clone": clone_result,
+            "migration": migration,
+            "validation": {},
+        }
+
     validation = validate_organization_repo(mirror_path)
     validation_ok = bool(validation.get("ok"))
     errors = validation.get("errors") or []
@@ -201,7 +225,13 @@ def connect_organization_source(
         "last_sync_commit": commit if validation_ok else "",
         "last_sync_at": now if validation_ok else "",
     }
-    return {"ok": validation_ok, "settings": settings, "clone": clone_result, "validation": validation}
+    return {
+        "ok": validation_ok,
+        "settings": settings,
+        "clone": clone_result,
+        "migration": migration,
+        "validation": validation,
+    }
 
 
 def validate_organization_repo(repo_path: Path) -> dict[str, Any]:
@@ -249,19 +279,31 @@ def validate_organization_repo(repo_path: Path) -> dict[str, Any]:
     kb = manifest.get("kb") if isinstance(manifest.get("kb"), dict) else {}
     skills = manifest.get("skills") if isinstance(manifest.get("skills"), dict) else {}
 
-    main_path_text = _as_relative_path(kb.get("main_path") or "")
-    trusted_path_text = _as_relative_path(kb.get("trusted_path") or "kb/trusted")
-    candidates_path_text = _as_relative_path(kb.get("candidates_path") or "kb/candidates")
-    imports_path_text = _as_relative_path(kb.get("imports_path") or "kb/imports")
-    registry_path_text = _as_relative_path(skills.get("registry_path") or "skills/registry.yaml")
-    skill_candidates_path_text = _as_relative_path(skills.get("candidates_path") or "skills/candidates")
+    if "trusted_path" in kb or "candidates_path" in kb:
+        errors.append("obsolete kb.trusted_path/kb.candidates_path fields are forbidden; run the upgrade migration")
 
-    if not main_path_text and (repo_path / "kb" / "main").exists():
-        main_path_text = "kb/main"
+    main_path_text = _as_relative_path(kb.get("main_path"))
+    imports_path_text = _as_relative_path(kb.get("imports_path"))
+    registry_path_text = _as_relative_path(skills.get("registry_path"))
+    skill_candidates_path_text = _as_relative_path(skills.get("candidates_path"))
 
-    required_dirs = {"main_path": main_path_text} if main_path_text else {
-        "trusted_path": trusted_path_text,
-        "candidates_path": candidates_path_text,
+    exact_paths = {
+        "main_path": (main_path_text, ORG_RECOMMENDED_MAIN_PATH),
+        "imports_path": (imports_path_text, ORG_RECOMMENDED_IMPORTS_PATH),
+        "skills.registry_path": (registry_path_text, "skills/registry.yaml"),
+        "skills.candidates_path": (skill_candidates_path_text, "skills/candidates"),
+    }
+    for label, (actual, expected) in exact_paths.items():
+        if actual != expected:
+            errors.append(f"{label} must be exactly {expected}")
+
+    obsolete_roots = [relative for relative in ("kb/trusted", "kb/candidates") if (repo_path / relative).exists()]
+    if obsolete_roots:
+        errors.append("obsolete organization roots are forbidden: " + ", ".join(obsolete_roots))
+
+    required_dirs = {
+        "main_path": main_path_text,
+        "imports_path": imports_path_text,
     }
     for label, relative in required_dirs.items():
         if not relative:
@@ -270,13 +312,8 @@ def validate_organization_repo(repo_path: Path) -> dict[str, Any]:
         if not (repo_path / relative).is_dir():
             errors.append(f"{label} does not exist or is not a directory: {relative}")
 
-    optional_dirs = {
-        "imports_path": imports_path_text,
-        "skill_candidates_path": skill_candidates_path_text,
-    }
-    for label, relative in optional_dirs.items():
-        if relative and not (repo_path / relative).exists():
-            errors.append(f"{label} does not exist: {relative}")
+    if skill_candidates_path_text and not (repo_path / skill_candidates_path_text).is_dir():
+        errors.append(f"skill_candidates_path does not exist or is not a directory: {skill_candidates_path_text}")
 
     registry_skills: list[Any] = []
     if registry_path_text:
@@ -290,10 +327,6 @@ def validate_organization_repo(repo_path: Path) -> dict[str, Any]:
         else:
             errors.append(f"skills registry does not exist: {registry_path_text}")
 
-    layout = ORG_TARGET_LAYOUT if main_path_text else ORG_LEGACY_LAYOUT
-    legacy_compatibility = layout == ORG_LEGACY_LAYOUT
-    legacy_paths = [path for path in (trusted_path_text, candidates_path_text) if path]
-
     main_count = 0
     main_active_count = 0
     trusted_count = 0
@@ -301,41 +334,14 @@ def validate_organization_repo(repo_path: Path) -> dict[str, Any]:
     main_status_counts: dict[str, int] = {}
     imports_count = 0
     imports_status_counts: dict[str, int] = {}
-    legacy_trusted_count = 0
-    legacy_candidate_count = 0
-    legacy_status_counts: dict[str, int] = {}
-
     if main_path_text and (repo_path / main_path_text).exists():
         main_count, main_status_counts = _yaml_status_counts(repo_path / main_path_text)
         main_active_count = sum(main_status_counts.get(status, 0) for status in ORG_MAIN_ACTIVE_STATUSES)
         trusted_count = main_status_counts.get("trusted", 0) + main_status_counts.get("approved", 0)
         candidate_count = main_status_counts.get("candidate", 0)
-    else:
-        legacy_trusted_count, trusted_status_counts = (
-            _yaml_status_counts(repo_path / trusted_path_text) if trusted_path_text else (0, {})
-        )
-        legacy_candidate_count, candidate_status_counts = (
-            _yaml_status_counts(repo_path / candidates_path_text) if candidates_path_text else (0, {})
-        )
-        trusted_count = legacy_trusted_count
-        candidate_count = legacy_candidate_count
-        main_active_count = trusted_count + candidate_count
-        for status_counts in (trusted_status_counts, candidate_status_counts):
-            for status, count in status_counts.items():
-                legacy_status_counts[status] = legacy_status_counts.get(status, 0) + count
 
     if imports_path_text:
         imports_count, imports_status_counts = _yaml_status_counts(repo_path / imports_path_text)
-
-    local_download_paths = [main_path_text] if main_path_text else legacy_paths
-    layout_message = (
-        "Organization repository uses the recommended kb/imports incoming lane and kb/main exchange surface."
-        if not legacy_compatibility
-        else (
-            "Legacy kb/trusted and kb/candidates are accepted for compatibility only; "
-            "the recommended organization layout is kb/imports for incoming proposals and kb/main for the exchange surface."
-        )
-    )
 
     return {
         "ok": not errors,
@@ -344,19 +350,15 @@ def validate_organization_repo(repo_path: Path) -> dict[str, Any]:
         "manifest_path": str(manifest_path),
         "organization_id": organization_id,
         "schema_version": manifest.get("schema_version"),
-        "layout": layout,
+        "layout": ORG_TARGET_LAYOUT,
         "target_layout": ORG_TARGET_LAYOUT,
-        "legacy_compatibility": legacy_compatibility,
-        "layout_message": layout_message,
-        "incoming_lane_path": imports_path_text or ORG_RECOMMENDED_IMPORTS_PATH,
-        "exchange_surface_path": main_path_text or ORG_RECOMMENDED_MAIN_PATH,
-        "legacy_paths": legacy_paths,
-        "local_download_primary_path": main_path_text or ORG_RECOMMENDED_MAIN_PATH,
-        "local_download_paths": local_download_paths,
-        "local_download_excluded_paths": [imports_path_text] if imports_path_text else [ORG_RECOMMENDED_IMPORTS_PATH],
+        "layout_message": "Organization repository uses the sole current kb/imports incoming lane and kb/main exchange surface.",
+        "incoming_lane_path": imports_path_text,
+        "exchange_surface_path": main_path_text,
+        "local_download_primary_path": main_path_text,
+        "local_download_paths": [main_path_text] if main_path_text else [],
+        "local_download_excluded_paths": [imports_path_text] if imports_path_text else [],
         "main_path": main_path_text,
-        "trusted_path": trusted_path_text,
-        "candidates_path": candidates_path_text,
         "imports_path": imports_path_text,
         "skills_registry_path": registry_path_text,
         "skill_candidates_path": skill_candidates_path_text,
@@ -365,9 +367,6 @@ def validate_organization_repo(repo_path: Path) -> dict[str, Any]:
         "main_status_counts": main_status_counts,
         "imports_count": imports_count,
         "imports_status_counts": imports_status_counts,
-        "legacy_trusted_count": legacy_trusted_count,
-        "legacy_candidate_count": legacy_candidate_count,
-        "legacy_status_counts": legacy_status_counts,
         "trusted_count": trusted_count,
         "candidate_count": candidate_count,
         "skill_count": len(registry_skills),

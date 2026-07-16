@@ -9,6 +9,14 @@ is implemented as an optional overlay on the same core software, not as a
 separate product fork. Sections that still use "should" describe the target
 behavior and review rules that the implementation is being checked against.
 
+Current LogicGuard-native boundary: organization cards are portable exchange
+projections. They are read-only source material until local use/adoption routes
+them through the receiving machine's sole Sleep publisher, which creates a new
+exact scoped LogicGuard model revision. Organization files, similarity, co-use,
+and `related_cards` never become local semantic or ModelMesh authority by
+themselves. Any older wording below about “creating a local adopted card” means
+this model-publisher transaction plus its deterministic readable projection.
+
 ## Product Shape
 
 Use one Khaos Brain codebase.
@@ -296,11 +304,12 @@ the pull request. If all required rules pass, GitHub auto-merge or a restricted
 bot merges it. If checks fail, the pull request stays open for review.
 
 Some private repositories may not support branch protection without a paid
-GitHub plan. In that case, the fallback is still cloud-side automation: run the
-organization KB check workflow on pull requests, then let a restricted
+GitHub plan. That configuration must select one explicit cloud merge policy:
+run the organization KB check workflow on pull requests, then let a restricted
 GitHub-side bot workflow merge only labeled PRs after the check workflow
-completes successfully. This preserves the core boundary that no local machine
-directly merges protected organization knowledge.
+completes successfully. It is a declared deployment mode, not a route selected
+after another merge authority fails. No local machine directly merges protected
+organization knowledge.
 
 The local app may expose an "advanced maintainer tools" mode, but that mode
 should mean "this installation is allowed to run organization-maintenance
@@ -523,12 +532,12 @@ Skill sharing should be card-led. The review unit is a bundle:
 - one or more candidate cards;
 - required or recommended Skill candidates;
 - dependency metadata linking cards to Skills;
-- task evidence showing when the Skill helped, failed, replaced a fallback, or
+- task evidence showing when the Skill helped, failed, replaced an older manual action, or
   should be invoked earlier.
 
 A Skill is strongest as an organization candidate when cards already explain
-when it is useful, what problem it solves, what outcome it predicts, and what
-fallback exists when the Skill is missing.
+when it is useful, what problem it solves, what outcome it predicts, and the
+current guidance to expose when the Skill is unavailable.
 
 Cards may reference organization or local Skills. In the first implementation,
 Skills travel as card-bound bundles rather than as free-floating organization
@@ -541,8 +550,8 @@ skill_dependencies:
     requirement: required
     content_hash: sha256:...
     version_time: 2026-04-24T21:30:00Z
-fallback:
-  guidance: Use the generic GitHub release workflow if the Skill is not installed.
+use:
+  unavailable_skill_guidance: Keep the dependency unresolved when the Skill is not installed.
 ```
 
 The `bundle_id` is the Skill lineage. The `content_hash` is the exact version.
@@ -632,8 +641,8 @@ Core maintenance actions:
 - pin approved Skill versions and content hashes;
 - write rejected review records so similar weak submissions can be recognized;
 - check that every approved Skill has supporting card evidence;
-- check that every approved card dependency points to an approved Skill or a
-  documented fallback;
+- check that every approved card dependency points to an approved Skill and has
+  current `unavailable_skill_guidance`;
 - scan for private data, local paths, credentials, and unsafe Skill behavior.
 
 Participation model:
@@ -704,7 +713,7 @@ Search and card detail UI must show:
   organization source;
 - local display name or machine label only when it is local display metadata;
 - trust level and review status;
-- required Skill status, such as installed, available, missing, or fallback;
+- required Skill status, such as installed, available, or missing with explicit unavailable guidance;
 - whether the card is local editable, organization read-only, or contribution
   eligible.
 
@@ -959,9 +968,9 @@ The practical path from personal KB to organization KB should be incremental.
 Each milestone should preserve the current personal-only behavior when no
 organization source is configured.
 
-### Phase 0: Baseline and Compatibility
+### Phase 0: Baseline and Current-Only Boundary
 
-Goal: make the current personal KB behavior an explicit baseline.
+Goal: make the current personal KB behavior an explicit baseline with one schema and no compatibility reader.
 
 - Keep existing local card loading, retrieval, UI browsing, and feedback capture
   working unchanged.
@@ -1506,10 +1515,10 @@ the read-only and local-feedback foundations in place:
 - the local organization maintenance switch is now represented as
   "participate in organization maintenance"; it enables local maintenance
   proposal automation without granting GitHub merge authority;
-- user-facing status should keep that switch separate from GitHub merge or
-  maintainer authority: `organization_maintenance_*` reports local
-  participation, while legacy `maintainer_*` fields are compatibility metadata
-  and must not make enabled organization maintenance look disabled;
+- user-facing status keeps that switch separate from GitHub merge or maintainer
+  authority: only `organization_maintenance_*` reports local participation.
+  Retired `maintainer_*` fields are direct-upgrade input and are absent from
+  normal settings reads and writes;
 - local maintainer and contribution helpers can inspect an organization mirror
   and prepare a local import branch under `kb/imports/<contributor>/`.
 - a private sandbox organization repository exists and has been seeded with
@@ -1521,8 +1530,8 @@ the read-only and local-feedback foundations in place:
   `.github/scripts/org_kb_check.py` checker inside the organization repo;
 - GitHub API configuration successfully enabled the repository update step, but
   branch protection on the private sandbox returned GitHub 403 unless the repo
-  is public or the account is upgraded; the sandbox therefore uses the
-  GitHub-side workflow fallback that merges labeled PRs after the organization
+  is public or the account is upgraded; that sandbox explicitly selects the
+  GitHub-side labeled-PR workflow as its one merge mode after the organization
   check workflow succeeds;
 - live GitHub smoke test PRs verified the cloud loop: the organization KB check
   workflow passed, the PRs carried `org-kb:auto-merge`, and

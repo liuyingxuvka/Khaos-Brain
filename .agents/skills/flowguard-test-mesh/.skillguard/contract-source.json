@@ -1,0 +1,226 @@
+{
+  "artifacts": [],
+  "checks": [
+    {
+      "check_id": "check:flowguard-test-mesh:plane-boundary",
+      "coverage_rationale": "The check is the single declared owner for its mapped obligation set.",
+      "coverage_scope": "declared_obligations",
+      "covers_obligation_ids": [
+        "obligation:flowguard-test-mesh:plane-boundary"
+      ],
+      "depends_on_check_ids": [],
+      "evidence_class": "hard",
+      "evidence_domain_id": "evidence-domain:check:flowguard-test-mesh:plane-boundary",
+      "execution_owner_id": "owner:check:flowguard-test-mesh:plane-boundary",
+      "input_selectors": [
+        {
+          "kind": "path",
+          "path": ".flowguard/test_evidence_mesh/model.py"
+        }
+      ],
+      "kind": "model_assertion",
+      "semantic_check_id": "semantic:check:flowguard-test-mesh:plane-boundary",
+      "timeout_seconds": 30
+    },
+    {
+      "args": [
+        "-m",
+        "pytest",
+        "tests/test_test_mesh.py",
+        "-q"
+      ],
+      "check_id": "check:flowguard-test-mesh:native-authority",
+      "command": "python",
+      "coverage_rationale": "The check is the single declared owner for its mapped obligation set.",
+      "coverage_scope": "declared_obligations",
+      "covers_obligation_ids": [
+        "obligation:flowguard-test-mesh:native-authority"
+      ],
+      "cwd_token": "repository_root",
+      "depends_on_check_ids": [],
+      "evidence_class": "hard",
+      "evidence_domain_id": "evidence-domain:check:flowguard-test-mesh:native-authority",
+      "execution_owner_id": "owner:check:flowguard-test-mesh:native-authority",
+      "expected": {
+        "exit_code": 0
+      },
+      "input_selectors": [
+        {
+          "kind": "path",
+          "path": ".flowguard/test_evidence_mesh/model.py"
+        },
+        {
+          "kind": "path",
+          "path": "tests/test_test_mesh.py"
+        },
+        {
+          "kind": "role",
+          "role": "runtime_source"
+        },
+        {
+          "kind": "role",
+          "role": "documentation_model"
+        },
+        {
+          "kind": "role",
+          "role": "test_dev"
+        }
+      ],
+      "kind": "command",
+      "semantic_check_id": "semantic:check:flowguard-test-mesh:native-authority",
+      "timeout_seconds": 300
+    },
+    {
+      "check_id": "check:flowguard-test-mesh:evidence-closure",
+      "coverage_rationale": "The check is the single declared owner for its mapped obligation set.",
+      "coverage_scope": "declared_obligations",
+      "covers_obligation_ids": [
+        "obligation:flowguard-test-mesh:evidence-closure"
+      ],
+      "depends_on_check_ids": [],
+      "evidence_class": "hard",
+      "evidence_domain_id": "evidence-domain:check:flowguard-test-mesh:evidence-closure",
+      "execution_owner_id": "owner:check:flowguard-test-mesh:evidence-closure",
+      "input_selectors": [
+        {
+          "kind": "path",
+          "path": ".flowguard/test_evidence_mesh/model.py"
+        }
+      ],
+      "kind": "model_assertion",
+      "semantic_check_id": "semantic:check:flowguard-test-mesh:evidence-closure",
+      "timeout_seconds": 30
+    }
+  ],
+  "claim_boundary": "The route proves current complete required-inventory parent/child ownership, diagnostic-boundary accounting, stable finding references, and terminal evidence freshness; it does not execute tests, choose DPF process optimization, group root causes, or decide semantic behavior coverage.",
+  "closure_profiles": [
+    {
+      "profile_id": "enforced",
+      "required_obligation_ids": [
+        "obligation:flowguard-test-mesh:plane-boundary",
+        "obligation:flowguard-test-mesh:native-authority",
+        "obligation:flowguard-test-mesh:evidence-closure"
+      ]
+    }
+  ],
+  "confirmed": true,
+  "content_impact_policy": {
+    "full_admission_reason_codes": [
+      "explicit_final_gate",
+      "explicit_release_gate",
+      "impact_policy_or_compiler_changed",
+      "shared_validation_runtime_changed",
+      "all_owner_component_changed"
+    ],
+    "owner_receipt_root_ref": {
+      "path_token": "owner_evidence_root",
+      "relative_path": "check-executions"
+    },
+    "policy_id": "skillguard.content_impact_policy.current",
+    "unknown_mapping_disposition": "block"
+  },
+  "default_route_id": "route:test_mesh_maintenance",
+  "depth_profile": {
+    "schema_version": "skillguard.depth_profile.v2",
+    "profile_id": "profile:flowguard-test-mesh:fixed-enforced-declared-check-supervision",
+    "target_skill_id": "flowguard-test-mesh",
+    "integration_mode": "native-integrated",
+    "native_owner_id": "test_mesh_maintenance",
+    "native_route_ids": [
+      "route:test_mesh_maintenance"
+    ],
+    "native_check_ids": [
+      "check:flowguard-test-mesh:plane-boundary",
+      "check:flowguard-test-mesh:native-authority",
+      "check:flowguard-test-mesh:evidence-closure"
+    ],
+    "skillguard_adds_domain_route": false,
+    "enforcement_level": "enforced",
+    "required_closure_profiles": [
+      "enforced"
+    ],
+    "provider_runtime": {
+      "provider_id": "skillguard-local-provider",
+      "required_runtime_contract_id": "skillguard-declared-check-supervision-current",
+      "required_capability_ids": [
+        "declared-check-inventory.v1",
+        "declared-check-receipt-reconciliation.v1",
+        "installation-receipt-binding.v1",
+        "installation-currentness-replay.v1",
+        "provider-runtime-enrollment.v1",
+        "single-flight-check-execution.v1"
+      ],
+      "required_enrollment_status": "enrolled",
+      "readiness_check_ids": [
+        "check:flowguard-test-mesh:native-authority"
+      ]
+    },
+    "claim_boundary": "flowguard-test-mesh owns every check's domain meaning; SkillGuard only reconciles the exact current declared-check inventory and terminal receipts in one fixed enforced closure."
+  },
+  "implementation_paths": [
+    ".agents/skills/flowguard-test-mesh",
+    ".flowguard/test_evidence_mesh",
+    "flowguard/testmesh.py",
+    "flowguard/skill_contract_model.py",
+    "tests/test_test_mesh.py"
+  ],
+  "integration_mode": "native-integrated",
+  "judgment_rubrics": [],
+  "may_define_parallel_execution_route": false,
+  "may_define_skillguard_runtime_route": false,
+  "model_id": "flowguard.test_mesh_maintenance.skill_contract.v2",
+  "model_path": ".flowguard/test_evidence_mesh/model.py",
+  "native_check_bindings": [
+    {
+      "authority": "target-native",
+      "check_id": "check:flowguard-test-mesh:native-authority",
+      "owner_id": "test_mesh_maintenance"
+    }
+  ],
+  "native_route_bindings": [
+    {
+      "authority": "target-native",
+      "owner_id": "test_mesh_maintenance",
+      "route_id": "route:test_mesh_maintenance"
+    }
+  ],
+  "native_route_owner": "test_mesh_maintenance",
+  "release_eligible": false,
+  "schema_version": "skillguard.contract_source.v2",
+  "skill_id": "flowguard-test-mesh",
+  "step_bindings": [
+    {
+      "action": {
+        "kind": "inventory",
+        "summary": "Declare the parent claim, revisioned required inventory, child ownership, scope, timeouts, freshness rules, and terminal receipt contract."
+      },
+      "check_ids": [
+        "check:flowguard-test-mesh:plane-boundary"
+      ],
+      "output_artifact_ids": [],
+      "step_id": "step:flowguard-test-mesh:intake"
+    },
+    {
+      "action": {
+        "kind": "native",
+        "summary": "Run the existing TestMesh owner to partition evidence, reconcile diagnostic planned/executed/failed/not-run counts and findings, and map every required id to one registered child and final receipt."
+      },
+      "check_ids": [
+        "check:flowguard-test-mesh:native-authority"
+      ],
+      "output_artifact_ids": [],
+      "step_id": "step:flowguard-test-mesh:execute"
+    },
+    {
+      "action": {
+        "kind": "verifier",
+        "summary": "Reject subsets, hidden skips, timeout ambiguity, progress-only background state, incomplete receipts, stale reuse, or unowned ids."
+      },
+      "check_ids": [
+        "check:flowguard-test-mesh:evidence-closure"
+      ],
+      "output_artifact_ids": [],
+      "step_id": "step:flowguard-test-mesh:verify"
+    }
+  ]
+}

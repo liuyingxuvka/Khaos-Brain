@@ -1,892 +1,925 @@
 from __future__ import annotations
 
+import re
 import json
 import os
-import re
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
+from unittest.mock import patch
 
-from local_kb.config import install_state_path
 from local_kb.install import (
     AUTOMATION_MODEL_ENV_VAR,
     AUTOMATION_REASONING_EFFORT_ENV_VAR,
-    ORG_CONTRIBUTE_WINDOW,
-    ORG_MAINTENANCE_WINDOW,
+    MAINTENANCE_SKILL_NAMES,
     REPO_AUTOMATION_SPECS,
+    RETIRED_AUTOMATION_IDS,
+    RETIRED_MAINTENANCE_SKILL_IDS,
     automation_rrule_for_spec,
     build_installation_check,
     global_agents_path,
     install_codex_integration,
-    resolve_automation_runtime,
+    latest_upgrade_attempt,
+    _automation_spec_payload,
+    _check_repo_skillguard_current_sources,
+    _freeze_flowguard_validation_toolchain,
+    _freeze_logicguard_validation_toolchain,
+    _freeze_skillguard_validation_toolchain,
+    _require_live_flowguard_matches_snapshot,
+    _require_live_logicguard_matches_snapshot,
+    _require_live_skillguard_matches_snapshot,
+    _restore_exact_file_snapshot,
+    _run_pre_restore_upgrade_assurance,
+    _skillguard_compiler_path,
+    _refresh_and_verify_skillguard_global_router,
+    _verify_skillguard_global_router,
 )
+from local_kb.config import install_state_path
+from local_kb.transactional_install import tree_manifest
+from scripts.check_retired_kb_architect import build_report as build_architect_retirement_report
 
 
-def write_cmd(path: Path, body: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f"@echo off\r\n{body}\r\n", encoding="utf-8")
+SURVIVING_SKILLS = {
+    "kb-sleep-maintenance",
+    "kb-dream-pass",
+    "kb-organization-contribute",
+    "kb-organization-maintenance",
+    "khaos-brain-update",
+}
+SURVIVING_AUTOMATIONS = {
+    "kb-sleep",
+    "kb-dream",
+    "khaos-brain-system-update",
+    "kb-org-contribute",
+    "kb-org-maintenance",
+}
 
 
-def rrule_local_minute(rrule: str) -> int:
-    hour = re.search(r"BYHOUR=(\d+)", rrule)
-    minute = re.search(r"BYMINUTE=(\d+)", rrule)
-    if not hour or not minute:
-        raise AssertionError(f"rrule does not contain BYHOUR/BYMINUTE: {rrule}")
-    return int(hour.group(1)) * 60 + int(minute.group(1))
+def _write_fake_tools(root: Path) -> tuple[Path, Path, Path]:
+    shell_bin = root / "shell-bin"
+    git_real = root / "tools" / "git-real.cmd"
+    rg_source = root / "tools" / "rg-source.exe"
+    git_real.parent.mkdir(parents=True, exist_ok=True)
+    git_real.write_text("@echo off\r\necho git version test\r\n", encoding="utf-8")
+    rg_source.write_bytes(b"rg-binary")
+    return shell_bin, git_real, rg_source
 
 
-def toml_string_value(text: str, key: str) -> str:
-    match = re.search(rf"^{re.escape(key)} = \"([^\"]*)\"$", text, re.MULTILINE)
-    if not match:
-        raise AssertionError(f"toml text does not contain string value for {key}")
-    return match.group(1)
+def _automation_status(path: Path) -> str:
+    text = path.read_text(encoding="utf-8")
+    match = re.search(r'^status = "([A-Z]+)"$', text, re.MULTILINE)
+    return match.group(1) if match else ""
 
 
 class CodexInstallTests(unittest.TestCase):
-    def test_sleep_maintenance_prompt_requires_self_preflight_and_postflight(self) -> None:
+    def setUp(self) -> None:
+        self._automation_runtime = patch.dict(
+            os.environ,
+            {
+                AUTOMATION_MODEL_ENV_VAR: "test-current-model",
+                AUTOMATION_REASONING_EFFORT_ENV_VAR: "high",
+            },
+        )
+        self._automation_runtime.start()
+        self.addCleanup(self._automation_runtime.stop)
+        self._update_state_migration = patch(
+            "local_kb.software_update.canonicalize_obsolete_update_state",
+            return_value={
+                "ok": True,
+                "status": "fixture_skipped",
+                "retired_state_found": False,
+                "retired_schema_found": False,
+                "residual_retired_state_count": 0,
+            },
+        )
+        self._update_state_migration.start()
+        self.addCleanup(self._update_state_migration.stop)
+
+    def test_update_state_rollback_restores_exact_bytes_or_prior_absence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / ".local" / "khaos_brain_update_state.json"
+            original = b'{"status":"available","old_shape":true}\r\n'
+            path.parent.mkdir(parents=True)
+            path.write_bytes(original)
+
+            path.write_bytes(b'{"schema_version":1,"status":"failed"}\n')
+            _restore_exact_file_snapshot(path, existed=True, content=original)
+            self.assertEqual(path.read_bytes(), original)
+
+            _restore_exact_file_snapshot(path, existed=False, content=b"")
+            self.assertFalse(path.exists())
+
+    def test_automation_payload_preserves_status_and_user_pause_independently(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
-        prompt_text = (
-            repo_root / ".agents" / "skills" / "local-kb-retrieve" / "MAINTENANCE_PROMPT.md"
-        ).read_text(encoding="utf-8")
+        spec = next(item for item in REPO_AUTOMATION_SPECS if item["id"] == "kb-sleep")
 
-        self.assertIn("visible sleep execution plan", prompt_text)
-        self.assertIn("checkpoint", prompt_text)
-        self.assertIn("completed, skipped with reason, or blocked", prompt_text)
-        self.assertIn("try the supported repair path", prompt_text)
-        self.assertIn("sleep self-preflight", prompt_text)
-        self.assertIn("system/knowledge-library/maintenance", prompt_text)
-        self.assertIn("final sleep postflight check", prompt_text)
-        self.assertIn("structured observation", prompt_text)
-        self.assertIn("Do not rerun `kb_consolidate.py`", prompt_text)
-        self.assertIn("final AI zh-CN display completion checkpoint", prompt_text)
-        self.assertIn("route_segment_labels", prompt_text)
-        self.assertIn("Do not run separate mid-run translation cleanup", prompt_text)
+        system_paused = _automation_spec_payload(
+            spec,
+            repo_root,
+            existing={"status": "PAUSED", "user_paused": False},
+        )
+        self.assertEqual("PAUSED", system_paused["status"])
+        self.assertFalse(system_paused["user_paused"])
 
-    def test_install_writes_global_skill_launcher_and_manifest(self) -> None:
-        repo_root = Path(__file__).resolve().parents[1]
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            codex_home = Path(tmp_dir) / ".codex"
-            shell_bin_dir = Path(tmp_dir) / "shell-bin"
-            git_real = Path(tmp_dir) / "tool-src" / "git-real.cmd"
-            rg_source = Path(tmp_dir) / "tool-src" / "rg-source.exe"
-            write_cmd(git_real, "echo git version test")
-            rg_source.parent.mkdir(parents=True, exist_ok=True)
-            rg_source.write_bytes(b"rg-binary")
+        independently_marked = _automation_spec_payload(
+            spec,
+            repo_root,
+            existing={"status": "ACTIVE", "user_paused": True},
+        )
+        self.assertEqual("ACTIVE", independently_marked["status"])
+        self.assertTrue(independently_marked["user_paused"])
 
-            payload = install_codex_integration(
-                repo_root=repo_root,
-                codex_home=codex_home,
-                shell_bin_dir=shell_bin_dir,
-                git_executable=git_real,
-                rg_source=rg_source,
-                persist_user_shell_path=False,
+        legacy_paused = _automation_spec_payload(
+            spec,
+            repo_root,
+            existing={"status": "PAUSED"},
+        )
+        self.assertEqual("PAUSED", legacy_paused["status"])
+        self.assertTrue(legacy_paused["user_paused"])
+
+    def test_architect_retirement_checks_only_the_active_codex_registry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            codex_home = root / ".codex"
+            registry = root / "active-global-registry.json"
+            codex_home.mkdir(parents=True)
+            codex_home.joinpath("AGENTS.md").write_text(
+                f"- registry_path: {registry.as_posix()}\n",
+                encoding="utf-8",
             )
-            automation_runtime = resolve_automation_runtime(codex_home)
-
-            self.assertTrue((codex_home / "skills" / "predictive-kb-preflight" / "SKILL.md").exists())
-            self.assertTrue((codex_home / "skills" / "predictive-kb-preflight" / "kb_launch.py").exists())
-            self.assertTrue((codex_home / "predictive-kb" / "install.json").exists())
-            self.assertTrue((codex_home / "automations" / "kb-sleep" / "automation.toml").exists())
-            self.assertTrue((codex_home / "automations" / "kb-dream" / "automation.toml").exists())
-            self.assertTrue((codex_home / "automations" / "kb-architect" / "automation.toml").exists())
-            self.assertTrue((codex_home / "automations" / "kb-org-contribute" / "automation.toml").exists())
-            self.assertTrue((codex_home / "automations" / "kb-org-maintenance" / "automation.toml").exists())
-            self.assertTrue((codex_home / "skills" / "kb-sleep-maintenance" / "SKILL.md").exists())
-            self.assertTrue((codex_home / "skills" / "kb-dream-pass" / "SKILL.md").exists())
-            self.assertTrue((codex_home / "skills" / "kb-architect-pass" / "SKILL.md").exists())
-            self.assertTrue((codex_home / "skills" / "kb-organization-contribute" / "SKILL.md").exists())
-            self.assertTrue((codex_home / "skills" / "kb-organization-maintenance" / "SKILL.md").exists())
-            self.assertTrue((codex_home / "skills" / "khaos-brain-update" / "SKILL.md").exists())
-            self.assertTrue(global_agents_path(codex_home).exists())
-            self.assertTrue((shell_bin_dir / "git.cmd").exists())
-            self.assertTrue((shell_bin_dir / "rg.exe").exists())
-            self.assertEqual(payload["repo_root"], str(repo_root))
-            self.assertEqual(
-                payload["maintenance_skill_names"],
-                [
-                    "kb-sleep-maintenance",
-                    "kb-dream-pass",
-                    "kb-architect-pass",
-                    "kb-organization-contribute",
-                    "kb-organization-maintenance",
-                    "khaos-brain-update",
-                ],
-            )
-            self.assertEqual(
-                payload["automation_ids"],
-                [
-                    "kb-sleep",
-                    "kb-dream",
-                    "kb-architect",
-                    "kb-org-contribute",
-                    "kb-org-maintenance",
-                ],
-            )
-            self.assertEqual(payload["automation_runtime"], automation_runtime)
-            self.assertEqual(payload["shell_tools"]["shell_bin_dir"], str(shell_bin_dir))
-            self.assertTrue(payload["shell_tools"]["git_shim_installed"])
-            self.assertTrue(payload["shell_tools"]["rg_installed"])
-            self.assertFalse(payload["shell_tools"]["issues"])
-
-            skill_text = (codex_home / "skills" / "predictive-kb-preflight" / "SKILL.md").read_text(
-                encoding="utf-8"
-            )
-            self.assertIn("--route-hint", skill_text)
-            self.assertIn("search-style calls without the explicit `search` subcommand", skill_text)
-            self.assertIn("Skill and plugin usage lessons count as reusable signals", skill_text)
-            self.assertIn("Subagent and delegation usage lessons count as reusable signals", skill_text)
-            self.assertIn("phase-change KB checkpoints", skill_text)
-            self.assertIn("repeated same-type subtask", skill_text)
-            self.assertIn("mistake-first priority", skill_text)
-            self.assertIn("highest-priority observation evidence", skill_text)
-            self.assertIn("Successful reusable patterns may still be recorded", skill_text)
-            self.assertIn("canonical machine interfaces", skill_text)
-            self.assertIn("localized display projection", skill_text)
-            self.assertIn("encoding-stable JSON", skill_text)
-
-            openai_text = (
-                codex_home / "skills" / "predictive-kb-preflight" / "agents" / "openai.yaml"
-            ).read_text(encoding="utf-8")
-            self.assertIn("allow_implicit_invocation: true", openai_text)
-            self.assertIn("record a KB follow-up observation", openai_text)
-            self.assertIn("required default preflight", openai_text)
-            self.assertIn("skill/plugin usage lesson", openai_text)
-            self.assertIn("subagent/delegation usage lesson", openai_text)
-            self.assertIn("phase-change KB checkpoints", openai_text)
-            self.assertIn("mistake-first priority", openai_text)
-            self.assertIn("highest-priority observation evidence", openai_text)
-            self.assertIn("successful reusable patterns", openai_text)
-            self.assertIn("canonical machine interfaces", openai_text)
-            self.assertIn("localized display projection", openai_text)
-            self.assertIn("encoding-stable JSON", openai_text)
-
-            global_agents_text = global_agents_path(codex_home).read_text(encoding="utf-8")
-            self.assertIn("BEGIN MANAGED PREDICTIVE KB DEFAULTS", global_agents_text)
-            self.assertIn("$predictive-kb-preflight", global_agents_text)
-            self.assertIn("explicit KB postflight check", global_agents_text)
-            self.assertIn("skill/plugin usage", global_agents_text)
-            self.assertIn("subagent/delegation usage", global_agents_text)
-            self.assertIn("phase-change KB checkpoints", global_agents_text)
-            self.assertIn("mistake-first priority", global_agents_text)
-            self.assertIn("highest-priority observation evidence", global_agents_text)
-            self.assertIn("Successful reusable patterns may still be recorded", global_agents_text)
-            self.assertIn("canonical machine interfaces", global_agents_text)
-            self.assertIn("localized display projection", global_agents_text)
-            self.assertIn("encoding-stable JSON", global_agents_text)
-
-            sleep_skill_text = (codex_home / "skills" / "kb-sleep-maintenance" / "SKILL.md").read_text(
-                encoding="utf-8"
-            )
-            sleep_skill_openai = (
-                codex_home / "skills" / "kb-sleep-maintenance" / "agents" / "openai.yaml"
-            ).read_text(encoding="utf-8")
-            self.assertIn("name: kb-sleep-maintenance", sleep_skill_text)
-            self.assertIn("docs/maintenance_agent_worldview.md", sleep_skill_text)
-            self.assertIn("MAINTENANCE_PROMPT.md", sleep_skill_text)
-            self.assertIn("mandatory similar-card merge checkpoint", sleep_skill_text)
-            self.assertIn("mandatory overloaded-card split checkpoint", sleep_skill_text)
-            self.assertIn("organization Skill bundle consolidation checkpoint", sleep_skill_text)
-            self.assertIn("Do not skip the merge, split, or Skill bundle consolidation checkpoint itself", sleep_skill_text)
-            self.assertIn("mechanical apply eligibility", sleep_skill_text)
-            self.assertIn("final AI-authored zh-CN display completion checkpoint", sleep_skill_text)
-            self.assertIn("canonical-interface checkpoint", sleep_skill_text)
-            self.assertIn("CLI machine JSON", sleep_skill_text)
-            self.assertIn("route/path display labels", sleep_skill_text)
-            self.assertIn("--status completed --run-id <run_id> --json", sleep_skill_text)
-            self.assertIn("allow_implicit_invocation: false", sleep_skill_openai)
-            self.assertIn("$kb-sleep-maintenance", sleep_skill_openai)
-
-            dream_skill_text = (codex_home / "skills" / "kb-dream-pass" / "SKILL.md").read_text(
-                encoding="utf-8"
-            )
-            dream_skill_openai = (
-                codex_home / "skills" / "kb-dream-pass" / "agents" / "openai.yaml"
-            ).read_text(encoding="utf-8")
-            self.assertIn("name: kb-dream-pass", dream_skill_text)
-            self.assertIn("docs/maintenance_agent_worldview.md", dream_skill_text)
-            self.assertIn("DREAM_PROMPT.md", dream_skill_text)
-            self.assertIn("sandbox experiment artifacts", dream_skill_text)
-            self.assertIn("allow_implicit_invocation: false", dream_skill_openai)
-            self.assertIn("$kb-dream-pass", dream_skill_openai)
-
-            architect_skill_text = (codex_home / "skills" / "kb-architect-pass" / "SKILL.md").read_text(
-                encoding="utf-8"
-            )
-            architect_skill_openai = (
-                codex_home / "skills" / "kb-architect-pass" / "agents" / "openai.yaml"
-            ).read_text(encoding="utf-8")
-            self.assertIn("name: kb-architect-pass", architect_skill_text)
-            self.assertIn("docs/maintenance_agent_worldview.md", architect_skill_text)
-            self.assertIn("ARCHITECT_PROMPT.md", architect_skill_text)
-            self.assertIn("sandbox_apply.sandbox_ready=true", architect_skill_text)
-            self.assertIn("allow_implicit_invocation: false", architect_skill_openai)
-            self.assertIn("$kb-architect-pass", architect_skill_openai)
-
-            org_contribute_skill_text = (
-                codex_home / "skills" / "kb-organization-contribute" / "SKILL.md"
-            ).read_text(encoding="utf-8")
-            org_contribute_skill_openai = (
-                codex_home / "skills" / "kb-organization-contribute" / "agents" / "openai.yaml"
-            ).read_text(encoding="utf-8")
-            self.assertIn("name: kb-organization-contribute", org_contribute_skill_text)
-            self.assertIn("scripts/kb_org_outbox.py", org_contribute_skill_text)
-            self.assertIn("card-bound Skill bundle", org_contribute_skill_text)
-            self.assertIn("local latest version for that bundle", org_contribute_skill_text)
-            self.assertIn("allow_implicit_invocation: false", org_contribute_skill_openai)
-            self.assertIn("$kb-organization-contribute", org_contribute_skill_openai)
-
-            org_maintenance_skill_text = (
-                codex_home / "skills" / "kb-organization-maintenance" / "SKILL.md"
-            ).read_text(encoding="utf-8")
-            org_maintenance_skill_openai = (
-                codex_home / "skills" / "kb-organization-maintenance" / "agents" / "openai.yaml"
-            ).read_text(encoding="utf-8")
-            self.assertIn("name: kb-organization-maintenance", org_maintenance_skill_text)
-            self.assertIn("scripts/kb_org_maintainer.py", org_maintenance_skill_text)
-            self.assertIn("organization-level Sleep-like maintenance", org_maintenance_skill_text)
-            self.assertIn("organization candidate intake checkpoint", org_maintenance_skill_text)
-            self.assertIn("mandatory organization similar-card merge checkpoint", org_maintenance_skill_text)
-            self.assertIn("mandatory organization overloaded-card split checkpoint", org_maintenance_skill_text)
-            self.assertIn("Skill safety checkpoint", org_maintenance_skill_text)
-            self.assertIn("Skill bundle version checkpoint", org_maintenance_skill_text)
-            self.assertIn("latest approved version by `version_time`", org_maintenance_skill_text)
-            self.assertIn("GitHub merge-readiness checkpoint", org_maintenance_skill_text)
-            self.assertIn("organization-review", org_maintenance_skill_text)
-            self.assertIn("allow_implicit_invocation: false", org_maintenance_skill_openai)
-            self.assertIn("$kb-organization-maintenance", org_maintenance_skill_openai)
-
-            update_skill_text = (codex_home / "skills" / "khaos-brain-update" / "SKILL.md").read_text(
-                encoding="utf-8"
-            )
-            update_skill_openai = (
-                codex_home / "skills" / "khaos-brain-update" / "agents" / "openai.yaml"
-            ).read_text(encoding="utf-8")
-            self.assertIn("name: khaos-brain-update", update_skill_text)
-            self.assertIn("scripts/install_codex_kb.py", update_skill_text)
-            self.assertIn("Force-close Khaos Brain desktop UI processes", update_skill_text)
-            self.assertIn("Do not require KB preflight", update_skill_text)
-            self.assertIn("fast-forward", update_skill_text)
-            self.assertIn("Do not run `git reset --hard`", update_skill_text)
-            self.assertIn("allow_implicit_invocation: false", update_skill_openai)
-            self.assertIn("$khaos-brain-update", update_skill_openai)
-
-            sleep_toml = (codex_home / "automations" / "kb-sleep" / "automation.toml").read_text(encoding="utf-8")
-            self.assertIn('kind = "cron"', sleep_toml)
-            self.assertIn("$kb-sleep-maintenance", sleep_toml)
-            self.assertIn('rrule = "FREQ=WEEKLY;BYDAY=SU,MO,TU,WE,TH,FR,SA;BYHOUR=12;BYMINUTE=0"', sleep_toml)
-            self.assertIn(f'model = "{automation_runtime["model"]}"', sleep_toml)
-            self.assertIn(f'reasoning_effort = "{automation_runtime["reasoning_effort"]}"', sleep_toml)
-            self.assertIn('model_policy = "strongest-available"', sleep_toml)
-            self.assertIn('reasoning_effort_policy = "deepest"', sleep_toml)
-            self.assertIn("docs/maintenance_agent_worldview.md", sleep_toml)
-            self.assertIn("shared maintenance-agent worldview", sleep_toml)
-            self.assertIn("visible sleep execution plan", sleep_toml)
-            self.assertIn("checkpoint statuses", sleep_toml)
-            self.assertIn("every safe checkpoint", sleep_toml)
-            self.assertIn("supported low-risk repairs", sleep_toml)
-            self.assertIn("rerun the relevant validation", sleep_toml)
-            self.assertIn("sleep self-preflight", sleep_toml)
-            self.assertIn("system/knowledge-library/maintenance", sleep_toml)
-            self.assertIn("mandatory similar-card merge checkpoint", sleep_toml)
-            self.assertIn("mandatory overloaded-card split checkpoint", sleep_toml)
-            self.assertIn("organization Skill bundle consolidation checkpoint", sleep_toml)
-            self.assertIn("latest approved version by version_time", sleep_toml)
-            self.assertIn("skip-with-reason decisions", sleep_toml)
-            self.assertIn("mechanical apply eligibility", sleep_toml)
-            self.assertIn("high-volume lanes proposal-only", sleep_toml)
-            self.assertIn("sleep postflight check", sleep_toml)
-            self.assertIn("structured maintenance observation", sleep_toml)
-            self.assertIn("recursively consolidating", sleep_toml)
-            self.assertIn("selected action keys", sleep_toml)
-            self.assertIn("--action-key", sleep_toml)
-            self.assertIn("final AI-authored zh-CN", sleep_toml)
-            self.assertIn("canonical-interface checkpoint", sleep_toml)
-            self.assertIn("CLI machine JSON", sleep_toml)
-            self.assertIn("route/path display labels", sleep_toml)
-            self.assertIn("do not run separate mid-run translation cleanup", sleep_toml)
-            self.assertIn("same run id", sleep_toml)
-            self.assertIn("--status completed --run-id <run_id> --json", sleep_toml)
-            self.assertIn(str(repo_root).replace("\\", "\\\\"), sleep_toml)
-
-            dream_toml = (codex_home / "automations" / "kb-dream" / "automation.toml").read_text(encoding="utf-8")
-            self.assertIn('kind = "cron"', dream_toml)
-            self.assertIn("$kb-dream-pass", dream_toml)
-            self.assertIn('kb_dream.py', dream_toml)
-            self.assertIn('rrule = "FREQ=WEEKLY;BYDAY=SU,MO,TU,WE,TH,FR,SA;BYHOUR=13;BYMINUTE=0"', dream_toml)
-            self.assertIn(f'model = "{automation_runtime["model"]}"', dream_toml)
-            self.assertIn(f'reasoning_effort = "{automation_runtime["reasoning_effort"]}"', dream_toml)
-            self.assertIn('model_policy = "strongest-available"', dream_toml)
-            self.assertIn('reasoning_effort_policy = "deepest"', dream_toml)
-            self.assertIn("docs/maintenance_agent_worldview.md", dream_toml)
-            self.assertIn("shared maintenance-agent worldview", dream_toml)
-            self.assertIn("generated preflight", dream_toml)
-            self.assertIn("preflight entries retrieved", dream_toml)
-            self.assertIn("bounded route-deduped batch", dream_toml)
-            self.assertIn("experiments executed in order", dream_toml)
-            self.assertIn("report a no-op", dream_toml)
-            self.assertIn("execution-plan checkpoint status", dream_toml)
-            self.assertIn("safety tier and rollback plan", dream_toml)
-            self.assertIn("sandbox experiment artifacts", dream_toml)
-            self.assertIn("retrieval-ab sandbox paths", dream_toml)
-            self.assertIn("allowed writes", dream_toml)
-            self.assertIn("evidence grades", dream_toml)
-            self.assertIn("validation results", dream_toml)
-            self.assertIn("prior Dream report", dream_toml)
-            self.assertIn("external-system experiments proposal-only", dream_toml)
-            self.assertIn("Sleep handoff", dream_toml)
-            self.assertIn("Sleep/Architect handoff", dream_toml)
-
-            architect_toml = (
-                codex_home / "automations" / "kb-architect" / "automation.toml"
-            ).read_text(encoding="utf-8")
-            self.assertIn('kind = "cron"', architect_toml)
-            self.assertIn("$kb-architect-pass", architect_toml)
-            self.assertIn('kb_architect.py', architect_toml)
-            self.assertIn('rrule = "FREQ=WEEKLY;BYDAY=SU,MO,TU,WE,TH,FR,SA;BYHOUR=14;BYMINUTE=0"', architect_toml)
-            self.assertIn(f'model = "{automation_runtime["model"]}"', architect_toml)
-            self.assertIn(f'reasoning_effort = "{automation_runtime["reasoning_effort"]}"', architect_toml)
-            self.assertIn('model_policy = "strongest-available"', architect_toml)
-            self.assertIn('reasoning_effort_policy = "deepest"', architect_toml)
-            self.assertIn("docs/maintenance_agent_worldview.md", architect_toml)
-            self.assertIn("shared maintenance-agent worldview", architect_toml)
-            self.assertIn("visible Architect execution plan", architect_toml)
-            self.assertIn("checkpoint statuses", architect_toml)
-            self.assertIn("Architect self-preflight", architect_toml)
-            self.assertIn("system/knowledge-library/maintenance", architect_toml)
-            self.assertIn("scripts/khaos_brain_update.py --architect-check --json", architect_toml)
-            self.assertIn("$khaos-brain-update", architect_toml)
-            self.assertIn("apply_ready=true", architect_toml)
-            self.assertIn("software update gate result", architect_toml)
-            self.assertIn("Evidence, Impact, and Safety", architect_toml)
-            self.assertIn("human-review status", architect_toml)
-            self.assertIn("long-observation items as watching", architect_toml)
-            self.assertIn("KB operating mechanisms rather than card content", architect_toml)
-            self.assertIn("do not rewrite trusted cards or promote candidates", architect_toml)
-            self.assertIn("execution packet is agent-ready", architect_toml)
-            self.assertIn("sandbox_apply.sandbox_ready=true", architect_toml)
-            self.assertIn("planned sandbox path", architect_toml)
-            self.assertIn("allowed/disallowed writes", architect_toml)
-            self.assertIn("merge/block decision fields", architect_toml)
-            self.assertIn("choose at most one", architect_toml)
-            self.assertIn("instead of repeatedly reporting", architect_toml)
-            self.assertIn("sandbox-ready packets", architect_toml)
-            self.assertIn("blocked execution states", architect_toml)
-            self.assertIn("validation bundle", architect_toml)
-            self.assertIn("postflight observation status", architect_toml)
-            self.assertIn("system-readable maintenance rollup", architect_toml)
-            self.assertIn("content-boundary", architect_toml)
-            self.assertIn("install-sync status", architect_toml)
-
-            org_contribute_toml = (
-                codex_home / "automations" / "kb-org-contribute" / "automation.toml"
-            ).read_text(encoding="utf-8")
-            self.assertIn('kind = "cron"', org_contribute_toml)
-            self.assertIn("$kb-organization-contribute", org_contribute_toml)
-            self.assertIn("scripts/kb_org_outbox.py", org_contribute_toml)
-            self.assertIn('schedule_policy = "stable-jitter"', org_contribute_toml)
-            self.assertIn('schedule_window = "10:00-13:59"', org_contribute_toml)
-            org_contribute_minute = rrule_local_minute(toml_string_value(org_contribute_toml, "rrule"))
-            self.assertGreaterEqual(org_contribute_minute, ORG_CONTRIBUTE_WINDOW[0])
-            self.assertLessEqual(org_contribute_minute, ORG_CONTRIBUTE_WINDOW[1])
-            self.assertIn(f'model = "{automation_runtime["model"]}"', org_contribute_toml)
-            self.assertIn(f'reasoning_effort = "{automation_runtime["reasoning_effort"]}"', org_contribute_toml)
-            self.assertIn("desktop settings", org_contribute_toml)
-            self.assertIn("validated organization repository", org_contribute_toml)
-            self.assertIn("successful no-op", org_contribute_toml)
-            self.assertIn("sync the organization mirror first", org_contribute_toml)
-            self.assertIn("KB preflight", org_contribute_toml)
-            self.assertIn("content-hash-gated outbox", org_contribute_toml)
-            self.assertIn("every exchanged hash", org_contribute_toml)
-            self.assertIn("downloaded, used, absorbed, exported, uploaded", org_contribute_toml)
-            self.assertIn("prepare an import branch", org_contribute_toml)
-            self.assertIn("push eligible import proposals automatically", org_contribute_toml)
-            self.assertIn("org-kb:auto-merge", org_contribute_toml)
-            self.assertIn("card-bound Skill bundles", org_contribute_toml)
-            self.assertIn("bundle_id", org_contribute_toml)
-            self.assertIn("local latest version for that bundle", org_contribute_toml)
-            self.assertIn("KB postflight", org_contribute_toml)
-
-            org_maintenance_toml = (
-                codex_home / "automations" / "kb-org-maintenance" / "automation.toml"
-            ).read_text(encoding="utf-8")
-            self.assertIn('kind = "cron"', org_maintenance_toml)
-            self.assertIn("$kb-organization-maintenance", org_maintenance_toml)
-            self.assertIn("scripts/kb_org_maintainer.py", org_maintenance_toml)
-            self.assertIn("organization-level Sleep-like maintenance", org_maintenance_toml)
-            self.assertIn('schedule_policy = "stable-jitter"', org_maintenance_toml)
-            self.assertIn('schedule_window = "14:00-16:00"', org_maintenance_toml)
-            org_maintenance_minute = rrule_local_minute(toml_string_value(org_maintenance_toml, "rrule"))
-            self.assertGreaterEqual(org_maintenance_minute, ORG_MAINTENANCE_WINDOW[0])
-            self.assertLessEqual(org_maintenance_minute, ORG_MAINTENANCE_WINDOW[1])
-            self.assertIn(f'model = "{automation_runtime["model"]}"', org_maintenance_toml)
-            self.assertIn(f'reasoning_effort = "{automation_runtime["reasoning_effort"]}"', org_maintenance_toml)
-            self.assertIn("desktop settings", org_maintenance_toml)
-            self.assertIn("organization maintenance participation", org_maintenance_toml)
-            self.assertIn("shared exchange layer", org_maintenance_toml)
-            self.assertIn("same editorial posture as local Sleep", org_maintenance_toml)
-            self.assertIn("successful no-op", org_maintenance_toml)
-            self.assertIn("KB preflight", org_maintenance_toml)
-            self.assertIn("organization candidate intake checkpoint", org_maintenance_toml)
-            self.assertIn("content-hash checkpoint", org_maintenance_toml)
-            self.assertIn("mandatory organization similar-card merge checkpoint", org_maintenance_toml)
-            self.assertIn("mandatory organization overloaded-card split checkpoint", org_maintenance_toml)
-            self.assertIn("candidate decision checkpoint", org_maintenance_toml)
-            self.assertIn("Skill safety checkpoint", org_maintenance_toml)
-            self.assertIn("Skill bundle version checkpoint", org_maintenance_toml)
-            self.assertIn("decision-apply checkpoint", org_maintenance_toml)
-            self.assertIn("post-apply organization check", org_maintenance_toml)
-            self.assertIn("GitHub merge-readiness checkpoint", org_maintenance_toml)
-            self.assertIn("organization-review", org_maintenance_toml)
-            self.assertIn("Skill registry", org_maintenance_toml)
-            self.assertIn("duplicate content hashes", org_maintenance_toml)
-            self.assertIn("duplicate entry ids", org_maintenance_toml)
-            self.assertIn("bundle_id", org_maintenance_toml)
-            self.assertIn("original-author updates", org_maintenance_toml)
-            self.assertIn("latest approved version by version_time", org_maintenance_toml)
-            self.assertIn("do not auto-install", org_maintenance_toml)
-            self.assertIn("organization Sleep decision set", org_maintenance_toml)
-            self.assertIn("organization-review as guidance rather than an apply gate", org_maintenance_toml)
-            self.assertIn("exact selected action ids", org_maintenance_toml)
-            self.assertIn("post-apply check result", org_maintenance_toml)
-            self.assertIn("maintenance branch, PR, push, and auto-merge-label result", org_maintenance_toml)
-            self.assertIn("KB postflight", org_maintenance_toml)
-
-            check = build_installation_check(repo_root=repo_root, codex_home=codex_home)
-            self.assertTrue(check["ok"], check["issues"])
-            self.assertEqual(check["automation_runtime"], automation_runtime)
-            self.assertEqual(
-                check["maintenance_skill_names"],
-                [
-                    "kb-sleep-maintenance",
-                    "kb-dream-pass",
-                    "kb-architect-pass",
-                    "kb-organization-contribute",
-                    "kb-organization-maintenance",
-                    "khaos-brain-update",
-                ],
-            )
-            self.assertEqual(
-                [item["name"] for item in check["maintenance_skill_checks"]],
-                [
-                    "kb-sleep-maintenance",
-                    "kb-dream-pass",
-                    "kb-architect-pass",
-                    "kb-organization-contribute",
-                    "kb-organization-maintenance",
-                    "khaos-brain-update",
-                ],
-            )
-            self.assertEqual(
-                [item["id"] for item in check["automation_checks"]],
-                [
-                    "kb-sleep",
-                    "kb-dream",
-                    "kb-architect",
-                    "kb-org-contribute",
-                    "kb-org-maintenance",
-                ],
-            )
-            checklist = {item["id"]: item for item in check["checklist"]}
-            self.assertIn("codex_shell_tools", checklist)
-            self.assertIn("strong_session_defaults", checklist)
-            self.assertIn("canonical_machine_interfaces", checklist)
-            self.assertIn("repo_maintenance_skills", checklist)
-            self.assertIn("kb_sleep_automation", checklist)
-            self.assertIn("kb_architect_automation", checklist)
-            self.assertIn("kb_org_contribute_automation", checklist)
-            self.assertIn("kb_org_maintenance_automation", checklist)
-            self.assertTrue(checklist["codex_shell_tools"]["ok"])
-            self.assertTrue(checklist["repo_maintenance_skills"]["ok"])
-            self.assertTrue(checklist["kb_sleep_automation"]["ok"])
-            self.assertTrue(checklist["kb_architect_automation"]["ok"])
-            self.assertTrue(checklist["kb_org_contribute_automation"]["ok"])
-            self.assertTrue(checklist["kb_org_maintenance_automation"]["ok"])
-            self.assertTrue(checklist["strong_session_defaults"]["ok"])
-            self.assertTrue(checklist["global_agents_block"]["ok"])
-            self.assertTrue(checklist["global_skill_postflight"]["ok"])
-            self.assertTrue(checklist["global_skill_skill_usage"]["ok"])
-            self.assertTrue(checklist["global_skill_subagent_usage"]["ok"])
-            self.assertTrue(checklist["global_skill_phase_checkpoints"]["ok"])
-            self.assertTrue(checklist["global_skill_mistake_priority"]["ok"])
-            self.assertTrue(checklist["global_skill_canonical_interface"]["ok"])
-            self.assertTrue(checklist["global_agents_skill_usage"]["ok"])
-            self.assertTrue(checklist["global_agents_subagent_usage"]["ok"])
-            self.assertTrue(checklist["global_agents_phase_checkpoints"]["ok"])
-            self.assertTrue(checklist["global_agents_mistake_priority"]["ok"])
-            self.assertTrue(checklist["global_agents_canonical_interface"]["ok"])
-            self.assertTrue(checklist["canonical_machine_interfaces"]["ok"])
-
-    def test_organization_automation_times_are_stable_and_windowed(self) -> None:
-        specs = {str(spec["id"]): spec for spec in REPO_AUTOMATION_SPECS}
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            repo_root = Path(tmp_dir) / "repo"
-            identity_path = repo_root / ".local" / "khaos_brain_installation.json"
-            identity_path.parent.mkdir(parents=True, exist_ok=True)
-            identity_path.write_text(
-                json.dumps({"local_installation_id": "stable-installation-a"}),
+            registry.write_text(json.dumps({"skills": []}), encoding="utf-8")
+            unrelated_stale = root / "unrelated-old-registry.json"
+            unrelated_stale.write_text(
+                json.dumps({"skills": [{"skill_id": "kb-architect-pass"}]}),
                 encoding="utf-8",
             )
 
-            contribute_first = automation_rrule_for_spec(specs["kb-org-contribute"], repo_root)
-            contribute_second = automation_rrule_for_spec(specs["kb-org-contribute"], repo_root)
-            maintenance_first = automation_rrule_for_spec(specs["kb-org-maintenance"], repo_root)
-            maintenance_second = automation_rrule_for_spec(specs["kb-org-maintenance"], repo_root)
+            clean = build_architect_retirement_report(codex_home)
+            registry.write_text(
+                json.dumps({"skills": [{"skill_id": "kb-architect-pass"}]}),
+                encoding="utf-8",
+            )
+            active_stale = build_architect_retirement_report(codex_home)
 
-            self.assertEqual(contribute_first, contribute_second)
-            self.assertEqual(maintenance_first, maintenance_second)
-            contribute_minute = rrule_local_minute(contribute_first)
-            maintenance_minute = rrule_local_minute(maintenance_first)
-            self.assertGreaterEqual(contribute_minute, ORG_CONTRIBUTE_WINDOW[0])
-            self.assertLessEqual(contribute_minute, ORG_CONTRIBUTE_WINDOW[1])
-            self.assertGreaterEqual(maintenance_minute, ORG_MAINTENANCE_WINDOW[0])
-            self.assertLessEqual(maintenance_minute, ORG_MAINTENANCE_WINDOW[1])
+        self.assertTrue(clean["ok"], clean)
+        clean_registry_check = {
+            item["id"]: item for item in clean["checks"]
+        }["global_registry_route_absent"]
+        self.assertEqual(clean_registry_check["details"], str(registry))
+        self.assertNotEqual(clean_registry_check["details"], str(unrelated_stale))
+        self.assertFalse(active_stale["ok"])
+        registry_check = {
+            item["id"]: item for item in active_stale["checks"]
+        }["global_registry_route_absent"]
+        self.assertFalse(registry_check["ok"])
 
-        first_machine_rrule = contribute_first
-        staggered = False
-        for index in range(1, 8):
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                repo_root = Path(tmp_dir) / "repo"
-                identity_path = repo_root / ".local" / "khaos_brain_installation.json"
-                identity_path.parent.mkdir(parents=True, exist_ok=True)
-                identity_path.write_text(
-                    json.dumps({"local_installation_id": f"stable-installation-b-{index}"}),
+    def test_real_upgrade_wrapper_keeps_pause_until_final_restore_transaction(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            codex_home = root / ".codex"
+            shell_bin, git_real, rg_source = _write_fake_tools(root)
+            sleep = codex_home / "automations/kb-sleep/automation.toml"
+            dream = codex_home / "automations/kb-dream/automation.toml"
+            architect = codex_home / "automations/kb-architect/automation.toml"
+            for path, status in ((sleep, "ACTIVE"), (dream, "PAUSED"), (architect, "ACTIVE")):
+                path.parent.mkdir(parents=True)
+                path.write_text(f'status = "{status}"\n', encoding="utf-8")
+            router_result = {
+                "ok": True,
+                "refresh": {"decision": "pass", "registry_hash": "A" * 64},
+                "live_freshness": {"ok": True},
+                "surface_after_check": {"surface_hash": "B" * 64},
+            }
+
+            with patch(
+                "local_kb.maintenance_migration.run_maintenance_migration",
+                return_value={"ok": True, "status": "committed", "migration_id": "fixture"},
+            ), patch(
+                "local_kb.install.build_installation_check",
+                return_value={"ok": True, "issues": []},
+            ), patch(
+                "local_kb.install._refresh_and_verify_skillguard_global_router",
+                return_value=router_result,
+            ):
+                payload = install_codex_integration(
+                    repo_root,
+                    codex_home,
+                    shell_bin_dir=shell_bin,
+                    git_executable=git_real,
+                    rg_source=rg_source,
+                    persist_user_shell_path=False,
+                    run_upgrade_assurance=False,
+                )
+
+            self.assertTrue(payload["paused_install_transaction"]["ok"])
+            self.assertNotEqual(
+                payload["paused_install_transaction"]["transaction_id"],
+                payload["install_transaction"]["transaction_id"],
+            )
+            self.assertEqual(_automation_status(sleep), "ACTIVE")
+            self.assertEqual(_automation_status(dream), "PAUSED")
+            self.assertFalse(architect.parent.exists())
+            self.assertEqual(payload["upgrade_attempt"]["status"], "completed")
+            phases = [
+                row["phase"]
+                for row in payload["upgrade_attempt"]["checkpoint_refs"]
+            ]
+            self.assertLess(
+                phases.index("final_install_transaction_committed"),
+                phases.index("final_router_current"),
+            )
+            self.assertTrue(payload["global_router_live_freshness"]["ok"])
+            self.assertIn(
+                payload["skillguard_validation_toolchain"]["status"],
+                {"frozen", "inherited_frozen"},
+            )
+            self.assertIn(
+                payload["flowguard_validation_toolchain"]["status"],
+                {"frozen", "inherited_frozen"},
+            )
+            self.assertIn(
+                payload["logicguard_validation_toolchain"]["status"],
+                {"frozen", "inherited_frozen"},
+            )
+            self.assertLess(
+                phases.index("validation_toolchain_frozen"),
+                phases.index("paused_install_transaction_committed"),
+            )
+
+    def test_real_upgrade_drains_observations_admitted_during_assurance(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            codex_home = root / ".codex"
+            shell_bin, git_real, rg_source = _write_fake_tools(root)
+            initial = {
+                "ok": True,
+                "status": "committed",
+                "migration_id": "fixture-initial",
+            }
+            final = {
+                "ok": True,
+                "status": "reconciled",
+                "migration_id": "fixture-final",
+                "logical_debt_reconciliation": {"pass_count": 1},
+            }
+            router_result = {
+                "ok": True,
+                "refresh": {
+                    "decision": "pass",
+                    "registry_path": str(
+                        codex_home / ".skillguard/global-router/global_registry.json"
+                    ),
+                    "registry_hash": "A" * 64,
+                },
+                "live_freshness": {"ok": True},
+                "surface_after_check": {"surface_hash": "B" * 64},
+            }
+
+            with patch(
+                "local_kb.maintenance_migration.run_maintenance_migration",
+                side_effect=[initial, final],
+            ) as migration, patch(
+                "local_kb.maintenance_migration.check_migration",
+                return_value={"ok": True, "issues": []},
+            ), patch(
+                "scripts.evaluate_kb_retrieval.build_report",
+                return_value={
+                    "ok": True,
+                    "metrics": {"useful_top3_rate": 1.0},
+                    "threshold_results": {"active_index_current": True},
+                },
+            ), patch(
+                "local_kb.install._refresh_and_verify_skillguard_global_router",
+                return_value=router_result,
+            ), patch(
+                "local_kb.install._run_pre_restore_upgrade_assurance",
+                return_value={"ok": True, "failed_checks": []},
+            ), patch(
+                "local_kb.install.build_installation_check",
+                return_value={"ok": True, "issues": []},
+            ):
+                payload = install_codex_integration(
+                    repo_root,
+                    codex_home,
+                    shell_bin_dir=shell_bin,
+                    git_executable=git_real,
+                    rg_source=rg_source,
+                    persist_user_shell_path=False,
+                )
+
+            self.assertEqual(migration.call_count, 2)
+            self.assertEqual(payload["initial_history_migration"], initial)
+            self.assertEqual(payload["history_migration"], final)
+            self.assertEqual(payload["post_assurance_history_migration"], final)
+            self.assertTrue(payload["post_assurance_data_convergence"]["ok"])
+            self.assertEqual(
+                payload["post_assurance_data_convergence"]["attempt_count"], 1
+            )
+            phases = [
+                row["phase"] for row in payload["upgrade_attempt"]["checkpoint_refs"]
+            ]
+            self.assertLess(
+                phases.index("aggregate_assurance_passed"),
+                phases.index("post_assurance_history_current"),
+            )
+            self.assertLess(
+                phases.index("post_assurance_history_current"),
+                phases.index("final_install_transaction_committed"),
+            )
+
+    def test_post_assurance_data_convergence_failure_keeps_survivors_paused(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            codex_home = root / ".codex"
+            shell_bin, git_real, rg_source = _write_fake_tools(root)
+            initial = {
+                "ok": True,
+                "status": "committed",
+                "migration_id": "fixture-initial",
+            }
+            failed = {
+                "ok": False,
+                "status": "paused_failed",
+                "issues": ["late observation debt kept changing"],
+            }
+            router_result = {
+                "ok": True,
+                "refresh": {
+                    "decision": "pass",
+                    "registry_path": str(
+                        codex_home / ".skillguard/global-router/global_registry.json"
+                    ),
+                    "registry_hash": "A" * 64,
+                },
+                "live_freshness": {"ok": True},
+                "surface_after_check": {"surface_hash": "B" * 64},
+            }
+
+            with patch(
+                "local_kb.maintenance_migration.run_maintenance_migration",
+                side_effect=[initial, failed, failed, failed, failed],
+            ), patch(
+                "local_kb.install._refresh_and_verify_skillguard_global_router",
+                return_value=router_result,
+            ), patch(
+                "local_kb.install._run_pre_restore_upgrade_assurance",
+                return_value={"ok": True, "failed_checks": []},
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError, "post-assurance data convergence failed"
+                ):
+                    install_codex_integration(
+                        repo_root,
+                        codex_home,
+                        shell_bin_dir=shell_bin,
+                        git_executable=git_real,
+                        rg_source=rg_source,
+                        persist_user_shell_path=False,
+                    )
+
+            attempt = latest_upgrade_attempt(codex_home)
+            self.assertEqual(attempt["status"], "failed")
+            phases = [row["phase"] for row in attempt["checkpoint_refs"]]
+            self.assertIn("aggregate_assurance_passed", phases)
+            self.assertNotIn("final_install_transaction_committed", phases)
+            for automation_id in SURVIVING_AUTOMATIONS:
+                self.assertEqual(
+                    _automation_status(
+                        codex_home / "automations" / automation_id / "automation.toml"
+                    ),
+                    "PAUSED",
+                )
+
+    def test_failed_post_commit_assurance_keeps_old_manifest_and_durable_attempt(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            codex_home = root / ".codex"
+            shell_bin, git_real, rg_source = _write_fake_tools(root)
+            old_manifest = {"sentinel": "last-known-good"}
+            state_path = install_state_path(codex_home)
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_text(json.dumps(old_manifest), encoding="utf-8")
+            update_state = root / "obsolete-update-state.json"
+            obsolete_update_bytes = (
+                b'{"schema_version":1,"status":"failed",'
+                b'"error":"SkillGuard installation identity is not current"}\r\n'
+            )
+            update_state.write_bytes(obsolete_update_bytes)
+            migration_calls: list[dict[str, object]] = []
+
+            def migrate_before_assurance(
+                _repo_root: Path, *, install_receipt: dict[str, object]
+            ) -> dict[str, object]:
+                self.assertEqual(install_receipt.get("status"), "committed")
+                migration_calls.append(dict(install_receipt))
+                update_state.write_text(
+                    '{"schema_version":1,"status":"current","error":""}\n',
                     encoding="utf-8",
                 )
-                if automation_rrule_for_spec(specs["kb-org-contribute"], repo_root) != first_machine_rrule:
-                    staggered = True
-                    break
+                return {
+                    "ok": True,
+                    "status": "committed",
+                    "residual_retired_state_count": 0,
+                }
 
-        self.assertTrue(staggered)
+            def fail_after_current_state(*_args: object, **_kwargs: object) -> dict:
+                self.assertIn('"status":"current"', update_state.read_text(encoding="utf-8"))
+                raise RuntimeError("fixture aggregate failure")
+            router_result = {
+                "ok": True,
+                "refresh": {
+                    "decision": "pass",
+                    "registry_path": str(
+                        codex_home
+                        / ".skillguard/global-router/global_registry.json"
+                    ),
+                    "registry_hash": "A" * 64,
+                },
+                "live_freshness": {"ok": True},
+                "surface_after_check": {"surface_hash": "B" * 64},
+            }
 
-    def test_installer_preserves_user_paused_organization_automations(self) -> None:
-        repo_root = Path(__file__).resolve().parents[1]
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            codex_home = Path(tmp_dir) / ".codex"
-            shell_bin_dir = Path(tmp_dir) / "shell-bin"
-            git_real = Path(tmp_dir) / "tool-src" / "git-real.cmd"
-            rg_source = Path(tmp_dir) / "tool-src" / "rg-source.exe"
-            write_cmd(git_real, "echo git version test")
-            rg_source.parent.mkdir(parents=True, exist_ok=True)
-            rg_source.write_bytes(b"rg-binary")
-
-            install_codex_integration(
-                repo_root=repo_root,
-                codex_home=codex_home,
-                shell_bin_dir=shell_bin_dir,
-                git_executable=git_real,
-                rg_source=rg_source,
-                persist_user_shell_path=False,
-            )
-            for automation_id in ("kb-org-contribute", "kb-org-maintenance"):
-                path = codex_home / "automations" / automation_id / "automation.toml"
-                text = path.read_text(encoding="utf-8")
-                path.write_text(text.replace('status = "ACTIVE"', 'status = "PAUSED"'), encoding="utf-8")
-
-            install_codex_integration(
-                repo_root=repo_root,
-                codex_home=codex_home,
-                shell_bin_dir=shell_bin_dir,
-                git_executable=git_real,
-                rg_source=rg_source,
-                persist_user_shell_path=False,
-            )
-
-            for automation_id in ("kb-org-contribute", "kb-org-maintenance"):
-                text = (codex_home / "automations" / automation_id / "automation.toml").read_text(encoding="utf-8")
-                self.assertIn('status = "PAUSED"', text)
-                self.assertIn("user_paused = true", text)
-                self.assertIn('model_policy = "strongest-available"', text)
-                self.assertIn('reasoning_effort_policy = "deepest"', text)
-            check = build_installation_check(repo_root=repo_root, codex_home=codex_home)
-            self.assertTrue(check["ok"], check["issues"])
-
-    def test_automation_runtime_prefers_newest_full_gpt_model_with_deepest_reasoning(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            codex_home = Path(tmp_dir) / ".codex"
-            codex_home.mkdir(parents=True, exist_ok=True)
-            (codex_home / "config.toml").write_text(
-                'model = "gpt-5.4"\nmodel_reasoning_effort = "medium"\n',
-                encoding="utf-8",
-            )
-            (codex_home / "models_cache.json").write_text(
-                json.dumps(
-                    {
-                        "models": [
-                            {
-                                "slug": "gpt-5.4",
-                                "supported_reasoning_levels": [{"effort": "xhigh"}],
-                            },
-                            {
-                                "slug": "gpt-6.1",
-                                "supported_reasoning_levels": [
-                                    {"effort": "high"},
-                                    {"effort": "xhigh"},
-                                ],
-                            },
-                            {
-                                "slug": "codex-auto-review",
-                                "supported_reasoning_levels": [{"effort": "xhigh"}],
-                            },
-                        ]
-                    }
-                ),
-                encoding="utf-8",
-            )
-
-            with mock.patch.dict(
-                os.environ,
-                {AUTOMATION_MODEL_ENV_VAR: "", AUTOMATION_REASONING_EFFORT_ENV_VAR: ""},
+            with patch(
+                "local_kb.maintenance_migration.run_maintenance_migration",
+                return_value={
+                    "ok": True,
+                    "status": "committed",
+                    "migration_id": "fixture",
+                },
+            ), patch(
+                "local_kb.software_update.update_state_path",
+                return_value=update_state,
+            ), patch(
+                "local_kb.software_update.canonicalize_obsolete_update_state",
+                side_effect=migrate_before_assurance,
+            ), patch(
+                "local_kb.install._refresh_and_verify_skillguard_global_router",
+                return_value=router_result,
+            ), patch(
+                "local_kb.install._run_pre_restore_upgrade_assurance",
+                side_effect=fail_after_current_state,
             ):
-                runtime = resolve_automation_runtime(codex_home)
+                with self.assertRaisesRegex(RuntimeError, "fixture aggregate failure"):
+                    install_codex_integration(
+                        repo_root,
+                        codex_home,
+                        shell_bin_dir=shell_bin,
+                        git_executable=git_real,
+                        rg_source=rg_source,
+                        persist_user_shell_path=False,
+                    )
 
-            self.assertEqual(runtime["model"], "gpt-6.1")
-            self.assertEqual(runtime["reasoning_effort"], "xhigh")
-            self.assertEqual(runtime["model_policy"], "strongest-available")
-            self.assertEqual(runtime["reasoning_effort_policy"], "deepest")
-
-    def test_automation_runtime_keeps_newest_model_when_xhigh_is_unavailable(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            codex_home = Path(tmp_dir) / ".codex"
-            codex_home.mkdir(parents=True, exist_ok=True)
-            (codex_home / "config.toml").write_text(
-                'model = "gpt-5.5"\nmodel_reasoning_effort = "xhigh"\n',
-                encoding="utf-8",
+            self.assertEqual(
+                json.loads(state_path.read_text(encoding="utf-8")), old_manifest
             )
-            (codex_home / "models_cache.json").write_text(
-                json.dumps(
-                    {
-                        "models": [
-                            {
-                                "slug": "gpt-5.5",
-                                "supported_reasoning_levels": [{"effort": "xhigh"}],
-                            },
-                            {
-                                "slug": "gpt-7",
-                                "supported_reasoning_levels": [
-                                    {"effort": "medium"},
-                                    {"effort": "high"},
-                                ],
-                            },
-                        ]
-                    }
+            self.assertEqual(len(migration_calls), 1)
+            self.assertEqual(update_state.read_bytes(), obsolete_update_bytes)
+            attempt = latest_upgrade_attempt(codex_home)
+            self.assertEqual(attempt["status"], "failed")
+            self.assertEqual(attempt["phase"], "failed_paused_recoverable")
+            phases = [row["phase"] for row in attempt["checkpoint_refs"]]
+            self.assertIn("paused_install_transaction_committed", phases)
+            self.assertIn("pre_assurance_router_current", phases)
+            for automation_id in SURVIVING_AUTOMATIONS:
+                self.assertEqual(
+                    _automation_status(
+                        codex_home / "automations" / automation_id / "automation.toml"
+                    ),
+                    "PAUSED",
+                )
+
+    def test_router_refresh_retries_when_active_skillguard_surface_drifts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            codex_home.mkdir()
+            refresh = {
+                "decision": "pass",
+                "registry_path": str(
+                    codex_home / ".skillguard/global-router/global_registry.json"
                 ),
-                encoding="utf-8",
-            )
-
-            with mock.patch.dict(
-                os.environ,
-                {AUTOMATION_MODEL_ENV_VAR: "", AUTOMATION_REASONING_EFFORT_ENV_VAR: ""},
+            }
+            surfaces = [
+                {"surface_hash": "A" * 64},
+                {"surface_hash": "B" * 64},
+                {"surface_hash": "C" * 64},
+                {"surface_hash": "C" * 64},
+            ]
+            with patch(
+                "local_kb.install._refresh_skillguard_global_router",
+                return_value=refresh,
+            ) as refresh_mock, patch(
+                "local_kb.install._verify_skillguard_global_router",
+                return_value={"ok": True},
+            ), patch(
+                "local_kb.install._skillguard_router_surface",
+                side_effect=surfaces,
             ):
-                runtime = resolve_automation_runtime(codex_home)
+                result = _refresh_and_verify_skillguard_global_router(codex_home)
 
-            self.assertEqual(runtime["model"], "gpt-7")
-            self.assertEqual(runtime["reasoning_effort"], "high")
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["attempt_number"], 2)
+            self.assertEqual(refresh_mock.call_count, 2)
 
-    def test_install_preserves_existing_global_agents_content(self) -> None:
-        repo_root = Path(__file__).resolve().parents[1]
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            codex_home = Path(tmp_dir) / ".codex"
-            shell_bin_dir = Path(tmp_dir) / "shell-bin"
-            git_real = Path(tmp_dir) / "tool-src" / "git-real.cmd"
-            rg_source = Path(tmp_dir) / "tool-src" / "rg-source.exe"
-            write_cmd(git_real, "echo git version test")
-            rg_source.parent.mkdir(parents=True, exist_ok=True)
-            rg_source.write_bytes(b"rg-binary")
-            agents_path = global_agents_path(codex_home)
-            agents_path.parent.mkdir(parents=True, exist_ok=True)
-            agents_path.write_text("## User Custom Defaults\n\n- Keep this line.\n", encoding="utf-8")
-
-            install_codex_integration(
-                repo_root=repo_root,
-                codex_home=codex_home,
-                shell_bin_dir=shell_bin_dir,
-                git_executable=git_real,
-                rg_source=rg_source,
-                persist_user_shell_path=False,
+    def test_router_live_check_uses_canonical_registry_not_display_projection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            registry = (
+                codex_home
+                / ".skillguard/global-router/global_registry.json"
             )
+            registry.parent.mkdir(parents=True)
+            registry.write_text("{}", encoding="utf-8")
+            seen: list[Path] = []
 
-            global_agents_text = agents_path.read_text(encoding="utf-8")
-            self.assertIn("## User Custom Defaults", global_agents_text)
-            self.assertIn("- Keep this line.", global_agents_text)
-            self.assertIn("BEGIN MANAGED PREDICTIVE KB DEFAULTS", global_agents_text)
-            self.assertEqual(global_agents_text.count("BEGIN MANAGED PREDICTIVE KB DEFAULTS"), 1)
+            def checked(_home: Path, *, command: str, registry_path: Path) -> dict:
+                seen.append(registry_path)
+                return {"ok": True, "decision": "pass", "command": command}
 
-    def test_check_fails_when_shell_tool_artifacts_are_missing(self) -> None:
+            with patch(
+                "local_kb.install._run_skillguard_router_check",
+                side_effect=checked,
+            ):
+                result = _verify_skillguard_global_router(
+                    codex_home,
+                    {
+                        "registry_path": "AppData/Local/Temp/redacted/.codex/.skillguard/global-router/global_registry.json",
+                        "registry_hash": "A" * 64,
+                    },
+                )
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(seen, [registry.resolve(), registry.resolve()])
+
+    def test_sleep_and_dream_prompts_are_automatic_and_convergent(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        sleep = (root / ".agents/skills/local-kb-retrieve/MAINTENANCE_PROMPT.md").read_text(encoding="utf-8")
+        dream = (root / ".agents/skills/local-kb-retrieve/DREAM_PROMPT.md").read_text(encoding="utf-8")
+        self.assertIn("kb_sleep.py", sleep)
+        self.assertIn("exactly one current disposition", sleep)
+        self.assertIn("Do not ask a human", sleep)
+        self.assertIn("no_delta_closed", dream)
+        self.assertIn("typed idempotent Sleep handoff", dream)
+        self.assertIn("Never directly modify cards", dream)
+
+    def test_fixture_install_requires_isolated_shell_tools(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            codex_home = Path(tmp_dir) / ".codex"
-            shell_bin_dir = Path(tmp_dir) / "shell-bin"
-            git_real = Path(tmp_dir) / "tool-src" / "git-real.cmd"
-            rg_source = Path(tmp_dir) / "tool-src" / "rg-source.exe"
-            write_cmd(git_real, "echo git version test")
-            rg_source.parent.mkdir(parents=True, exist_ok=True)
-            rg_source.write_bytes(b"rg-binary")
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            with self.assertRaisesRegex(RuntimeError, "explicit shell_bin_dir"):
+                install_codex_integration(
+                    repo_root=repo_root,
+                    codex_home=codex_home,
+                    persist_user_shell_path=False,
+                    run_history_migration=False,
+                )
 
-            install_codex_integration(
-                repo_root=repo_root,
-                codex_home=codex_home,
-                shell_bin_dir=shell_bin_dir,
-                git_executable=git_real,
-                rg_source=rg_source,
-                persist_user_shell_path=False,
+    def test_source_validation_rejects_compiler_identity_change(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        installed_skillguard = Path.home() / ".codex" / "skills" / "skillguard"
+        self.assertTrue(installed_skillguard.is_dir())
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            copied_skillguard = codex_home / "skills" / "skillguard"
+            shutil.copytree(installed_skillguard, copied_skillguard)
+            compiler = copied_skillguard / "scripts" / "skillguard_compile.py"
+            real_run = subprocess.run
+            mutated = False
+
+            def run_and_mutate(*args, **kwargs):  # type: ignore[no-untyped-def]
+                nonlocal mutated
+                result = real_run(*args, **kwargs)
+                command = args[0] if args else kwargs.get("args", ())
+                if (
+                    not mutated
+                    and len(command) > 1
+                    and Path(command[1]).resolve() == compiler.resolve()
+                ):
+                    compiler.write_bytes(compiler.read_bytes() + b"\n")
+                    mutated = True
+                return result
+
+            manifest_digest = tree_manifest(copied_skillguard)["digest"]
+            with patch.dict(
+                os.environ,
+                {
+                    "KHAOS_BRAIN_SKILLGUARD_VALIDATION_ROOT": str(copied_skillguard),
+                    "KHAOS_BRAIN_SKILLGUARD_VALIDATION_DIGEST": str(
+                        manifest_digest
+                    ),
+                },
+            ), patch(
+                "local_kb.install.subprocess.run", side_effect=run_and_mutate
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError, "Validation identity changed during source validation"
+                ):
+                    _check_repo_skillguard_current_sources(repo_root, codex_home)
+            self.assertTrue(mutated)
+
+    def test_skillguard_validation_toolchain_is_a_stable_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            codex_home = root / ".codex"
+            live = codex_home / "skills" / "skillguard"
+            scripts = live / "scripts"
+            scripts.mkdir(parents=True)
+            (scripts / "skillguard_compile.py").write_text(
+                "print('compiler')\n", encoding="utf-8"
             )
-
-            (shell_bin_dir / "rg.exe").unlink()
-
-            check = build_installation_check(repo_root=repo_root, codex_home=codex_home)
-            self.assertFalse(check["ok"])
-            checklist = {item["id"]: item for item in check["checklist"]}
-            self.assertFalse(checklist["codex_shell_tools"]["ok"])
+            (scripts / "skillguard.py").write_text(
+                "print('cli')\n", encoding="utf-8"
+            )
+            destination = root / "receipts" / "skillguard"
+            with patch.dict(
+                os.environ,
+                {
+                    "KHAOS_BRAIN_SKILLGUARD_VALIDATION_ROOT": "",
+                    "KHAOS_BRAIN_SKILLGUARD_VALIDATION_DIGEST": "",
+                },
+            ):
+                receipt = _freeze_skillguard_validation_toolchain(
+                    codex_home, destination
+                )
+            self.assertEqual(receipt["status"], "frozen")
+            self.assertEqual(
+                receipt["manifest"]["digest"], tree_manifest(destination)["digest"]
+            )
+            shutil.rmtree(live)
             self.assertTrue(
-                any("Codex shell rg binary is missing" in issue for issue in check["issues"]),
-                check["issues"],
+                _skillguard_compiler_path(codex_home, destination).is_file()
+            )
+            with self.assertRaisesRegex(RuntimeError, "identity changed"):
+                _require_live_skillguard_matches_snapshot(receipt)
+
+    def test_flowguard_validation_toolchain_is_a_stable_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            live = root / "live" / "flowguard"
+            live.mkdir(parents=True)
+            (live / "__init__.py").write_text(
+                "SCHEMA_VERSION = 'test'\n", encoding="utf-8"
+            )
+            (live / "engine.py").write_text("VALUE = 1\n", encoding="utf-8")
+            destination = root / "receipts" / "python" / "flowguard"
+            with patch.dict(
+                os.environ,
+                {
+                    "KHAOS_BRAIN_FLOWGUARD_VALIDATION_ROOT": "",
+                    "KHAOS_BRAIN_FLOWGUARD_VALIDATION_DIGEST": "",
+                },
+            ):
+                receipt = _freeze_flowguard_validation_toolchain(
+                    destination, source_root=live
+                )
+            self.assertEqual(receipt["status"], "frozen")
+            self.assertEqual(
+                receipt["manifest"]["digest"], tree_manifest(destination)["digest"]
+            )
+            shutil.rmtree(live)
+            self.assertTrue((destination / "__init__.py").is_file())
+            with self.assertRaisesRegex(RuntimeError, "identity changed"):
+                _require_live_flowguard_matches_snapshot(receipt)
+
+    def test_logicguard_validation_toolchain_is_a_stable_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            live = root / "live" / "logicguard"
+            live.mkdir(parents=True)
+            (live / "__init__.py").write_text(
+                "SCHEMA_VERSION = 'test'\n", encoding="utf-8"
+            )
+            (live / "engine.py").write_text("VALUE = 1\n", encoding="utf-8")
+            destination = root / "receipts" / "python" / "logicguard"
+            with patch.dict(
+                os.environ,
+                {
+                    "KHAOS_BRAIN_LOGICGUARD_VALIDATION_ROOT": "",
+                    "KHAOS_BRAIN_LOGICGUARD_VALIDATION_DIGEST": "",
+                },
+            ):
+                receipt = _freeze_logicguard_validation_toolchain(
+                    destination, source_root=live
+                )
+            self.assertEqual(receipt["status"], "frozen")
+            self.assertEqual(
+                receipt["manifest"]["digest"], tree_manifest(destination)["digest"]
+            )
+            shutil.rmtree(live)
+            self.assertTrue((destination / "__init__.py").is_file())
+            with self.assertRaisesRegex(RuntimeError, "identity changed"):
+                _require_live_logicguard_matches_snapshot(receipt)
+
+    def test_pre_restore_assurance_keeps_baseline_install_identity_environment(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            flowguard_root = root / "validation" / "python" / "flowguard"
+            flowguard_root.mkdir(parents=True)
+            logicguard_root = root / "validation" / "python" / "logicguard"
+            logicguard_root.mkdir(parents=True)
+            baseline_pythonpath = str(root / "baseline-pythonpath")
+            injected_pythonpath = os.pathsep.join(
+                (str(flowguard_root.parent), baseline_pythonpath)
+            )
+            captured: dict[str, object] = {}
+
+            def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess:
+                captured["environment"] = dict(kwargs["env"])
+                return subprocess.CompletedProcess(
+                    args=args,
+                    returncode=0,
+                    stdout=json.dumps({"ok": True}),
+                    stderr="",
+                )
+
+            with patch.dict(
+                os.environ,
+                {
+                    "PYTHONPATH": injected_pythonpath,
+                    "KHAOS_BRAIN_INSTALLATION_IDENTITY_PYTHONPATH_PRESENT": "1",
+                    "KHAOS_BRAIN_INSTALLATION_IDENTITY_PYTHONPATH_VALUE": baseline_pythonpath,
+                },
+            ), patch("local_kb.install.run_with_timeout_cleanup", side_effect=fake_run):
+                result = _run_pre_restore_upgrade_assurance(
+                    root,
+                    root / ".codex",
+                    skillguard_validation_toolchain={
+                        "snapshot_root": str(root / "validation" / "skillguard"),
+                        "manifest": {"digest": "S" * 64},
+                    },
+                    flowguard_validation_toolchain={
+                        "snapshot_root": str(flowguard_root),
+                        "manifest": {"digest": "F" * 64},
+                    },
+                    logicguard_validation_toolchain={
+                        "snapshot_root": str(logicguard_root),
+                        "manifest": {"digest": "L" * 64},
+                    },
+                )
+
+            self.assertTrue(result["ok"])
+            environment = captured["environment"]
+            self.assertEqual(environment["PYTHONPATH"], injected_pythonpath)
+            self.assertEqual(
+                environment["KHAOS_BRAIN_LOGICGUARD_VALIDATION_ROOT"],
+                str(logicguard_root),
+            )
+            self.assertEqual(
+                environment["KHAOS_BRAIN_LOGICGUARD_VALIDATION_DIGEST"],
+                "L" * 64,
+            )
+            self.assertEqual(
+                environment[
+                    "KHAOS_BRAIN_INSTALLATION_IDENTITY_PYTHONPATH_VALUE"
+                ],
+                baseline_pythonpath,
             )
 
-    def test_check_skips_windows_shell_tools_for_non_windows_partial_install(self) -> None:
+    def test_install_is_transactional_current_and_retires_exact_architect(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            codex_home = Path(tmp_dir) / ".codex"
-            shell_bin_dir = Path(tmp_dir) / "shell-bin"
-            git_real = Path(tmp_dir) / "tool-src" / "git-real.cmd"
-            rg_source = Path(tmp_dir) / "tool-src" / "rg-source.exe"
-            write_cmd(git_real, "echo git version test")
-            rg_source.parent.mkdir(parents=True, exist_ok=True)
-            rg_source.write_bytes(b"rg-binary")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            codex_home = root / ".codex"
+            shell_bin, git_real, rg_source = _write_fake_tools(root)
 
-            install_codex_integration(
-                repo_root=repo_root,
-                codex_home=codex_home,
-                shell_bin_dir=shell_bin_dir,
+            # Model a supported old machine, including exact retired ids and a
+            # similarly named user surface that must remain untouched.
+            (codex_home / "skills/kb-architect-pass").mkdir(parents=True)
+            (codex_home / "skills/kb-architect-pass/SKILL.md").write_text("legacy", encoding="utf-8")
+            (codex_home / "automations/kb-architect").mkdir(parents=True)
+            (codex_home / "automations/kb-architect/automation.toml").write_text("id='legacy'", encoding="utf-8")
+            (codex_home / "skills/kb-architect-pass-personal").mkdir(parents=True)
+            (codex_home / "skills/kb-architect-pass-personal/keep.txt").write_text("user", encoding="utf-8")
+
+            payload = install_codex_integration(
+                repo_root,
+                codex_home,
+                shell_bin_dir=shell_bin,
                 git_executable=git_real,
                 rg_source=rg_source,
                 persist_user_shell_path=False,
+                run_history_migration=False,
             )
 
-            (shell_bin_dir / "rg.exe").unlink()
-            manifest_path = install_state_path(codex_home)
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            manifest["shell_tools"]["rg_installed"] = False
-            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            self.assertEqual(set(payload["maintenance_skill_names"]), SURVIVING_SKILLS)
+            self.assertEqual(set(payload["automation_ids"]), SURVIVING_AUTOMATIONS)
+            self.assertEqual(set(MAINTENANCE_SKILL_NAMES), SURVIVING_SKILLS)
+            self.assertEqual({item["id"] for item in REPO_AUTOMATION_SPECS}, SURVIVING_AUTOMATIONS)
+            self.assertEqual(tuple(payload["retired_skill_ids"]), RETIRED_MAINTENANCE_SKILL_IDS)
+            self.assertEqual(tuple(payload["retired_automation_ids"]), RETIRED_AUTOMATION_IDS)
+            self.assertFalse((codex_home / "skills/kb-architect-pass").exists())
+            self.assertFalse((codex_home / "automations/kb-architect").exists())
+            self.assertTrue((codex_home / "skills/kb-architect-pass-personal/keep.txt").exists())
 
-            with mock.patch("local_kb.install.platform.system", return_value="Linux"):
-                check = build_installation_check(repo_root=repo_root, codex_home=codex_home)
+            transaction = payload["install_transaction"]
+            self.assertTrue(transaction["ok"])
+            self.assertTrue(transaction["receipt_hash"])
+            self.assertTrue(Path(transaction["journal_path"]).exists())
+            self.assertTrue(Path(transaction["backup_root"]).exists())
+            source_checks = {
+                row["skill_id"]: row for row in payload["skillguard_source_checks"]
+            }
+            self.assertEqual(set(source_checks), SURVIVING_SKILLS)
+            authority_receipts = transaction["skillguard_authority_receipts"]
+            self.assertEqual(set(authority_receipts), SURVIVING_SKILLS)
+            for skill in SURVIVING_SKILLS:
+                source_check = source_checks[skill]
+                self.assertEqual(source_check["status"], "current")
+                self.assertTrue(source_check["ok"])
+                self.assertRegex(source_check["compiler_sha256"], r"^[0-9a-f]{64}$")
+                self.assertRegex(source_check["generator_sha256"], r"^[0-9a-f]{64}$")
+                self.assertRegex(source_check["receipt_hash"], r"^[0-9a-f]{64}$")
+                authority = authority_receipts[skill]
+                self.assertEqual(
+                    authority["decision"], "validated-current-replaces-non-current"
+                )
+                self.assertFalse(authority["semantic_comparison_performed"])
+                self.assertEqual(
+                    authority["incoming_validation"]["receipt_hash"],
+                    source_check["receipt_hash"],
+                )
+            for skill in SURVIVING_SKILLS:
+                root_path = codex_home / "skills" / skill
+                self.assertTrue((root_path / "SKILL.md").exists())
+                self.assertTrue((root_path / ".skillguard/contract-source.json").exists())
+                self.assertTrue((root_path / ".skillguard/compiled-contract.json").exists())
+                self.assertTrue((root_path / ".skillguard/check-manifest.json").exists())
+            for automation in SURVIVING_AUTOMATIONS:
+                self.assertTrue((codex_home / "automations" / automation / "automation.toml").exists())
+            self.assertTrue(global_agents_path(codex_home).exists())
 
-            checklist = {item["id"]: item for item in check["checklist"]}
+            check = build_installation_check(repo_root, codex_home)
             self.assertTrue(check["ok"], check["issues"])
-            self.assertTrue(checklist["codex_shell_tools"]["ok"])
-            self.assertTrue(
-                any("shell git/rg shim check skipped" in warning for warning in check["warnings"]),
-                check["warnings"],
-            )
+            checklist = {item["id"]: item for item in check["checklist"]}
+            self.assertTrue(checklist["retired_architect_surfaces"]["ok"])
+            self.assertTrue(checklist["transactional_install_receipt"]["ok"])
+            self.assertTrue(checklist["repo_maintenance_skills"]["ok"])
+            self.assertTrue(checklist["khaos_brain_system_update_automation"]["ok"])
 
-    def test_check_fails_when_mistake_priority_wording_is_missing(self) -> None:
+    def test_reinstall_preserves_pause_state_for_every_surviving_automation(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            codex_home = Path(tmp_dir) / ".codex"
-            shell_bin_dir = Path(tmp_dir) / "shell-bin"
-            git_real = Path(tmp_dir) / "tool-src" / "git-real.cmd"
-            rg_source = Path(tmp_dir) / "tool-src" / "rg-source.exe"
-            write_cmd(git_real, "echo git version test")
-            rg_source.parent.mkdir(parents=True, exist_ok=True)
-            rg_source.write_bytes(b"rg-binary")
-
-            install_codex_integration(
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            codex_home = root / ".codex"
+            shell_bin, git_real, rg_source = _write_fake_tools(root)
+            kwargs = dict(
                 repo_root=repo_root,
                 codex_home=codex_home,
-                shell_bin_dir=shell_bin_dir,
+                shell_bin_dir=shell_bin,
                 git_executable=git_real,
                 rg_source=rg_source,
                 persist_user_shell_path=False,
+                run_history_migration=False,
             )
+            install_codex_integration(**kwargs)
+            for automation in ("kb-sleep", "kb-dream", "khaos-brain-system-update"):
+                path = codex_home / "automations" / automation / "automation.toml"
+                text = path.read_text(encoding="utf-8").replace('status = "ACTIVE"', 'status = "PAUSED"')
+                text = text.replace("user_paused = false", "user_paused = true")
+                path.write_text(text, encoding="utf-8")
 
-            openai_path = codex_home / "skills" / "predictive-kb-preflight" / "agents" / "openai.yaml"
-            openai_text = openai_path.read_text(encoding="utf-8")
-            openai_path.write_text(openai_text.replace("mistake-first priority", "postflight priority"), encoding="utf-8")
-
-            agents_path = global_agents_path(codex_home)
-            agents_text = agents_path.read_text(encoding="utf-8")
-            agents_path.write_text(agents_text.replace("mistake-first priority", "postflight priority"), encoding="utf-8")
-
-            check = build_installation_check(repo_root=repo_root, codex_home=codex_home)
-            self.assertFalse(check["ok"])
-            checklist = {item["id"]: item for item in check["checklist"]}
-            self.assertFalse(checklist["global_skill_mistake_priority"]["ok"])
-            self.assertFalse(checklist["global_agents_mistake_priority"]["ok"])
-            self.assertFalse(checklist["strong_session_defaults"]["ok"])
-            self.assertTrue(
-                any("mistake-first highest-priority" in issue for issue in check["issues"]),
-                check["issues"],
+            install_codex_integration(**kwargs)
+            self.assertEqual(_automation_status(codex_home / "automations/kb-sleep/automation.toml"), "PAUSED")
+            self.assertEqual(_automation_status(codex_home / "automations/kb-dream/automation.toml"), "PAUSED")
+            self.assertEqual(
+                _automation_status(codex_home / "automations/khaos-brain-system-update/automation.toml"),
+                "PAUSED",
             )
+            self.assertEqual(_automation_status(codex_home / "automations/kb-org-contribute/automation.toml"), "ACTIVE")
 
-    def test_check_fails_when_canonical_interface_wording_is_missing(self) -> None:
+    def test_complete_tree_drift_fails_install_check(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            codex_home = Path(tmp_dir) / ".codex"
-            shell_bin_dir = Path(tmp_dir) / "shell-bin"
-            git_real = Path(tmp_dir) / "tool-src" / "git-real.cmd"
-            rg_source = Path(tmp_dir) / "tool-src" / "rg-source.exe"
-            write_cmd(git_real, "echo git version test")
-            rg_source.parent.mkdir(parents=True, exist_ok=True)
-            rg_source.write_bytes(b"rg-binary")
-
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            codex_home = root / ".codex"
+            shell_bin, git_real, rg_source = _write_fake_tools(root)
             install_codex_integration(
-                repo_root=repo_root,
-                codex_home=codex_home,
-                shell_bin_dir=shell_bin_dir,
+                repo_root,
+                codex_home,
+                shell_bin_dir=shell_bin,
                 git_executable=git_real,
                 rg_source=rg_source,
                 persist_user_shell_path=False,
+                run_history_migration=False,
             )
-
-            openai_path = codex_home / "skills" / "predictive-kb-preflight" / "agents" / "openai.yaml"
-            openai_text = openai_path.read_text(encoding="utf-8")
-            openai_path.write_text(openai_text.replace("canonical machine interfaces", "machine interfaces"), encoding="utf-8")
-
-            agents_path = global_agents_path(codex_home)
-            agents_text = agents_path.read_text(encoding="utf-8")
-            agents_path.write_text(agents_text.replace("canonical machine interfaces", "machine interfaces"), encoding="utf-8")
-
-            check = build_installation_check(repo_root=repo_root, codex_home=codex_home)
+            target = codex_home / "skills/kb-dream-pass/.skillguard/check-manifest.json"
+            target.write_text(target.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+            check = build_installation_check(repo_root, codex_home)
             self.assertFalse(check["ok"])
-            checklist = {item["id"]: item for item in check["checklist"]}
-            self.assertFalse(checklist["global_skill_canonical_interface"]["ok"])
-            self.assertFalse(checklist["global_agents_canonical_interface"]["ok"])
-            self.assertFalse(checklist["canonical_machine_interfaces"]["ok"])
-            self.assertFalse(checklist["strong_session_defaults"]["ok"])
-            self.assertTrue(
-                any("canonical machine interface" in issue for issue in check["issues"]),
-                check["issues"],
-            )
+            self.assertTrue(any("complete tree differs" in item for item in check["issues"]))
 
-    def test_check_fails_when_managed_global_agents_block_is_missing(self) -> None:
+    def test_organization_automation_times_are_stable_and_windowed(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            codex_home = Path(tmp_dir) / ".codex"
-            shell_bin_dir = Path(tmp_dir) / "shell-bin"
-            git_real = Path(tmp_dir) / "tool-src" / "git-real.cmd"
-            rg_source = Path(tmp_dir) / "tool-src" / "rg-source.exe"
-            write_cmd(git_real, "echo git version test")
-            rg_source.parent.mkdir(parents=True, exist_ok=True)
-            rg_source.write_bytes(b"rg-binary")
-
-            install_codex_integration(
-                repo_root=repo_root,
-                codex_home=codex_home,
-                shell_bin_dir=shell_bin_dir,
-                git_executable=git_real,
-                rg_source=rg_source,
-                persist_user_shell_path=False,
-            )
-
-            agents_path = global_agents_path(codex_home)
-            agents_path.write_text("## User Custom Defaults\n\n- Keep this line only.\n", encoding="utf-8")
-
-            check = build_installation_check(repo_root=repo_root, codex_home=codex_home)
-            self.assertFalse(check["ok"])
-            checklist = {item["id"]: item for item in check["checklist"]}
-            self.assertFalse(checklist["global_agents_block"]["ok"])
-            self.assertFalse(checklist["strong_session_defaults"]["ok"])
+        by_id = {item["id"]: item for item in REPO_AUTOMATION_SPECS}
+        first = automation_rrule_for_spec(by_id["kb-org-contribute"], repo_root)
+        second = automation_rrule_for_spec(by_id["kb-org-contribute"], repo_root)
+        self.assertEqual(first, second)
+        self.assertRegex(first, r"BYHOUR=\d+;BYMINUTE=\d+")
 
 
 if __name__ == "__main__":

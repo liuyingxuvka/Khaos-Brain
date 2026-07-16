@@ -19,7 +19,7 @@ except Exception:  # pragma: no cover - model remains runnable without the packa
     _flowguard = None
 
 
-LOCAL_LANES = ("kb-sleep", "kb-dream", "kb-architect")
+LOCAL_LANES = ("kb-sleep", "kb-dream")
 ORG_LANES = ("kb-org-contribute", "kb-org-maintenance")
 
 
@@ -192,7 +192,7 @@ class SoftwareUpdateBlock:
     name = "SoftwareUpdateBlock"
     reads = ("update_status", "update_available", "user_requested", "ui_running")
     writes = ("update_status", "update_available", "user_requested", "ui_running")
-    idempotency = "Architect check marks upgrading only once, only after user request and UI closure."
+    idempotency = "System update check marks upgrading only once, only after user request and UI closure."
 
     def apply(self, event: Input, state: State) -> Iterable[tuple[Output, State]]:
         if event.kind == "remote_available":
@@ -213,7 +213,7 @@ class SoftwareUpdateBlock:
         if event.kind == "ui_state":
             yield Output("ui_state_changed", str(event.ui_running)), replace(state, ui_running=event.ui_running)
             return
-        if event.kind == "architect_update_check":
+        if event.kind == "system_update_check":
             if state.update_status == "upgrading":
                 yield Output("update_already_upgrading"), state
                 return
@@ -273,7 +273,7 @@ EXTERNAL_INPUTS = (
     Input("prepare_update"),
     Input("ui_state", ui_running=True),
     Input("ui_state", ui_running=False),
-    Input("architect_update_check"),
+    Input("system_update_check"),
     Input("update_done"),
     Input("update_failed"),
 )

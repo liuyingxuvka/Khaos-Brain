@@ -4,7 +4,12 @@
 
 This document is the authoritative implementation brief for Khaos Brain in this repository.
 
-Implement **v0.1 only**. Optimize for clarity, maintainability, and explicit review. Do not jump ahead to vector databases, autonomous memory growth, embeddings, MCP services, or subagent orchestration unless a later task explicitly asks for them.
+The current implementation baseline is **LogicGuard-native v0.1**. Optimize for clarity, maintainability, executable argument structure, and explicit machine receipts. Do not jump ahead to vector databases, embeddings, MCP services, or mandatory subagent orchestration unless a later task explicitly asks for them.
+
+Where older wording in this document calls a YAML card “current state” or treats
+`related_cards` as navigation authority, the LogicGuard-native authority rules
+below supersede it: readable cards are projections, exact model/mesh revisions
+are semantic authority, and only grounded ModelMesh edges may expand context.
 
 ## 1. Objective
 
@@ -18,13 +23,26 @@ The library is meant to store reusable local experience in a structured way. It 
 - help Codex predict likely outcomes under known contexts
 - help Codex choose better actions before answering or editing code
 
-The first version should be simple enough that a human can inspect every file, understand every score, and review every update.
+The first version should be simple enough that AI can replay every decision, explain every score from canonical evidence, and verify every update without requiring a human review step. Human inspection remains an optional observability benefit.
+
+Khaos Brain deliberately supports one current runtime contract only. It has no
+normal-operation compatibility layer, dual reader/writer, command alias,
+alternate authority, or fallback launcher/model. A versioned upgrade may read
+an exact retired format only inside a bounded transaction so AI can rewrite it
+directly to the current format, remove the old authority, and prove zero
+residuals. Unknown or incomplete old state blocks and rolls back the upgrade; it
+does not broaden the daily software contract. Such a blocker remains an open
+upgrade-AI work item: the AI must derive or add one explicit direct-to-current
+migration from captured evidence and retry the transaction. It may not close
+the upgrade by teaching normal software to understand the old form.
 
 ## 2. Core Concept
 
-### 2.1 Each entry is a local predictive model card
+### 2.1 Each entry is an executable local LogicGuard model
 
-Every knowledge entry in this repository should be treated as a **bounded predictive model**, not merely a loose note and not a universal truth.
+Every knowledge entry in this repository is a **bounded predictive LogicGuard
+model**, not merely a loose note, a YAML object, or a universal truth. The
+human-readable card is a deterministic projection of one exact model revision.
 
 A model card answers the following questions:
 
@@ -32,7 +50,9 @@ A model card answers the following questions:
 2. **What action, input, or condition is under consideration?**
 3. **What result is expected or likely?**
 4. **What should Codex do with that prediction?**
-5. **How confident are we, and where did this come from?**
+5. **What evidence and warrant support the claim?**
+6. **Which assumptions, rebuttals, counterexamples, or limitations constrain it?**
+7. **How confident are we, and where did this come from?**
 
 This means even a preference can be expressed predictively.
 
@@ -67,9 +87,28 @@ Each model card is intentionally **local** and **conditional**. It is not meant 
 
 A card should only claim what it can justify within a defined scope. A card may include case splits when outcomes differ across conditions.
 
-### 2.3 Human-auditable over clever
+### 2.3 Machine-replayable and inspectable over opaque
 
-The system should remain understandable without hidden model behavior. If a human cannot explain why a card was retrieved or why it was trusted, the design is too opaque for v0.1.
+The system should remain understandable without hidden authority. If canonical receipts cannot explain why a card was retrieved, excluded, promoted, or downgraded, the design is too opaque for v0.1. A person may inspect those receipts, but routine operation and closure must not depend on that inspection.
+
+### 2.4 LogicGuard authority and readable projection
+
+Canonical semantic authority lives under
+`.local/khaos-brain/logicguard-authority/` as physically separated public,
+private, and candidate LogicGuard model stores plus scoped ModelMesh stores.
+Every retrieval or maintenance decision binds an exact authority generation,
+model id and revision, root node and ArgumentBlock, mesh id and revision, and
+projection digest.
+
+The files under `kb/public/`, `kb/private/`, and `kb/candidates/` remain useful
+for people, Git diffs, exchange, and lexical indexing, but they are generated
+views. They may not be used as a fallback semantic reader. Missing or
+inconsistent exact authority fails visibly.
+
+Each model has a root Claim and explicit Context and Method nodes. Evidence,
+Warrant, Assumption, Rebuttal, and Limitation nodes exist only when supported by
+the source material; absent roles are first-class gaps with a next evidence
+need. This prevents fluent prose from being mistaken for justified knowledge.
 
 ## 3. Design Principles
 
@@ -79,11 +118,11 @@ The system should remain understandable without hidden model behavior. If a huma
 2. **Path-first retrieval**  
    Retrieval should not depend on flat keyword matching alone. It should first locate the relevant direction of thought.
 
-3. **Predictive representation**  
-   Store expectation structures, not only descriptive notes.
+3. **Executable predictive representation**
+   Store expectation structures as LogicGuard nodes, edges, ArgumentBlocks, and explicit gaps, not only descriptive notes.
 
-4. **Multi-index memory palace**  
-   Entries should be reachable through a main route and additional cross routes.
+4. **Route entry plus grounded model mesh**
+   Entries should be reachable through a main route and additional cross routes; after selection, only exact grounded ModelMesh relations may expand the argument context.
 
 5. **Candidate-first capture with AI-driven consolidation**  
    New experience should land in `kb/candidates/` or structured history first, then be consolidated during scheduled AI maintenance.
@@ -91,8 +130,15 @@ The system should remain understandable without hidden model behavior. If a huma
 6. **Public/private separation**  
    User-specific or sensitive knowledge stays private by default.
 
-7. **AI-driven maintenance with file-based tooling**  
-   Maintenance decisions may be made automatically by AI, but the tooling around those decisions should remain file-based, logged, inspectable, and reversible.
+7. **AI-driven maintenance with one model writer**
+   Sleep alone may publish canonical model generations. The tooling remains file-based, logged, inspectable, atomic, and reversible.
+
+   All lifecycle mutations and active-index activation share one current
+   owner-identified writer lock. Its physical owner record binds the process,
+   thread, and a unique token. A live owner is never displaced; the active
+   owner thread may safely reenter; dead or interrupted owner state is
+   recovered after a bounded creation grace; and a filesystem release failure
+   is a visible non-success rather than a silently retained empty directory.
 
 8. **Simple scoring**  
    Use explainable scoring heuristics instead of opaque retrieval models.
@@ -143,6 +189,10 @@ The retrieval logic for v0.1 should follow this order:
 4. Expand to entries whose `cross_index` overlaps with the primary or secondary routes.
 5. Apply lexical matching on title, tags, trigger keywords, and body.
 6. Re-rank by confidence and trust status.
+7. For each selected entry, validate and read its exact LogicGuard binding,
+   root ArgumentBlock, typed support/challenge nodes, and explicit gaps.
+8. Expand only the small neighborhood licensed by current grounded ModelMesh
+   relations. Never expand from a legacy `related_cards` value or mere co-use.
 
 ### 4.4 Why this matters
 
@@ -157,7 +207,7 @@ The intended direction is:
 - keep the library structure explicit and hierarchical
 - let Codex narrow the search one route level at a time
 - prefer deterministic structural choices over hidden synonym expansion
-- keep the retrieval rules simple enough that a human can predict what the next step will return
+- keep the retrieval rules deterministic enough that AI can reproduce and explain what the next step will return
 
 In practice, this means the system should be able to support a navigation pattern such as:
 
@@ -184,7 +234,7 @@ They should not default to:
 
 - large alias tables
 - opaque query rewriting
-- hidden semantic expansion that a human cannot audit easily
+- hidden semantic expansion that canonical machine receipts cannot reconstruct
 
 This is an architectural principle for the library. The storage format should remain simple so that most adaptation happens during lookup, with Codex following clear navigation rules over explicit route structure.
 
@@ -192,7 +242,8 @@ This is an architectural principle for the library. The storage format should re
 
 ### 5.1 In scope
 
-- YAML-based local storage
+- local LogicGuard model and ModelMesh authority
+- deterministic YAML card projections for human inspection and exchange
 - public / private / candidate separation
 - hierarchical `domain_path`
 - `cross_index` support
@@ -203,7 +254,7 @@ This is an architectural principle for the library. The storage format should re
 - one candidate-capture script
 - history or feedback logs
 - AI-driven scheduled consolidation / “sleep” maintenance
-- optional bounded “dream” exploration maintenance that writes only to history or candidates
+- bounded Dream verification that simulates exact immutable models and writes only experiment artifacts plus typed Sleep model-gap handoffs
 - example entries
 - small evaluation cases
 - documentation for Codex
@@ -216,9 +267,9 @@ This is an architectural principle for the library. The storage format should re
 - hidden autonomous write-back without snapshots or rollback
 - free-form autonomous capability growth or direct trusted-card mutation from dream-only evidence
 - MCP-backed knowledge services
-- opaque or mandatory subagent orchestration without fallback behavior
+- opaque or mandatory subagent orchestration without an explicit current non-subagent route
 - probabilistic calibration infrastructure
-- graph databases
+- graph databases (LogicGuard ModelMesh is a bounded local argument relation artifact, not a graph-database dependency)
 
 Subagents are available in current Codex releases, but they are more expensive and only run when explicitly requested. For this repository they are optional, and are most useful as sidecar helpers for scout, recorder, or scheduled maintenance workflows.
 
@@ -232,7 +283,6 @@ The repository should be organized so the file system itself supports the concep
 ├─ PROJECT_SPEC.md
 ├─ README.md
 ├─ docs/
-│  ├─ architecture_runbook.md
 │  ├─ dream_runbook.md
 │  └─ maintenance_runbook.md
 ├─ .agents/
@@ -243,11 +293,7 @@ The repository should be organized so the file system itself supports the concep
 │     ├─ kb-dream-pass/
 │     │  ├─ SKILL.md
 │     │  └─ agents/openai.yaml
-│     ├─ kb-architect-pass/
-│     │  ├─ SKILL.md
-│     │  └─ agents/openai.yaml
 │     └─ local-kb-retrieve/
-│        ├─ ARCHITECT_PROMPT.md
 │        ├─ SKILL.md
 │        ├─ DREAM_PROMPT.md
 │        ├─ MAINTENANCE_PROMPT.md
@@ -259,22 +305,37 @@ The repository should be organized so the file system itself supports the concep
 │           ├─ kb_capture_candidate.py
 │           ├─ kb_consolidate.py
 │           ├─ kb_dream.py
-│           ├─ kb_architect.py
+│           ├─ kb_sleep.py
 │           ├─ kb_proposals.py
 │           ├─ kb_rollback.py
 │           └─ kb_taxonomy.py
 ├─ kb/
 │  ├─ history/
 │  ├─ taxonomy.yaml
-│  ├─ public/
-│  ├─ private/
-│  └─ candidates/
+│  ├─ public/       # deterministic readable projections
+│  ├─ private/      # deterministic readable projections
+│  └─ candidates/   # deterministic readable projections
+├─ .local/
+│  └─ khaos-brain/
+│     └─ logicguard-authority/
+│        ├─ generations/
+│        ├─ public-models/
+│        ├─ private-models/
+│        ├─ candidate-models/
+│        ├─ meshes/
+│        └─ current-generation.json
 ├─ local_kb/
+│  ├─ logicguard_models.py
+│  ├─ model_projection.py
+│  ├─ model_maintenance.py
 │  ├─ search.py
 │  ├─ routes.py
 │  ├─ feedback.py
 │  ├─ history.py
-│  ├─ architect.py
+│  ├─ lifecycle.py
+│  ├─ active_index.py
+│  ├─ maintenance_migration.py
+│  ├─ transactional_install.py
 │  ├─ consolidate.py
 │  ├─ proposals.py
 │  ├─ snapshots.py
@@ -290,11 +351,33 @@ The repository should be organized so the file system itself supports the concep
 
 Codex currently discovers repository skills from `.agents/skills/...`, and a skill is a directory containing `SKILL.md` plus optional scripts and metadata.
 
-## 7. Knowledge Entry Schema
+## 7. Canonical Model and Projection Schema
 
-### 7.1 Required fields for v0.1
+### 7.1 Canonical LogicGuard model
 
-Each entry should support the following structure:
+Each entry's semantic authority contains:
+
+- stable entry id, scope, lifecycle state, confidence, routes, and provenance
+- exact `model_id` and immutable `model_revision`
+- one root `Claim` node expressing the bounded prediction
+- explicit `Context` and `Method` nodes
+- optional typed `Evidence`, `Warrant`, `Assumption`, `Rebuttal`, and
+  `Limitation` nodes only when source material supports them
+- deterministic node and edge ids
+- one root `ArgumentBlock`
+- explicit gap records for missing context, action, evidence, warrant,
+  assumption review, opposition/rebuttal, or boundary conditions, each with a
+  stable open disposition, required grounded input, and reopen condition
+- exact scoped `mesh_id` and `mesh_revision`
+
+A canonical ModelMesh contains exact member model revisions and explicit
+relations. A relation becomes canonical only when its provenance includes a
+qualifying non-AI source. AI inference, lexical similarity, simultaneous
+retrieval, or legacy co-use may create an unresolved proposal but never an edge.
+
+### 7.2 Deterministic readable projection
+
+Each generated YAML card supports the following human-facing structure:
 
 - `id`: stable system reference handle, not the content identity
 - `title`: short readable title
@@ -302,7 +385,12 @@ Each entry should support the following structure:
 - `scope`: `public` or `private`
 - `domain_path`: ordered list representing the main conceptual route
 - `cross_index`: additional conceptual routes
-- `related_cards`: direct related-card ids that are repeatedly used together with this card
+- `projection_schema_version` and `projection_digest`: exact projection contract and content identity
+- `authority_generation_id` and `authority_scope`: exact generation and physical scope
+- `logicguard_model_id`, `logicguard_node_id`, `logicguard_block_id`, and `logicguard_revision_id`: exact model/root/ArgumentBlock binding
+- `logicguard_mesh_id` and `logicguard_mesh_revision_id`: exact scoped mesh binding
+- `logicguard_open_role_gaps`: human-visible summary of missing argument roles
+- `related_cards`: optional derived display of current grounded mesh neighbors; never authority and never a retrieval input
 - `tags`: lightweight retrieval hints
 - `trigger_keywords`: lexical triggers
 - `if`: applicability notes / conditions
@@ -314,7 +402,7 @@ Each entry should support the following structure:
 - `status`: `candidate`, `trusted`, or `deprecated`
 - `updated_at`: ISO date
 
-### 7.2 Schema interpretation
+### 7.3 Schema interpretation
 
 A card is operational, not merely descriptive.
 
@@ -322,7 +410,8 @@ A card is operational, not merely descriptive.
 - `action` defines what is being attempted or observed
 - `predict` defines the expected result
 - `use` defines what Codex should do because of that prediction
-- `related_cards` defines a small direct-navigation surface between cards that are repeatedly used together; it is not a concept graph and should stay short
+- the complete top-level LogicGuard binding field set is the only route from projection to semantic authority; an incomplete or stale binding fails closed
+- `related_cards` is a recomputable display field derived only from current grounded ModelMesh edges; it may be empty and cannot license traversal
 - `id` is used for references, UI handles, history targets, and filenames. New card ids should be generated from a timestamp, a sanitized author or local-installation short label, and random code. They must not embed raw machine identifiers. Exact duplicate detection should use normalized `content_hash`, not `id`.
 
 This keeps the knowledge unit useful for action selection.
@@ -332,6 +421,7 @@ Modeling discipline for v0.1:
 - A valid model card should encode a directional claim such as: under condition `if`, taking `action` makes `predict.expected_result` more likely.
 - Generic advice such as “should”, “avoid”, or “best practice” is not sufficient on its own.
 - `use` must remain downstream of `predict`; operational guidance cannot replace the predictive claim itself.
+- A missing Evidence or Warrant must remain a visible gap. Projection prose must not silently manufacture support that is absent from the model.
 - Titles should preferably name the predicted relation or outcome, not only the recommended behavior.
 - Cards about **model or runtime behavior** are allowed when they are still written as bounded predictive models rather than folklore.
 - Cards about a **specific user** are also allowed when they stay bounded, evidence-based, and behaviorally framed.
@@ -353,7 +443,7 @@ The implementation should remain intentionally simple.
 The search tool should accept:
 
 - `--query`: free-text task summary
-- `--path-hint`: optional route hint such as `work/reporting/ppt`
+- `--route-hint`: optional canonical route hint such as `work/reporting/ppt`
 - `--top-k`: result count
 
 ### 8.2 Scoring components
@@ -390,10 +480,21 @@ The exact constants can be adjusted, but the logic should remain easy to inspect
 
 ### 8.3 Retrieval behavior
 
-- If `path-hint` exists, use it strongly.
-- If no path hint exists, fall back to lexical search.
+- If `route-hint` exists, use it strongly.
+- Without a route hint, lexical matching is the declared query-only mode; it is not selected after another reader fails.
 - Always return a small ranked list.
 - Prefer `trusted` over `candidate` when relevance is similar.
+- Treat lexical/routing score as entry selection, not argument authorization.
+- Return the exact bound LogicGuard context for every selected entry: generation,
+  model and mesh revisions, root ArgumentBlock, typed nodes/edges, explicit gaps,
+  and the small grounded mesh neighborhood.
+- Within one process, different node reads in the same exact generation and
+  authority scope may reuse one pinned read-only model/mesh store session. The
+  authority pointer digest is part of the cache key, so a new Sleep generation
+  necessarily opens a new session; cached stores never grant write authority or
+  act as an alternate reader.
+- Do not use projection `related_cards`, floating heads, or readable YAML as a
+  fallback when exact authority is missing.
 - Never treat retrieval as certainty.
 
 ## 9. Skill Behavior
@@ -405,11 +506,11 @@ The skill should do the following:
 1. Summarize the task in one short sentence.
 2. When sub-agents are available and the task is non-trivial, start a scout-style sidecar agent to handle route scan and retrieval without distracting the primary task thread.
 3. Infer one primary `domain_path` and up to three alternative conceptual routes.
-4. Run the local search script with both a path hint and a textual query.
+4. Run the local search script with the canonical route hint and a textual query.
 5. Review the top results.
 6. Prefer entries with stronger path alignment, `trusted` status, and higher confidence.
 7. Use retrieved entries as bounded context.
-8. At the end of the task, start a recorder-style sidecar agent, or an equivalent inline fallback, to append feedback, misses, and candidate lessons into history.
+8. At the end of the task, use the explicitly selected recorder route—sidecar when requested and available, otherwise the current inline recorder—to append feedback, misses, and candidate lessons into history.
 9. State which entry ids influenced the answer.
    These should be the cards that materially influenced the work, not every card that appeared in retrieval results.
 10. When a reusable lesson is specifically about how the current model or runtime behaves, it may still be captured as a valid card if the runtime identity and triggering conditions are explicit enough to audit later.
@@ -461,13 +562,14 @@ This keeps memory interaction from derailing the main task while still letting t
 
 All new knowledge should enter `kb/candidates/` or structured history first.
 
-Architecturally, promotion to `kb/public/` or `kb/private/` may eventually happen automatically during scheduled AI maintenance if the repository's safety rails are satisfied. The deciding step should come from AI judgment over the stored history, while the resulting update should still be logged, snapshotted, and reversible.
+Promotion to `kb/public/` or `kb/private/` is decided automatically during scheduled Sleep maintenance only when the lifecycle, provenance, independent-validation, confidence, and contradiction gates are satisfied. Every result remains logged, reproducible from the lifecycle ledger, atomically indexed, and reversible.
 
 The semantic maintenance boundary should preserve AI agency without allowing uncontrolled churn:
 
 - thresholds, repeated reviews, and weak-hit counts are review triggers, not final decisions
 - AI should decide whether a card should be kept, rewritten, promoted, demoted, deprecated, split, or merged after reading the card and supporting evidence
 - tooling should require an explicit semantic-review plan with evidence ids, rationale, risk level, utility assessment, expected retrieval effect, and rollback notes before applying meaning-bearing changes
+- a parked entry whose evidence fingerprint is unchanged is skipped without another semantic review; when the digest changes but does not satisfy reopening, Sleep writes one same-state calibration snapshot and then skips that exact digest on later cycles; only a new evidence digest satisfying its reopen condition can re-enter candidate review
 - keep, rewrite, confidence-adjustment, and promotion decisions must judge the card as future-useful; demotion and deprecation are the supported path for cards judged low-utility, obsolete, misleading, unclear, or insufficiently evidenced
 - each semantic-review apply run should modify at most 3 trusted cards, including trusted rewrites, confidence changes, deprecations, demotions, and candidate promotions into trusted scope
 - candidate and trusted-card text changes should trigger display-translation cleanup before the sleep pass is considered complete
@@ -476,7 +578,7 @@ For the current implementation, keep the operational boundary simpler:
 
 - active task threads should prefer `kb/candidates/` or structured history writes
 - trusted-scope rewrites and promotions should be treated as dedicated semantic maintenance work
-- if the current tooling does not yet implement a specific semantic change cleanly, leave that change proposal-only instead of implying that the path already exists
+- if the current tooling does not yet implement a specific semantic change cleanly, record a `parked` machine disposition with the missing capability, owner, due boundary, and executable reopen condition instead of leaving loose proposal debt or implying that the path already exists
 
 ### 10.2 Conflict handling
 
@@ -615,7 +717,7 @@ When a split is needed:
 
 - the split cards may remain under the same main `domain_path`
 - a lighter hub card may stay in place as the route entry point
-- the related cards may cross-reference each other if that improves navigation and reviewability
+- sibling models may receive a grounded mesh relation only when qualifying provenance supports it; otherwise the proposed relationship stays unresolved
 
 Every split or split-rejection should leave a history trace describing:
 
@@ -628,10 +730,12 @@ Every split or split-rejection should leave a history trace describing:
 
 The library should distinguish between:
 
-- the **current merged card**, which represents the latest consolidated operational version of the model
-- the **history of that card**, which preserves how the card reached its current form
+- the **current exact LogicGuard generation**, which pins every canonical model and mesh revision
+- the **readable card projection**, which presents that exact model concisely for people and lexical indexing
+- the **history of that model**, which preserves how it reached its current form
 
-The current merged card is the surface that Codex should retrieve and use during normal work. It should stay concise, stable, and directly actionable.
+Codex uses the exact model as reasoning context. The readable card remains a
+concise observability and entry-selection surface, never an alternate authority.
 
 The history layer should preserve the evidence trail behind the card, including items such as:
 
@@ -677,10 +781,11 @@ It may update trusted cards during scheduled consolidation, but those updates sh
 
 In other words:
 
-- the main card stores the current consolidated state
+- the exact LogicGuard model stores the current consolidated semantic state
+- the readable card is regenerated from that model
 - the history preserves the reasoning and evidence trail
 - AI-driven consolidation evaluates accumulated history
-- tooling applies the AI-selected merge to produce the new main card state
+- Sleep tooling applies the AI-selected revision to produce a complete new model generation
 - snapshots and rollback preserve recoverability
 
 This repository is therefore allowed to maintain itself automatically, but the maintenance intelligence should live in AI rather than in a brittle hard-coded rule engine. The goal is not human-in-the-loop maintenance by default. The goal is AI-driven autonomous maintenance that remains inspectable after the fact.
@@ -695,15 +800,17 @@ small route-first retrieval against prior maintenance lessons, usually under
 apply actions. Retrieved maintenance cards are bounded context, not authority over
 the current repository state.
 
-Each sleep pass should also create and maintain a visible execution plan before
+Each sleep pass should also create and maintain a machine-readable execution plan before
 stateful maintenance work begins. The plan should list the concrete checkpoints for
 the pass and track each item as pending, in progress, completed, skipped with a
 reason, or blocked with a concrete blocker. A sleep pass should not stop after a
 short proposal or one successful command while safe required checkpoints remain.
 If a command exposes a supported low-risk repair, the maintenance agent should try
 that repair and rerun the relevant validation before finalizing. Unsupported or
-higher-risk issues should be recorded as proposal-only or as a final observation,
-then the pass should continue through remaining safe checkpoints.
+higher-risk issues should receive a bounded `parked`, `history_only`, or explicit
+development-observation disposition with an owner and reopen condition; they must
+not remain as unowned proposal debt. The pass should then continue through remaining
+safe checkpoints.
 
 Each non-empty sleep pass should also end with an explicit postflight check. If the
 pass exposed a reusable maintenance lesson, route gap, card weakness, split signal,
@@ -712,19 +819,21 @@ structured observation to history before finalizing. That final observation is a
 record for a future maintenance pass; it should not trigger an immediate recursive
 consolidation loop in the same pass.
 
-#### Related-card links
+#### Grounded ModelMesh relations
 
-The library may maintain a small direct `related_cards` field on cards when repeated observation history shows that the same cards are materially used together.
+Direct knowledge relationships live only in the scoped LogicGuard ModelMesh.
+Every edge pins exact model revisions and carries typed provenance. Qualifying
+non-AI evidence is required before the edge becomes canonical.
 
-This field should stay intentionally simple:
-
-- it stores direct card ids, not weighted graph state
-- it should be derived from repeated co-use of actually used `entry_ids` in observations
-- it should not be populated from mere retrieval visibility
-- it should avoid recursive expansion
-- it should usually keep no more than 3 related cards per entry
-
-The maintenance layer may keep richer support counts, ratios, decay, or ranking logic in history and proposal artifacts, but the card surface should remain only the current consolidated result.
+- repeated co-use, lexical similarity, or visibility creates at most an
+  unresolved relationship proposal
+- `related-cards` apply mode batches those proposals for Sleep; it does not
+  edit a card or create an edge
+- a model revision invalidates incident relations until Sleep revalidates them
+- cross-scope relations are rejected; public, private, and candidate stores stay
+  physically and semantically separated
+- projection `related_cards`, when present for display, is derived from the
+  current grounded mesh and may never drive retrieval
 
 #### Display-language translations
 
@@ -938,17 +1047,19 @@ In short:
 
 The repository may also support a separate **dream** lane, but it must remain distinct from sleep maintenance.
 
-The purpose of sleep is consolidation:
+The purpose of Sleep is canonical model consolidation:
 
 - review accumulated real observations
-- repair, merge, split, rerank, or deprecate memory surfaces
-- keep the active retrieval layer clean and auditable
+- repair, merge, split, rerank, or deprecate exact model revisions
+- audit missing evidence, warrant, assumptions, opposition, and boundaries
+- publish one atomic model/mesh/projection/index generation
 
-The purpose of dream is exploration:
+The purpose of Dream is immutable whole-model pressure testing:
 
-- generate bounded hypotheses from existing cards, misses, and route gaps
-- run small validation attempts on things that have not yet been tried enough in normal work
-- discover whether an adjacent route, workflow, or capability is worth later real-world use
+- pin exact generation/model/ArgumentBlock/mesh revisions
+- remove or weaken declared evidence and assumptions in simulation overlays
+- strengthen rebuttals or counterexamples and pressure declared boundaries
+- expose unsupported conclusions, fragile dependencies, and missing model roles
 
 This distinction matters because the repository should not treat speculative exploration as if it were already trusted experience.
 
@@ -957,8 +1068,10 @@ The required operating rules are:
 - dream and sleep must run in separate automations, threads, or maintenance sessions
 - they must not run concurrently on the same repository state
 - dream should not duplicate route-candidate creation that current sleep consolidation already marks as eligible
-- dream should write only to history, proposal artifacts, or `kb/candidates/`
-- dream should never directly rewrite `kb/public/` or `kb/private/`
+- dream should write only bounded simulation/experiment artifacts plus typed, idempotent Sleep model-gap handoffs
+- dream must not append ordinary observations, create candidates, or mutate the central lifecycle/history ledger directly
+- dream must never commit models or meshes, rewrite readable projections, or advance the canonical generation pointer
+- dream must prove the pinned generation unchanged before closure
 - dream-derived evidence should preserve explicit provenance so later maintenance can tell it apart from normal task evidence
 - dream-derived evidence alone is not enough to promote or strongly raise confidence on a trusted card
 - user-specific predictions discovered during dream mode should stay especially conservative; they should not become trusted private cards without later confirmation in live interaction
@@ -968,25 +1081,27 @@ Dream mode should stay grounded in existing evidence. Eligible inputs are things
 - repeated retrieval misses
 - repeated weak hits
 - low-confidence candidates that need a narrow validation attempt
-- proposal-only maintenance actions that still need evidence
+- parked maintenance observations whose executable reopen condition names a missing evidence class
 - taxonomy gaps that repeatedly appear in observed routes
 - explicit user-supplied hypotheses such as “maybe the system could learn X this way”
 
 Each dream run should create a bounded experiment record before acting. That record should say:
 
-- which route or card cluster the exploration is about
+- which exact generation, model nodes/edges, ArgumentBlock, and mesh neighborhood the verification is about
 - what hypothesis is being tested
 - what the maximum allowed action surface is
 - what success, failure, or inconclusive result would look like
 - what write-back is permitted afterward
 
-For v0.1, dream mode should prefer:
+For v0.1, Dream should prefer:
 
 - read-only inspection
 - local dry-runs
-- retrieval experiments
-- proposal generation
-- candidate scaffolding
+- evidence-removal and assumption-removal simulations
+- rebuttal/counterexample strengthening
+- boundary-pressure, cross-edge-removal, and neighbor-pin-replacement simulations
+- narrow retrieval experiments
+- model-gap handoff generation
 - evaluation against explicit tests or route checks
 
 It should avoid:
@@ -996,87 +1111,316 @@ It should avoid:
 - lockfile churn
 - destructive changes
 - broad refactors
-- silent trusted-card rewrites
+- any canonical model, mesh, or trusted-card projection rewrite
 - open-ended “try anything interesting” behavior
 
-The simplest acceptable write-back policy is:
+The write-back policy is convergent:
 
-- every dream run appends an explicit observation or maintenance event to history
-- if the run produced a reusable hypothesis, it may also create or update a candidate scaffold
-- if the result was noisy, one-off, or failed to generalize, keep it in history only
-- sleep maintenance may later review these dream outputs, but trusted promotion should still depend on later grounded evidence from real tasks or repeated low-risk confirmation
+- compute a stable fingerprint from the exact authority bindings, route, experiment mode, source ids, and decision-relevant evidence
+- if the same fingerprint already closed with passed, failed, weak, or inconclusive evidence, record `no_delta_closed` in the run artifact and perform no knowledge write
+- reopen only when the evidence fingerprint or relevant lifecycle disposition changes materially
+- if a simulation exposes a material gap, emit one typed Sleep handoff with exact generation/model/mesh bindings, gap kind, affected node/edge ids, provenance, and requested disposition; Sleep alone decides whether and how to revise authority
+- trusted promotion still requires independent current validation plus either one strong support item or two independent medium support items
 
-Dream mode is therefore not a second consolidation pass. It is a bounded hypothesis-generation and validation lane whose outputs remain provisional until later evidence supports them.
+Dream mode is therefore not a second consolidation pass or a model writer. It
+is an immutable argument-verification lane whose outputs remain provisional
+until Sleep admits evidence and publishes a new exact generation.
 
-### 10.11 Separate Architect mechanism maintenance
+### 10.11 Automatic convergence, system maintenance, and upgrade migration
 
-The repository may also support a third scheduled **Architect** lane, but it must stay narrower than general self-refactoring.
+The scheduled Architect lane is retired. There is no replacement self-modifying
+mechanism-maintenance agent and no human review queue in the core lifecycle.
+Ordinary prompt, Skill, installer, or product changes remain explicit development
+work with OpenSpec, FlowGuard, SkillGuard, tests, and release evidence as applicable.
 
-The purpose of Architect is mechanism maintenance:
+The fully automatic local maintenance roles are:
 
-- review Sleep, Dream, Architect, retrieval, installation, validation, rollback, and proposal-governance signals
-- review local Skill prompt/workflow signals when repeated Skill-use evidence shows that a Skill instruction should change
-- maintain a mechanism proposal queue
-- cluster duplicate proposals
-- decide whether mechanism proposals are watching, ready for patch, ready for apply, applied, rejected, or superseded
-- apply only narrow, high-evidence, high-safety mechanism changes with immediate validation
+- `KB Sleep` at 12:00: the only owner of observation disposition, candidate creation and terminal outcomes, promotion, downgrade, merge, confidence calibration, Dream-handoff acknowledgement, and atomic LogicGuard model/mesh/projection/index generation publication
+- `KB Dream` at 13:00: exact immutable model simulations and at-most-once typed Sleep model-gap handoffs; no direct model, mesh, projection, candidate, observation, or central-history writes
+- `Khaos Brain System Update` at 14:00: a narrow software-update check using `python scripts/khaos_brain_update.py --system-check --json`; it is not a general architecture or mechanism-maintenance lane
+- organization contribution and organization maintenance in their stable repository-derived windows
 
-Architect must not maintain card content. These remain Sleep responsibilities:
+Sleep acknowledges a Dream handoff only after the selected disposition and any staged candidate/model projection commit to the current LogicGuard generation. Admission or disposition alone is not acknowledgement authority. A recovered dead Sleep owner without a completed receipt reopens only its own uncommitted acknowledgements so the next run can retry them idempotently.
 
-- trusted-card rewrites
-- candidate promotion
-- card merge, split, deprecation, or deletion
-- card confidence changes
-- user-specific knowledge maintenance
+Sleep and Dream share the local-maintenance lock, wait and recheck instead of
+silently skipping, recover stale locks with an audit record, and publish final
+receipts. A failed pass must not advance its durable watermark or hide actionable
+debt. The desktop card viewer is optional: no human-readable file review or UI
+interaction is required for admission, disposition, promotion, migration, or
+completion.
 
-Skill maintenance uses the same evidence path as other mechanism proposals.
-Sleep may consolidate the card-facing lesson and may emit a proposal-only
-`review-code-change` action for routes such as `codex/workflow/skills` or
-`codex/skill-use/<skill-name>`, but it should not rewrite Skill files during the
-Sleep pass. Architect reviews those signals through the existing proposal queue
-with the same `Evidence`, `Impact`, and `Safety` axes. Local Skill prompt or
-workflow changes are medium-safety patch work unless a narrower validation path
-makes them eligible for a later explicit apply lane.
+Each of the five scheduled roles is independently guarded by SkillGuard. Every
+role has its own target route, obligation set, exact declared checks, and immutable
+native run artifact bound to one run id and content hash. Capability tests prove
+that a version can perform the behavior; they are never accepted as proof that a
+particular scheduled run completed. A real terminal succeeds only when the current
+installed runtime executes and reconciles the target's exact check inventory and
+the sole `enforced` closure consumes that exact declared-check receipt plus every
+required target-owned artifact. Intake, planning, partial native work, or a shared
+aggregate green result cannot satisfy a task's terminal claim.
 
-Each Architect pass is itself a KB task. It must begin with route-first retrieval against prior maintenance lessons, usually under `system/knowledge-library/maintenance`, and it must end with an explicit KB postflight observation.
+SkillGuard owns declared-check execution, receipt reconciliation, installation
+binding, currentness replay, and the single closure. Each target Skill remains the
+sole owner of domain obligations, applicability, native terminal construction,
+positive/shallow fixture meaning, finalization, and failure judgment. The positive
+fixture must satisfy the target obligations; the shallow fixture must be rejected
+for one named important target gap. Capability/JUnit evidence and fixture evidence
+remain separate from `scheduled_production` evidence tied to the exact scheduler
+execution, current installation receipt, and installed runtime fingerprint.
 
-Architect uses only three review axes:
+System update uses one non-terminal authorization stage and one closure profile.
+For a prepared update, the first request emits a declared-check authorization
+receipt with `overall_complete=false` and no closure. While all five automations
+remain PAUSED, the updater binds that receipt, the native receipt, preserved status
+and `user_paused`, exact source/target hashes, and the deferred install check into
+an immutable staged-restoration artifact. A fresh composed authorize+finalize run
+must obtain the sole `enforced` closure before native restore, readback, the normal
+install check, activation receipt, and CURRENT. The legal no-op branches skip
+restoration but still need a target-owned terminal receipt and the same enforced
+closure. Any authorization-stage closure, alternate profile, missing declared
+check, repeated check, stale runtime, caller-authored pass flag, or proposal-only
+receipt is an explicit failure.
 
-- `Evidence`: whether the mechanism signal is repeated and grounded
-- `Impact`: how much it affects KB operating reliability
-- `Safety`: how narrow, testable, and reversible the change is
+ The former SkillGuard runtime pair for each retained task is not allowed to
+The former SkillGuard runtime pair for each retained task is not allowed to
+remain as a parallel closure route. Once the current contract, target-native
+positive calibration, intentionally shallow blocker, native owner/route/check
+binding, and portable contract-depth report pass, the repository keeps only the
+current contract source, compiled contract, and exact check manifest.
+Installation and upgrades delete the exact former work contract, underscore
+check manifest, flat run records, and empty former runtime directories. No
+compatibility, conversion, renewal, retirement-receipt, alias, or fallback
+runtime survives; any reintroduced residual blocks installation and readiness.
 
-Do not replace these with a large weighted scoring system. The point is to keep autonomous maintenance auditable.
+Fresh installation and every supported upgrade provision only
+`kb-sleep-maintenance`, `kb-dream-pass`, `kb-organization-contribute`,
+`kb-organization-maintenance`, and `khaos-brain-update`, plus the surviving
+automations. The installer must delete only the exact retired
+`kb-architect-pass` Skill and `kb-architect` automation, even when an old machine
+has missing or stale install manifests; similarly named user assets remain
+untouched. Historical Architect records are inert provenance and may remain only
+in integrity-checked cold history.
 
-Allowed statuses are:
+Installation is one whole-tree transaction. It stages complete Skill and
+automation trees, compiles and checks the current SkillGuard authority, compares
+source, stage, installed, and post-operation manifests, detects concurrent source
+drift, rejects any unvalidated or incomplete incoming hard authority, creates rollback
+copies, activates all managed trees, validates the result, and commits a versioned
+durable receipt with immutable replay evidence. Interruption recovery restores
+any incomplete transaction before a new one begins. Every surviving automation
+retains both its exact prior runtime status and independent `user_paused` value.
+Failed aggregate validation leaves all five migration-paused survivors paused.
 
-- `new`
-- `watching`
-- `ready-for-patch`
-- `ready-for-apply`
-- `applied`
-- `rejected`
-- `superseded`
+The target-owned contract generator, complete current SkillGuard executable
+tree, complete current FlowGuard package tree, and each managed Skill source
+tree must retain one content identity from
+immediately before through immediately after the validation that issues its
+receipt. The upgrader copies both complete Guard trees into immutable,
+receipt-bound snapshots before long assurance; every child check consumes those
+snapshots instead of rediscovering a mutable global SkillGuard installation or
+editable FlowGuard package. A temporary live-tree replacement therefore cannot
+split one run across tool versions, but a genuinely different live identity at
+final currentness fails the upgrade while all surviving automations remain
+paused. A later automatic attempt may start only from newly frozen identities.
 
-There is no human-review status. High-risk or uncertain proposals remain under long observation as `watching` until evidence and safety improve.
+Installed supervision never imports that frozen snapshot together with its
+runtime receipts or interpreter caches. It creates a short, repository-local,
+content-addressed behavior projection containing the frozen SkillGuard program
+and current global-router sibling, excluding `.sg-runtime`, `__pycache__`,
+`.pyc`, and `.pyo`, and requires its official fingerprint to equal the verified
+installed runtime identity. The five exact installed control files use a second
+short exact-byte projection. Neither projection is nested below a deep scheduled
+run root, so Windows path length cannot silently decide whether the same current
+installation is executable. A missing router, identity mismatch, or residual
+runtime state fails closed; it does not switch to live source or a fallback.
 
-The daily Architect pass should not be forced to invent a new proposal. It must maintain the queue every day, which can mean creating, merging, upgrading, applying, rejecting, superseding, or explicitly doing nothing when no signal crosses the threshold.
+For each concrete scheduled Sleep, Dream, organization, or update execution,
+the guarded entrypoint establishes one official persistent supervision session
+before invoking the native owner. That session freezes and retains the sealed
+verified installation context, exact SkillGuard behavior projection, exact
+installed target-control projection, and six-field scheduled identity. The
+same authority builds any target-native terminal and closes the run after the
+native owner finishes; it never reopens live global SkillGuard currentness at
+the end of a long task. A newer global SkillGuard or target Skill version is
+eligible only for the next execution. Updating a supervised target Skill does
+not itself authorize or require reinstalling global SkillGuard.
 
-The default cadence is after Sleep and Dream, with lane-status checks preventing overlap:
+The frozen session separates immutable authority from evidence that is born
+after native execution. SkillGuard code, the installation context, the behavior
+projection, and installed target control never change within the run. The native
+receipt path/hash, run id, scheduled identity, fixture gate, and update
+finalization receipt cross into that retained session only through the exact
+seven declared dynamic keys. Missing declared keys clear inherited values and
+undeclared keys cannot become evidence. This prevents both stale-run closure and
+the false conclusion that a missing receipt requires a global SkillGuard
+reinstall.
 
-- `KB Sleep`: 12:00
-- `KB Dream`: 13:00
-- `KB Architect`: 14:00
+Aggregate assurance also separates resource owners. The repository-wide suite
+runs first, ordinary read-oriented children may then run in parallel,
+performance-sensitive LogicGuard runtime benchmarks run next on their own
+exclusive lane, and the child that executes real scheduled production runs
+last on another exclusive lane. This prevents a healthy benchmark, Sleep, or
+Dream route from exhausting its declared budget only because broad sibling
+checks are competing for the same machine. Inside one Sleep cycle, the final
+active-index generation has one publication/validation owner: unchanged
+intermediate work defers to that owner, and an already current receipt is reused
+unless a later lifecycle decision actually changes index eligibility.
 
-Each core maintenance lane should acquire the shared local maintenance lock before stateful work and mark itself completed after it finishes. If another core lane is still running, the new lane waits and rechecks every five minutes instead of skipping. Stale or corrupt lock state should be recovered with an auditable lock record so scheduled work is not permanently lost.
+The caller decides source versus installed supervision only from the exact
+managed target root. The canonical repository Skill root selects source; the
+active Codex `skills/<skill-id>` root selects installed execution. Scheduled,
+calibration, and other surface names are display labels only. A missing,
+outside, or ambiguously resolved root blocks before execution, so neither an
+installed target can silently run as source nor a source target masquerade as
+installed authority.
 
-The installer should provision the repository-managed maintenance, organization, and update skills (`kb-sleep-maintenance`, `kb-dream-pass`, `kb-architect-pass`, `kb-organization-contribute`, `kb-organization-maintenance`, and `khaos-brain-update`) plus the repository-managed automations, and the install check should verify them. These skills are explicit entry points for scheduled maintenance, organization exchange, organization maintenance, or authorized software update; they should remain narrow and should not enable broad implicit invocation.
+The portable installer continues to preserve each machine's pre-upgrade runtime
+status and independent user-pause choice. This machine has a separate explicit
+operator override: all five surviving automations remain `PAUSED` with
+`user_paused=true` after installation and final assurance. The closeout stages
+and hash-binds that whole five-member state, reads every result back, writes an
+immutable machine receipt, and blocks if any member becomes active or loses its
+user-pause bit.
 
-Each automation prompt should explicitly name its maintenance skill (`$kb-sleep-maintenance`, `$kb-dream-pass`, or `$kb-architect-pass`) while preserving enough fallback markers for install checks to detect prompt drift. Cron automation remains responsible for schedule, workspace, model policy, and reasoning policy; the skill owns the maintenance workflow contract.
+Aggregate-assurance installer fixtures are also isolated from the live Codex
+shell-tools directory and user PATH, not only from migration and automation
+state. Fixture mode requires an explicit non-default Codex home, fixture-local
+shell-tools directory, and disabled PATH persistence. The aggregate readiness
+owner runs the full repository regression once in an exclusive validation lane;
+model alignment consumes its node-level JUnit evidence instead of racing or
+restarting the same installer fixtures on Windows.
 
-`$khaos-brain-update` is not a cron automation. Architect or the UI may discover available versions and record user intent, then explicitly invoke the update Skill. The Skill itself should be recovery-oriented: force-close the desktop UI, preserve local KB and organization state, update only by Git fast-forward, and refresh the installer-managed Codex integration with `scripts/install_codex_kb.py`.
+That alignment uses declared logical validation-owner ids, not raw receipt file
+or producer names. An unknown owner is represented as missing failed evidence
+and keeps the aggregate red; it never raises an uncaught lookup exception or
+selects another receipt as fallback.
 
-Software update coordination uses `.local/khaos_brain_update_state.json`. The desktop UI reads this file to show the normal version, a red available-update capsule, or a prepared-update capsule that can be clicked again to cancel. Architect runs `python scripts/khaos_brain_update.py --architect-check --json` before ordinary mechanism maintenance; only when the user has prepared the update and no Khaos Brain UI process is running should Architect invoke `$khaos-brain-update`. While the state is `upgrading`, UI launchers should refuse to open the desktop and show an updating message.
+Peer AI work may still admit observations during that long assurance window.
+Before any restoration transaction, the installer therefore runs a bounded
+post-assurance data convergence loop: production debt settlement, atomic index
+rebuild, real retrieval-threshold evaluation, and a fresh migration check must
+all be current together. Non-convergence is a recoverable PAUSED attempt, never
+a partial success.
+
+The five exact repository-managed automation Skill paths use a currentness-bound
+whole-tree replacement policy. The incoming tree must pass the current compiler,
+target-owned contract generation, native depth calibration, complete manifest,
+and source/stage parity before activation. A current installed tree is compared
+for semantic hard-authority loss by projecting checks onto covered
+obligations, evidence classes, and mandatory owners. Check identifiers may be renamed, merged,
+split, or removed when the incoming semantic projection remains a superset;
+check-id, native-route, and depth-dimension subset preservation are not
+capability evidence. A conditional depth wrapper may move to its unchanged
+independent hard owner only with an exact closure-preserving reorganization
+proof, while any lost obligation, evidence class, or owner remains a hard downgrade. An absent or non-current
+managed tree is never interpreted or converted and is used only as the rollback backup before the
+validated incoming tree replaces it. Unknown, partial, shrunk, or tampered
+incoming trees fail before activation and preserve the paused old tree.
+
+Every attempt also writes a durable checkpoint journal outside the
+last-known-good install manifest. Router refresh is run and journaled before
+aggregate assurance, then run again after the last transaction that can replace
+a managed Skill tree. Final success requires the current official global
+registry and managed-prompt checks to match the live SkillGuard/global-router
+surface fingerprints and the current transaction. If assurance or any later
+post-commit check fails, the previous successful manifest is preserved, the
+failed attempt remains explicitly retryable, and all five tasks remain or return
+to `PAUSED`.
+
+The history migration lock must be interruption-safe too. A current holder
+publishes a versioned owner token, process id, and heartbeat. A live owner or a
+recent ownerless legacy lock cannot be displaced. A dead recorded owner, or an
+old ownerless legacy lock with no matching migration process, is atomically
+quarantined and recorded in a durable recovery receipt before the migration
+reacquires the lock and resumes. Manual deletion is not a valid success path.
+
+The upgrade also runs the versioned Chaos Brain maintenance migration:
+
+`preflight -> snapshot -> classify -> settle-logical-debt -> archive-cold-evidence -> prune-derived-data -> build-logicguard-authority -> publish-projections -> rebuild-index -> publish-pointer -> validate-zero-residual -> committed`
+
+The migration inventories files, counts, bytes, hashes, ownership, dependencies,
+and prune eligibility before deletion. It gives unresolved observations and
+candidates explicit lifecycle outcomes, parks only with machine-evaluable reopen
+conditions, settles the retired Architect proposal queue, archives retention-
+required evidence in content-addressed verified cold storage, and removes only
+receipt-covered regenerable caches, sandboxes, completed workspaces, duplicate
+snapshots, and other declared derivations. It is journaled, idempotent, resumable,
+rollbackable, writer-exclusive, and must publish before/after debt and storage
+accounting plus an atomic exact model/mesh/projection/index generation receipt.
+The migration is the only code allowed to read the exact retired card format.
+It converts every valid entry directly into the current LogicGuard authority,
+removes retired semantic fields, writes the generation pointer last, and proves
+zero legacy authority residuals. An incompatible residual blocks and rolls back;
+normal runtime never gains a compatibility reader.
+
+Maintenance standard v3 treats the managed physical surface as a convergent
+boundary, not a one-time scan. Validation rescans it after long integrity work;
+late or post-commit reintroduction of old caches, sandboxes, or workspaces
+reopens the gate and runs stable receipt-backed reconciliation passes until the
+surface is empty or a real blocker leaves the upgrade paused.
+Canonical receipts keep normal relative paths, while Windows filesystem I/O
+uses extended-length syntax so deeply nested legacy debt remains visible to
+inventory, hashing, archive, prune, and residual checks.
+Observations admitted by concurrent AI work during or after a long migration
+also reopen the gate and receive bounded atomic settlement, index rebuild, and
+their own logical-reconciliation receipts before completion.
+
+Foreground retrieval must not pay the cost of that full maintenance audit.
+The active index publishes a compact activation receipt; each query validates
+that receipt and only the few exact model/projection bindings it could return.
+For selected entries it then reads the immutable model, root block, explicit
+gaps, and bounded grounded mesh neighborhood. Observation-only
+intake does not invalidate entry authority. Any entry-lifecycle transition must
+write a durable fail-closed invalidation marker before its event, and only a
+full validated rebuild may reactivate the index. A changed or missing indexed
+binding also fails the compact check; there is no projection or legacy fallback.
+Full model/mesh/projection manifests and lifecycle replay
+remain mandatory for Sleep, migration, rebuild, and aggregate assurance.
+
+Historical lifecycle settlement must remain scale-bounded. It compiles missing
+admission, disposition, and entry-snapshot events into bounded atomic batches,
+replays the lifecycle authority at most once before and once after each batch,
+and records requested, created, reused, replay, batch, and final-sequence counts.
+Pending Dream handoffs are observation sources inside that same Sleep-owned
+batch; they must not admit and dispose one item at a time through separate full
+lifecycle replays. Each full replay preserves the ordered durable key projection
+but uses a separate in-memory membership index, so duplicate validation grows
+linearly with lifecycle event count rather than rescanning every prior key.
+An older partially completed per-item attempt must resume through stable
+idempotency keys and candidate identities without duplicate cards or events.
+
+Software update coordination uses `.local/khaos_brain_update_state.json`. The
+desktop UI may display update state, but the machine interface and automation use
+canonical encoding-stable JSON. `$khaos-brain-update` remains recovery-oriented:
+it preserves local KB and organization state, updates only through the supported
+Git path, runs the maintenance migration and transactional installer, removes
+retired surfaces, requires exact LogicGuard authority and zero residuals, and
+reports success only when every current aggregate gate is green.
+
+The aggregate readiness runner is the sole owner of expensive release leaf
+execution. It executes each exact command identity at most once, runs the full
+repository regression once on an exclusive lane, and publishes content-addressed
+command receipts plus a complete JUnit node inventory. Model-test alignment,
+focused and semantic coverage claims, and OpenSpec closure consume that evidence
+graph. They do not relaunch overlapping pytest or model commands. Reuse is valid
+only while source, normalized command, environment, verifier, inventory revision,
+terminal status, skips, and proof-artifact hashes remain exact and current.
+
+The updater uses a strict two-stage SkillGuard boundary. Its first route
+authorizes the completed native update work. While all five live automations are
+still `PAUSED`, the updater then builds a no-mutation restoration plan that binds
+each source hash, target hash, prior status, `user_paused` value, and desired
+state. A composed authorization-plus-finalization route must close that exact
+plan before activation. Only then may the updater apply the five writes, read
+back every state and hash, run the ordinary install check, publish an immutable
+activation receipt, and mark the software state `CURRENT`. Drift or failure at
+any point re-pauses all five and leaves the state `FAILED`.
+
+The update gate has exactly three successful no-op branches: `no-update`,
+`waiting-for-user`, and `ui-running`. States such as `already-upgrading`,
+`failed-awaiting-user`, `concurrent-update`, and unknown operational blockers
+remain blocked or retryable and must not be converted into completed native or
+SkillGuard receipts.
 
 The install check should also verify that the global predictive KB defaults
 name both skill/plugin usage lessons and subagent/delegation usage lessons as
@@ -1085,82 +1429,73 @@ paths.
 
 Automation specs must encode model intent as `model_policy = "strongest-available"` and `reasoning_effort_policy = "deepest"` rather than pinning a fixed model slug. During installation, the repo installer resolves that policy against the current machine's Codex model cache/config, writes the concrete runtime values into the automation files, and records the policy fields so future machines can pick newer models without changing the spec.
 
-## 11. Implementation Plan for Codex
+## 11. LogicGuard-Native Implementation Sequence
 
-Codex should treat the following as the implementation sequence.
+Codex should treat the following as the current implementation and validation
+sequence. A later change must preserve this ownership order.
 
-### Phase 1 — Align the schema with the predictive model concept
+### Phase 1 — Build exact argument models
 
-Tasks:
+1. Bind the real installed LogicGuard package and fail visibly if unavailable.
+2. Convert every admitted entry into a deterministic model revision with a root
+   Claim, Context, Method, supported typed nodes, ArgumentBlock, and explicit gaps.
+3. Keep public, private, and candidate authority physically separated.
 
-1. Update `schemas/kb_entry.example.yaml`.
-2. Update sample entries so they use `domain_path`, `cross_index`, `action`, `predict`, and `use`.
-3. Keep backward compatibility where practical.
+### Phase 2 — Build grounded meshes and projections
 
-### Phase 2 — Refactor retrieval toward hierarchical routing
+1. Pin exact member revisions in scoped ModelMeshes.
+2. Require qualifying non-AI provenance for every canonical relation.
+3. Generate readable YAML cards deterministically and bind each projection to
+   its exact model, node, block, mesh, generation, and digest.
+4. Publish an exact active index; never add a projection or legacy fallback.
 
-Tasks:
+### Phase 3 — Make Sleep the sole publisher
 
-1. Update `kb_search.py` to accept `--path-hint`.
-2. Add scoring for `domain_path` and `cross_index`.
-3. Improve rendering so results show:
-   - id
-   - title
-   - domain path
-   - predicted result
-   - operational guidance
-   - score
-4. Keep the logic file-based and deterministic.
+1. Route all card/candidate semantic writes through one Sleep generation publisher.
+2. Consume observations and Dream handoffs once, update models and meshes, audit
+   gaps, then write every projection and index before publishing the pointer last.
+3. Roll back the complete generation on any model, mesh, projection, index, or
+   pointer failure.
 
-### Phase 3 — Refactor candidate capture
+### Phase 4 — Make Dream an immutable verifier
 
-Tasks:
+1. Pin exact authority identities before experiment selection.
+2. Plan evidence removal, assumption removal, rebuttal/counterexample
+   strengthening, boundary pressure, cross-edge removal, and neighbor-pin
+   replacement, then execute every applicable path through a separate
+   simulation overlay.
+3. Emit typed exact model-gap handoffs and prove canonical authority unchanged.
 
-1. Update `kb_capture_candidate.py` so it can write predictive model fields.
-2. Support `domain_path`, `cross_index`, `action`, `expected_result`, and `guidance`.
-3. Continue writing to `kb/candidates/` only.
+### Phase 5 — Cut over existing machines
 
-### Phase 4 — Update the skill and repository guidance
+1. Let only the versioned migration read retired formats.
+2. Convert directly to current models, meshes, projections, index, and pointer.
+3. Remove legacy semantic authority and require zero residuals.
+4. Keep the transaction rollbackable and every retained automation paused until
+   installation, SkillGuard, migration, and aggregate readiness gates pass.
 
-Tasks:
+### Phase 6 — Validate one frozen snapshot
 
-1. Update `SKILL.md` to instruct path-first retrieval.
-2. Keep `AGENTS.md` short and routing-focused.
-3. Ensure `AGENTS.md` tells Codex to read this specification before architectural changes.
+1. Freeze one TestMesh/SkillGuard execution-owner plan.
+2. Run affected model, migration, retrieval, UI, privacy, and automation checks.
+3. Run the aggregate readiness owner exactly once on the stable snapshot.
+4. Reuse its immutable receipts rather than relaunching equivalent checks.
 
-Codex reads `AGENTS.md` before work and merges project guidance by directory depth, so repository-level instructions should stay small and stable while deeper documents carry the full plan.
+## 12. Definition of Done for LogicGuard-Native v0.1
 
-### Phase 5 — Add minimal evaluation coverage
+The version is done only when all of the following are true:
 
-Tasks:
-
-1. Expand `tests/eval_cases.yaml`.
-2. Include route-based examples, not only keyword examples.
-3. Verify that relevant entries rank near the top for representative tasks.
-
-### Phase 6 — Add optional dream-mode scaffolding
-
-Tasks:
-
-1. Add a dedicated runbook that keeps dream-mode separate from sleep maintenance.
-2. Store dream run artifacts under a distinct history location such as `kb/history/dream/<run-id>/` when a dedicated tool does not yet exist.
-3. Reuse current file-based tools such as `kb_search.py`, `kb_feedback.py`, `kb_capture_candidate.py`, and proposal artifacts instead of introducing opaque autonomous machinery.
-4. Keep dream write-back candidate-only or history-only until later real-task evidence confirms the result.
-5. Add a small evaluation set that checks the system can distinguish consolidation work from exploration work.
-
-## 12. Definition of Done for v0.1
-
-The first version is done when all of the following are true:
-
-- repository contains the predictive schema documentation
-- repository contains at least two example model cards
-- search script supports `--path-hint`
-- search output exposes domain path, predicted result, and guidance
-- capture script can write predictive candidate entries
-- skill instructions reflect route-first retrieval
-- `AGENTS.md` points Codex to this design brief
-- evaluation cases exist for at least a few representative tasks
-- no embeddings, no opaque AI-driven promotion, and no external services are required
+- every active entry has an exact valid LogicGuard model and scoped mesh binding
+- missing evidence, warrant, assumptions, rebuttals, and boundaries remain
+  visible gaps rather than generated claims
+- readable cards validate as deterministic projections and cannot act as fallback authority
+- retrieval enters the exact root ArgumentBlock and expands only grounded mesh edges
+- Sleep is the sole normal-runtime canonical generation publisher
+- Dream simulations do not advance or rewrite canonical authority
+- the versioned migration is idempotent, rollbackable, direct-to-current, and proves zero legacy semantic residuals
+- SkillGuard current contracts and install projections are exact and current
+- the unique aggregate readiness owner passes the frozen model/test contract
+- no embeddings, external database, graph database, compatibility reader, or opaque fallback is required
 
 ## 13. GitHub Publication Plan
 

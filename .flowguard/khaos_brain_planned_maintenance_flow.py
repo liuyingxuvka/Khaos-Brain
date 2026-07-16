@@ -2,13 +2,13 @@
 
 This model checks the plan before production edits:
 
-    Sleep content work -> final AI zh-CN cleanup -> Architect report rollup
+    Sleep content work -> final AI zh-CN cleanup -> system-maintenance rollup
     -> content-boundary/install gates -> release/update readiness
 
 The model is intentionally about workflow ownership, not text quality. It
 models whether the final cleanup and summary gates prevent silent completion,
 duplicate translation work, leaked local-only content, stale installs, and
-incomplete Architect reports.
+incomplete maintenance reports.
 """
 
 from __future__ import annotations
@@ -18,7 +18,6 @@ import json
 from typing import Iterable
 
 from flowguard import (
-    Explorer,
     FunctionContract,
     FunctionResult,
     Invariant,
@@ -30,9 +29,10 @@ from flowguard import (
     check_trace_contracts,
     run_exact_sequence,
 )
+from flowguard.explorer import Explorer
 
 
-REQUIRED_ARCHITECT_REPORTS = ("sleep", "dream", "flowguard", "organization", "install")
+REQUIRED_MAINTENANCE_REPORTS = ("sleep", "dream", "flowguard", "organization", "install")
 
 
 @dataclass(frozen=True)
@@ -57,7 +57,7 @@ class State:
     legacy_i18n_applied: bool = False
     sleep_report_status: str = "none"
     reports_seen: tuple[str, ...] = ()
-    architect_summary_status: str = "none"
+    maintenance_rollup_status: str = "none"
     improvement_backlog_visible_to_system: bool = False
     repo_skill_changed: bool = False
     installed_synced: bool = True
@@ -70,7 +70,7 @@ class State:
         return not self.card_i18n_missing and not self.route_i18n_missing
 
     def has_all_reports(self) -> bool:
-        return all(report in self.reports_seen for report in REQUIRED_ARCHITECT_REPORTS)
+        return all(report in self.reports_seen for report in REQUIRED_MAINTENANCE_REPORTS)
 
     def install_healthy_for_current_repo(self) -> bool:
         return (not self.repo_skill_changed) or (self.installed_synced and self.install_check_passed)
@@ -79,7 +79,7 @@ class State:
         return (
             self.i18n_clean()
             and self.sleep_report_status == "clean"
-            and self.architect_summary_status == "complete"
+            and self.maintenance_rollup_status == "complete"
             and self.improvement_backlog_visible_to_system
             and self.content_boundaries_verified
             and not self.local_only_content_leaked
@@ -211,12 +211,12 @@ class SleepFinalI18nBlock:
         )
 
 
-class ArchitectRollupBlock:
-    """Input x State -> Set(Output x State) for Architect-owned report aggregation."""
+class SystemMaintenanceRollupBlock:
+    """Input x State -> Set(Output x State) for system-maintenance report aggregation."""
 
-    name = "ArchitectRollupBlock"
+    name = "SystemMaintenanceRollupBlock"
     reads = ("sleep_report_status", "reports_seen", "repo_skill_changed", "installed_synced", "install_check_passed")
-    writes = ("reports_seen", "architect_summary_status", "improvement_backlog_visible_to_system")
+    writes = ("reports_seen", "maintenance_rollup_status", "improvement_backlog_visible_to_system")
     accepted_input_type = StepResult
     output_description = "StepResult"
     idempotency = "Repeated report collection only records each source once; summary writing converges."
@@ -226,88 +226,88 @@ class ArchitectRollupBlock:
 
     def apply(self, input_obj: StepResult, state: State) -> Iterable[FunctionResult]:
         event = input_obj.event
-        if event.kind == "architect_collect_sleep":
+        if event.kind == "maintenance_collect_sleep":
             if state.sleep_report_status in {"clean", "incomplete"}:
                 yield FunctionResult(
-                    output=StepResult(event, "architect_collected_sleep"),
+                    output=StepResult(event, "maintenance_collected_sleep"),
                     new_state=replace(state, reports_seen=_append_unique(state.reports_seen, "sleep")),
-                    label="architect_collected_sleep",
-                    reason="Architect reads the latest Sleep report after Sleep has produced one.",
+                    label="maintenance_collected_sleep",
+                    reason="System maintenance reads the latest Sleep report after Sleep has produced one.",
                 )
                 return
             yield FunctionResult(
-                output=StepResult(event, "architect_sleep_report_missing"),
+                output=StepResult(event, "maintenance_sleep_report_missing"),
                 new_state=state,
-                label="architect_sleep_report_missing",
-                reason="Architect cannot count Sleep before Sleep has emitted a report.",
+                label="maintenance_sleep_report_missing",
+                reason="System maintenance cannot count Sleep before Sleep has emitted a report.",
             )
             return
 
         source_by_event = {
-            "architect_collect_dream": "dream",
-            "architect_collect_flowguard": "flowguard",
-            "architect_collect_organization": "organization",
-            "architect_collect_install": "install",
+            "maintenance_collect_dream": "dream",
+            "maintenance_collect_flowguard": "flowguard",
+            "maintenance_collect_organization": "organization",
+            "maintenance_collect_install": "install",
         }
         if event.kind in source_by_event:
             source = source_by_event[event.kind]
             if source == "install" and not state.install_healthy_for_current_repo():
                 yield FunctionResult(
-                    output=StepResult(event, "architect_install_report_unhealthy"),
+                    output=StepResult(event, "maintenance_install_report_unhealthy"),
                     new_state=state,
-                    label="architect_install_report_unhealthy",
-                    reason="Architect sees that installed Codex skills are stale relative to repo changes.",
+                    label="maintenance_install_report_unhealthy",
+                    reason="System maintenance sees that installed Codex skills are stale relative to repo changes.",
                 )
                 return
             yield FunctionResult(
-                output=StepResult(event, f"architect_collected_{source}"),
+                output=StepResult(event, f"maintenance_collected_{source}"),
                 new_state=replace(state, reports_seen=_append_unique(state.reports_seen, source)),
-                label=f"architect_collected_{source}",
-                reason=f"Architect records the {source} maintenance source.",
+                label=f"maintenance_collected_{source}",
+                reason=f"System maintenance records the {source} maintenance source.",
             )
             return
 
-        if event.kind == "architect_write_summary":
-            if self.variant == "bad_architect_summary_without_sources":
+        if event.kind == "maintenance_write_rollup":
+            if self.variant == "bad_maintenance_rollup_without_sources":
                 yield FunctionResult(
-                    output=StepResult(event, "architect_summary_complete"),
+                    output=StepResult(event, "maintenance_rollup_complete"),
                     new_state=replace(
                         state,
-                        architect_summary_status="complete",
+                        maintenance_rollup_status="complete",
                         improvement_backlog_visible_to_system=True,
                     ),
-                    label="architect_summary_complete",
+                    label="maintenance_rollup_complete",
                     reason="Broken variant writes a complete rollup without all source reports.",
                 )
                 return
             if state.has_all_reports() and state.install_healthy_for_current_repo():
                 yield FunctionResult(
-                    output=StepResult(event, "architect_summary_complete"),
+                    output=StepResult(event, "maintenance_rollup_complete"),
                     new_state=replace(
                         state,
-                        architect_summary_status="complete",
+                        maintenance_rollup_status="complete",
                         improvement_backlog_visible_to_system=True,
                     ),
-                    label="architect_summary_complete",
-                    reason="Architect writes the system-readable rollup after all source reports are present.",
+                    label="maintenance_rollup_complete",
+                    reason="System maintenance writes the machine-readable rollup after all source reports are present.",
                 )
                 return
             yield FunctionResult(
-                output=StepResult(event, "architect_summary_incomplete"),
+                output=StepResult(event, "maintenance_rollup_incomplete"),
                 new_state=replace(
                     state,
-                    architect_summary_status="incomplete",
+                    maintenance_rollup_status="incomplete",
                     improvement_backlog_visible_to_system=False,
                 ),
-                label="architect_summary_incomplete",
-                reason="Architect refuses to call the rollup complete while source reports are missing or install is stale.",
+                label="maintenance_rollup_incomplete",
+                reason="System maintenance refuses to call the rollup complete while source reports are missing or install is stale.",
             )
             return
 
         yield FunctionResult(
             output=input_obj,
             new_state=state,
-            label="architect_noop",
+            label="maintenance_rollup_noop",
             reason="Event belongs to another maintenance boundary.",
         )
 
@@ -400,8 +400,8 @@ class BoundaryInstallGateBlock:
                 block_reason = "release_blocked_install"
             elif not state.i18n_clean() or state.sleep_report_status != "clean":
                 block_reason = "release_blocked_sleep_i18n"
-            elif state.architect_summary_status != "complete":
-                block_reason = "release_blocked_architect_summary"
+            elif state.maintenance_rollup_status != "complete":
+                block_reason = "release_blocked_maintenance_rollup"
             yield FunctionResult(
                 output=StepResult(event, block_reason),
                 new_state=replace(state, release_state="blocked"),
@@ -422,7 +422,7 @@ def build_workflow(*, variant: str = "accepted") -> Workflow:
     return Workflow(
         (
             SleepFinalI18nBlock(variant=variant),
-            ArchitectRollupBlock(variant=variant),
+            SystemMaintenanceRollupBlock(variant=variant),
             BoundaryInstallGateBlock(variant=variant),
         ),
         name=f"khaos_brain_planned_maintenance_flow_{variant}",
@@ -436,12 +436,12 @@ INPUTS = (
     Event("sleep_legacy_i18n_step"),
     Event("sleep_final_i18n_cleanup"),
     Event("sleep_finish"),
-    Event("architect_collect_sleep"),
-    Event("architect_collect_dream"),
-    Event("architect_collect_flowguard"),
-    Event("architect_collect_organization"),
-    Event("architect_collect_install"),
-    Event("architect_write_summary"),
+    Event("maintenance_collect_sleep"),
+    Event("maintenance_collect_dream"),
+    Event("maintenance_collect_flowguard"),
+    Event("maintenance_collect_organization"),
+    Event("maintenance_collect_install"),
+    Event("maintenance_write_rollup"),
     Event("skill_repo_changed"),
     Event("install_sync"),
     Event("content_boundary_review"),
@@ -455,12 +455,12 @@ ACCEPTED_SEQUENCE = (
     Event("sleep_finish"),
     Event("skill_repo_changed"),
     Event("install_sync"),
-    Event("architect_collect_sleep"),
-    Event("architect_collect_dream"),
-    Event("architect_collect_flowguard"),
-    Event("architect_collect_organization"),
-    Event("architect_collect_install"),
-    Event("architect_write_summary"),
+    Event("maintenance_collect_sleep"),
+    Event("maintenance_collect_dream"),
+    Event("maintenance_collect_flowguard"),
+    Event("maintenance_collect_organization"),
+    Event("maintenance_collect_install"),
+    Event("maintenance_write_rollup"),
     Event("content_boundary_review"),
     Event("release_gate"),
 )
@@ -476,21 +476,21 @@ LEGACY_DISABLED_SEQUENCE = (
     Event("sleep_final_i18n_cleanup"),
 )
 
-ARCHITECT_MISSING_SOURCE_SEQUENCE = (
+MAINTENANCE_MISSING_SOURCE_SEQUENCE = (
     Event("sleep_finish"),
-    Event("architect_collect_sleep"),
-    Event("architect_write_summary"),
+    Event("maintenance_collect_sleep"),
+    Event("maintenance_write_rollup"),
 )
 
 INSTALL_UNSYNCED_RELEASE_SEQUENCE = (
     Event("sleep_finish"),
-    Event("architect_collect_sleep"),
-    Event("architect_collect_dream"),
-    Event("architect_collect_flowguard"),
-    Event("architect_collect_organization"),
+    Event("maintenance_collect_sleep"),
+    Event("maintenance_collect_dream"),
+    Event("maintenance_collect_flowguard"),
+    Event("maintenance_collect_organization"),
     Event("skill_repo_changed"),
-    Event("architect_collect_install"),
-    Event("architect_write_summary"),
+    Event("maintenance_collect_install"),
+    Event("maintenance_write_rollup"),
     Event("content_boundary_review"),
     Event("release_gate"),
 )
@@ -518,14 +518,14 @@ def no_sleep_clean_with_missing_i18n(state: State, trace: object) -> InvariantRe
     return InvariantResult.pass_()
 
 
-def architect_complete_requires_sources(state: State, trace: object) -> InvariantResult:
-    if state.architect_summary_status == "complete" and not state.has_all_reports():
+def maintenance_rollup_requires_sources(state: State, trace: object) -> InvariantResult:
+    if state.maintenance_rollup_status == "complete" and not state.has_all_reports():
         return InvariantResult.fail(
-            "Architect marked the system rollup complete without all required reports",
+            "System maintenance marked the rollup complete without all required reports",
             {"reports_seen": ",".join(state.reports_seen)},
         )
-    if state.architect_summary_status == "complete" and not state.install_healthy_for_current_repo():
-        return InvariantResult.fail("Architect marked the rollup complete while installed skills were stale")
+    if state.maintenance_rollup_status == "complete" and not state.install_healthy_for_current_repo():
+        return InvariantResult.fail("System maintenance marked the rollup complete while installed skills were stale")
     return InvariantResult.pass_()
 
 
@@ -533,7 +533,9 @@ def release_requires_all_gates(state: State, trace: object) -> InvariantResult:
     if state.release_state != "allowed":
         return InvariantResult.pass_()
     if not state.release_ready():
-        return InvariantResult.fail("release was allowed before i18n, Architect, content-boundary, and install gates passed")
+        return InvariantResult.fail(
+            "release was allowed before i18n, maintenance-rollup, content-boundary, and install gates passed"
+        )
     return InvariantResult.pass_()
 
 
@@ -554,13 +556,13 @@ INVARIANTS = (
         no_sleep_clean_with_missing_i18n,
     ),
     Invariant(
-        "architect_complete_requires_sources",
-        "Architect rollup cannot be complete without Sleep, Dream, FlowGuard, organization, and install reports.",
-        architect_complete_requires_sources,
+        "maintenance_rollup_requires_sources",
+        "System-maintenance rollup cannot be complete without Sleep, Dream, FlowGuard, organization, and install reports.",
+        maintenance_rollup_requires_sources,
     ),
     Invariant(
         "release_requires_all_gates",
-        "Release/update readiness requires i18n, Architect rollup, content-boundary, and install-sync gates.",
+        "Release/update readiness requires i18n, system-maintenance rollup, content-boundary, and install-sync gates.",
         release_requires_all_gates,
     ),
 )
@@ -573,7 +575,7 @@ CONTRACTS = (
         writes=SleepFinalI18nBlock.writes,
         forbidden_writes=(
             "reports_seen",
-            "architect_summary_status",
+            "maintenance_rollup_status",
             "improvement_backlog_visible_to_system",
             "repo_skill_changed",
             "installed_synced",
@@ -585,10 +587,10 @@ CONTRACTS = (
         traceability_rule="Sleep emits explicit labels for content change, disabled legacy i18n, final cleanup, and finish status.",
     ),
     FunctionContract(
-        function_name="ArchitectRollupBlock",
+        function_name="SystemMaintenanceRollupBlock",
         accepted_input_type=StepResult,
         output_type=StepResult,
-        writes=ArchitectRollupBlock.writes,
+        writes=SystemMaintenanceRollupBlock.writes,
         forbidden_writes=(
             "card_i18n_missing",
             "route_i18n_missing",
@@ -601,7 +603,7 @@ CONTRACTS = (
             "release_state",
         ),
         idempotency_rule="Repeated report collection is set-like; summary status converges.",
-        traceability_rule="Architect rollup labels identify which source was collected or why summary stayed incomplete.",
+        traceability_rule="System-maintenance rollup labels identify which source was collected or why the rollup stayed incomplete.",
     ),
     FunctionContract(
         function_name="BoundaryInstallGateBlock",
@@ -617,7 +619,7 @@ CONTRACTS = (
             "final_i18n_runs",
             "legacy_i18n_applied",
             "reports_seen",
-            "architect_summary_status",
+            "maintenance_rollup_status",
             "improvement_backlog_visible_to_system",
         ),
         idempotency_rule="Install sync, boundary review, and release gate converge on stable statuses.",
@@ -720,19 +722,19 @@ def _progress_transition_fn(state: State) -> Iterable[tuple[str, State]]:
     if state.repo_skill_changed and not state.install_healthy_for_current_repo():
         yield _first_completed_state(state, Event("install_sync"))
         return
-    for report in REQUIRED_ARCHITECT_REPORTS:
+    for report in REQUIRED_MAINTENANCE_REPORTS:
         if report not in state.reports_seen:
             event_name = {
-                "sleep": "architect_collect_sleep",
-                "dream": "architect_collect_dream",
-                "flowguard": "architect_collect_flowguard",
-                "organization": "architect_collect_organization",
-                "install": "architect_collect_install",
+                "sleep": "maintenance_collect_sleep",
+                "dream": "maintenance_collect_dream",
+                "flowguard": "maintenance_collect_flowguard",
+                "organization": "maintenance_collect_organization",
+                "install": "maintenance_collect_install",
             }[report]
             yield _first_completed_state(state, Event(event_name))
             return
-    if state.architect_summary_status != "complete":
-        yield _first_completed_state(state, Event("architect_write_summary"))
+    if state.maintenance_rollup_status != "complete":
+        yield _first_completed_state(state, Event("maintenance_write_rollup"))
         return
     if not state.content_boundaries_verified:
         yield _first_completed_state(state, Event("content_boundary_review"))
@@ -776,7 +778,7 @@ def main() -> int:
             "final_i18n_applied",
             "sleep_finished_clean",
             "sleep_finish_blocked_missing_i18n",
-            "architect_summary_incomplete",
+            "maintenance_rollup_incomplete",
             "install_sync_passed",
             "content_boundaries_verified",
             "release_blocked_boundary",
@@ -786,11 +788,14 @@ def main() -> int:
     accepted_run = _run_sequence(ACCEPTED_SEQUENCE)
     missing_final_run = _run_sequence(MISSING_FINAL_I18N_SEQUENCE)
     legacy_disabled_run = _run_sequence(LEGACY_DISABLED_SEQUENCE)
-    architect_missing_run = _run_sequence(ARCHITECT_MISSING_SOURCE_SEQUENCE)
+    maintenance_missing_run = _run_sequence(MAINTENANCE_MISSING_SOURCE_SEQUENCE)
     install_unsynced_run = _run_sequence(INSTALL_UNSYNCED_RELEASE_SEQUENCE)
     bad_sleep_run = _run_sequence(MISSING_FINAL_I18N_SEQUENCE, variant="bad_sleep_allows_missing_i18n")
     bad_legacy_run = _run_sequence(LEGACY_DISABLED_SEQUENCE, variant="bad_legacy_i18n_duplicate")
-    bad_architect_run = _run_sequence(ARCHITECT_MISSING_SOURCE_SEQUENCE, variant="bad_architect_summary_without_sources")
+    bad_maintenance_run = _run_sequence(
+        MAINTENANCE_MISSING_SOURCE_SEQUENCE,
+        variant="bad_maintenance_rollup_without_sources",
+    )
     bad_release_run = _run_sequence((Event("release_gate"),), variant="bad_release_without_boundary")
     contract_summary = _contract_summary(accepted_run)
     loop_summary = _run_loop_check()
@@ -803,7 +808,7 @@ def main() -> int:
                 _has_label(accepted_run, "final_i18n_applied")
                 and _has_label(accepted_run, "sleep_finished_clean")
                 and _has_label(accepted_run, "install_sync_passed")
-                and _has_label(accepted_run, "architect_summary_complete")
+                and _has_label(accepted_run, "maintenance_rollup_complete")
                 and _has_label(accepted_run, "content_boundaries_verified")
                 and _has_label(accepted_run, "release_allowed")
             ),
@@ -815,14 +820,14 @@ def main() -> int:
                 _has_label(legacy_disabled_run, "legacy_i18n_disabled")
                 and _has_label(legacy_disabled_run, "final_i18n_applied")
             ),
-            "architect_cannot_complete_without_sources": (
-                _has_label(architect_missing_run, "architect_summary_incomplete")
-                and not _has_label(architect_missing_run, "architect_summary_complete")
+            "maintenance_rollup_cannot_complete_without_sources": (
+                _has_label(maintenance_missing_run, "maintenance_rollup_incomplete")
+                and not _has_label(maintenance_missing_run, "maintenance_rollup_complete")
             ),
             "install_change_blocks_release_until_sync": _has_label(install_unsynced_run, "release_blocked_install"),
             "bad_sleep_variant_is_rejected": bad_sleep_run.observed_status != "ok",
             "bad_legacy_variant_is_rejected": bad_legacy_run.observed_status != "ok",
-            "bad_architect_variant_is_rejected": bad_architect_run.observed_status != "ok",
+            "bad_maintenance_rollup_variant_is_rejected": bad_maintenance_run.observed_status != "ok",
             "bad_release_variant_is_rejected": bad_release_run.observed_status != "ok",
             "contracts_hold_for_accepted_sequence": contract_summary["ok"],
             "progress_loop_has_success_and_no_stuck_bottom": loop_summary["ok"],
@@ -832,11 +837,11 @@ def main() -> int:
         "accepted_sequence": _scenario_dict(accepted_run),
         "missing_final_i18n_sequence": _scenario_dict(missing_final_run),
         "legacy_disabled_sequence": _scenario_dict(legacy_disabled_run),
-        "architect_missing_source_sequence": _scenario_dict(architect_missing_run),
+        "maintenance_missing_source_sequence": _scenario_dict(maintenance_missing_run),
         "install_unsynced_release_sequence": _scenario_dict(install_unsynced_run),
         "bad_sleep_variant": _scenario_dict(bad_sleep_run),
         "bad_legacy_variant": _scenario_dict(bad_legacy_run),
-        "bad_architect_variant": _scenario_dict(bad_architect_run),
+        "bad_maintenance_rollup_variant": _scenario_dict(bad_maintenance_run),
         "bad_release_variant": _scenario_dict(bad_release_run),
         "contract_summary": contract_summary,
         "loop_summary": loop_summary,

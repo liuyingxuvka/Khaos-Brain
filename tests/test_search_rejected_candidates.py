@@ -7,6 +7,7 @@ from pathlib import Path
 from local_kb.maintenance import build_maintenance_decision, record_maintenance_decision
 from local_kb.search import render_search_payload, search_entries
 from local_kb.store import write_yaml_file
+from tests.current_runtime_helpers import activate_current_kb_runtime
 
 
 class RejectedCandidateSearchTests(unittest.TestCase):
@@ -31,8 +32,10 @@ class RejectedCandidateSearchTests(unittest.TestCase):
                     "use": {"guidance": "Use as a candidate card until validated."},
                     "confidence": 0.55,
                     "status": "candidate",
+                    "retrieval_eligible": True,
                 },
             )
+            activate_current_kb_runtime(repo_root)
 
             initial_results = render_search_payload(
                 search_entries(repo_root, query="default work email drafting"),
@@ -49,6 +52,7 @@ class RejectedCandidateSearchTests(unittest.TestCase):
                 decision_summary="reject-candidate",
             )
             record_maintenance_decision(repo_root, rejection_event)
+            activate_current_kb_runtime(repo_root)
 
             final_results = render_search_payload(
                 search_entries(repo_root, query="default work email drafting"),

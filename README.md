@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <strong>A local predictive experience layer where AI agents turn repeated work into inspectable model cards.</strong>
+  <strong>A local predictive experience layer where every card is an executable LogicGuard argument model.</strong>
 </p>
 <!-- README HERO END -->
 
@@ -19,15 +19,15 @@
   <img src="assets/khaos-brain-icon.png" alt="Khaos Brain icon" width="136">
 </p>
 
-`Khaos Brain` is a local predictive experience layer for AI agents. Instead of saving vague memories, it stores bounded model cards: the situation, the action under consideration, the predicted result, the confidence, the source, the status, and how an agent should use that lesson next time.
+`Khaos Brain` is a local predictive experience layer for AI agents. Instead of saving vague memories, it turns each bounded experience into an executable LogicGuard argument model: a root predictive claim, its context and method, declared evidence and warrant, assumptions, rebuttals, limitations, confidence, provenance, and explicit gaps where support is still missing.
 
-Those cards stay visible files. They can be searched, reviewed, diffed, consolidated, rolled back, and shared through an optional organization repository without exposing a user's private local KB by default. The current release is Codex-first, with installer-managed skills, global defaults, and local maintenance automations already wired for Codex; the design can be adapted to any host agent that supports preflight retrieval, post-task write-back, local scripts, reusable workflows, scheduled maintenance, and Git.
+The canonical models and their grounded ModelMeshes live in a local file-backed LogicGuard authority store. Cards stay visible as deterministic YAML projections, so people can search, review, diff, consolidate, roll back, and optionally share them without making YAML a second semantic authority. The current release is Codex-first, with installer-managed skills, global defaults, and local maintenance automations already wired for Codex; the design can be adapted to any host agent that supports preflight retrieval, post-task write-back, local scripts, reusable workflows, scheduled maintenance, and Git.
 
 ## Why It Is Worth Trying
 
-- It turns "remember this" into a predictive model card with conditions, action, expected outcome, confidence, source, and operational guidance.
+- It turns "remember this" into a LogicGuard model whose conclusion, support, assumptions, counterarguments, boundaries, and missing evidence can be inspected separately.
 - It keeps agent memory local, file-based, Git-versioned, and inspectable instead of hiding it in an opaque memory service.
-- It gives memory a maintenance rhythm: awake retrieval/write-back, Sleep consolidation, Dream exploration, Architect mechanism review, and optional organization maintenance.
+- It gives memory a fully automatic maintenance rhythm: exact-model retrieval/write-back, incremental Sleep model consolidation, immutable Dream pressure tests, system updates, and optional organization maintenance.
 - It makes Skill sharing more useful by pairing a Skill with the experience card that explains when and why to use it.
 
 ## Product Preview
@@ -40,16 +40,26 @@ Those cards stay visible files. They can be searched, reviewed, diffed, consolid
 
 ### What Khaos Brain Is
 
-`Khaos Brain` is a local predictive experience system for AI agents. It does not only store memories; it organizes task experience, predictive models, user preferences, runtime lessons, and shareable Skills into visible, maintainable, Git-versioned cards:
+`Khaos Brain` is a local predictive experience system for AI agents. It does not only store memories; it organizes task experience, predictive models, user preferences, runtime lessons, and shareable Skills into exact LogicGuard models with visible Git-versioned card projections:
 
 - the situation where a lesson applies;
 - the action or route that was taken;
 - the predicted or observed result;
 - the weaker route that failed, when that contrast matters;
+- the evidence and warrant that support the prediction;
+- the assumptions, rebuttals, limitations, and still-missing support;
 - source, author, status, confidence, and review metadata;
 - skill or workflow dependencies when a lesson depends on a reusable capability.
 
-The result is a card library that is local-first, inspectable, searchable, reviewable, mergeable, reversible, and friendly to Git history.
+The result is a model library that is local-first, executable, inspectable, searchable, reviewable, mergeable, reversible, and friendly to Git history.
+
+The authority boundary is strict:
+
+- `.local/khaos-brain/logicguard-authority/` owns exact model and ModelMesh revisions;
+- `kb/public/`, `kb/private/`, and `kb/candidates/` contain deterministic readable projections;
+- the active index binds every hit to an exact generation, model, root ArgumentBlock, and mesh revision;
+- retrieval may expand only grounded ModelMesh edges, never legacy `related_cards` or mere co-use;
+- missing exact authority fails visibly—there is no YAML or floating-head fallback.
 
 ### The Problem It Solves
 
@@ -57,19 +67,20 @@ Most AI memory systems save shallow reminders: "remember to do this next time." 
 
 Useful agent memory needs conditions, actions, outcomes, confidence, provenance, and maintenance. It should also know when a lesson is private, when it can be shared, when it is only a candidate, and when a repeated failure should become a stronger route.
 
-Khaos Brain turns those details into files rather than opaque vector-only memory. A human or maintenance agent can inspect cards, diffs, candidates, rollback records, and review outcomes.
+Khaos Brain turns those details into machine-auditable LogicGuard nodes, edges, ArgumentBlocks, gaps, and receipts rather than opaque vector-only memory. AI maintenance reads the lifecycle ledger, evidence, rollback records, and receipts automatically; the desktop viewer is optional and is not part of the completion gate.
 
 ### Why It Feels Like A Brain
 
 The system follows a brain-like rhythm:
 
 - **Awake work:** the agent retrieves relevant experience before a task and writes observations afterward.
-- **Sleep consolidation:** `KB Sleep` merges duplicates, splits swollen cards, repairs weak lessons, and maintains confidence.
-- **Dream exploration:** `KB Dream` explores nearby but under-validated opportunities in a bounded way.
-- **Architecture review:** `KB Architect` reviews installer, automation, rollback, proposal queues, and maintenance machinery.
+- **Sleep consolidation:** `KB Sleep` is the sole canonical writer. It turns every admitted entry into an exact LogicGuard revision, audits missing support and opposition, assembles grounded scoped ModelMeshes, and atomically publishes models, meshes, projections, and the active index as one generation.
+- **Dream verification:** `KB Dream` pins an exact immutable generation and pressures evidence, assumptions, rebuttals/counterexamples, and boundaries. It can only send typed model-gap handoffs to Sleep and must prove canonical authority unchanged.
+- **System maintenance:** a narrow system-update automation checks and applies authorized software updates; ordinary product changes remain explicit development work rather than a self-modifying maintenance lane.
 - **Organization maintenance:** shared organization sources have their own candidate, review, and maintenance path.
+- **Guarded completion:** each of the five scheduled tasks has its own SkillGuard route, full native phase inventory, non-overlapping evidence, current runtime-readiness proof, positive/shallow calibration, exact native run receipt, and deep terminal closure; finishing only the opening phases never counts as success.
 
-After installation, these rhythms can run through local automations. Task preflight and postflight keep retrieval and write-back close to ordinary work, while Sleep, Dream, Architect, and organization maintenance improve the library over time.
+After installation, these rhythms run through local automations without requiring a human review queue. Task preflight and postflight keep retrieval and evidence write-back close to ordinary work, while Sleep, Dream, system update, and organization maintenance improve the library over time.
 
 ### Personal Mode And Organization Mode
 
@@ -120,7 +131,7 @@ For many teams, a private repository is already the simplest reliable memory bac
 ### Why Try This Instead Of Another AI Memory Product
 
 - **Visible:** cards can be opened directly; source, author, confidence, status, and skill dependencies are visible.
-- **Maintainable:** Sleep, Dream, Architect, and organization maintenance treat memory as a living system.
+- **Maintainable:** incremental Sleep, convergent Dream, system update, and organization maintenance treat memory as a living system.
 - **Local-first:** organization mode does not overwrite personal memory.
 - **Organization-ready:** teams can share routes, lessons, maintenance methods, and reviewed skills.
 - **Git-native:** history, diff, review, rollback, private access, and automation can reuse GitHub.
@@ -155,7 +166,9 @@ python scripts/install_codex_kb.py --json
 python scripts/install_codex_kb.py --check --json
 ```
 
-After the check passes, the machine has the global preflight skill, postflight rules, `KB Sleep`, `KB Dream`, `KB Architect`, and the organization contribution / maintenance entry points.
+After the check passes, the machine has the global preflight skill, postflight rules, `KB Sleep`, `KB Dream`, `Khaos Brain System Update`, and the organization contribution / maintenance entry points. Each scheduled entry point is independently SkillGuard-covered through its complete native phase inventory, current provider/runtime readiness, positive/shallow calibration, real native receipt, and deep terminal closure. Upgrades also remove the retired Architect surfaces and settle old history, candidate, cache, sandbox, and maintenance debt under the current Chaos Brain standard, including late reintroduced files, Windows extended-length paths, and observations admitted by concurrent AI work. Old managed formats are upgrade input only: the AI-run transaction converts them directly into exact LogicGuard models, scoped ModelMeshes, deterministic projections, and an exact active index, publishes the generation pointer last, deletes retired authority, and requires a residual-zero receipt. Normal operation has no compatibility layer or projection fallback; missing current facts fail visibly. Every failed attempt remains durably retryable, and all five tasks remain paused until the updater's final composed SkillGuard gate authorizes an exact hash-bound restoration plan and the plan is applied and read back successfully.
+
+The exact migration phases, rollback behavior, pause-state preservation, and success gates are documented in [Chaos Brain upgrade contract](docs/chaos_brain_upgrade.md).
 
 ### Desktop Card Viewer
 
@@ -233,8 +246,9 @@ A good starting order is:
 ├─ VERSION
 ├─ docs/
 ├─ .agents/
-├─ kb/
-├─ local_kb/
+├─ .local/khaos-brain/logicguard-authority/  # exact local model/mesh generations
+├─ kb/                                      # readable projections + history/taxonomy
+├─ local_kb/                                # model, projection, retrieval, maintenance runtime
 ├─ schemas/
 ├─ scripts/
 ├─ templates/
@@ -245,15 +259,15 @@ A good starting order is:
 
 ### Khaos Brain 是什么
 
-`Khaos Brain` 是一个给 AI agent 使用的本地预测型经验层。它不只是保存一句“下次记得这样做”，而是把反复出现的工作经验写成有边界的模型卡片：适用情境、考虑中的动作、预测结果、可信度、来源、状态，以及 agent 下次应该怎样使用这条经验。
+`Khaos Brain` 是一个给 AI agent 使用的本地预测型经验层。它不只是保存一句“下次记得这样做”，而是把每条有边界的经验写成一个可执行的 LogicGuard 论证模型：根预测结论、适用情境、方法、证据、论证桥梁、假设、反驳、边界、可信度、来源，以及仍然缺少什么支持。
 
-这些卡片仍然是可见文件，可以搜索、审查、diff、整理、回滚，也可以通过可选的组织仓库共享可复用经验，同时默认不公开用户自己的本地私有 KB。当前版本首先集成 Codex：安装器、全局 Skill、`AGENTS.md` 默认规则和本地维护自动化都已经接好；但只要宿主 agent 能在任务前检索、任务后写回、运行本地脚本、加载可复用工作流、做定期维护并读写 Git 仓库，同样结构也可以迁移。
+真正的语义权威保存在本地文件型 LogicGuard model / ModelMesh store 中；卡片仍然是可见的确定性 YAML 投影，可以搜索、审查、diff、整理、回滚，也可以通过可选的组织仓库共享可复用经验，但 YAML 不再是第二套权威。当前版本首先集成 Codex：安装器、全局 Skill、`AGENTS.md` 默认规则和本地维护自动化都已经接好；但只要宿主 agent 能在任务前检索、任务后写回、运行本地脚本、加载可复用工作流、做定期维护并读写 Git 仓库，同样结构也可以迁移。
 
 ### 为什么值得一试
 
-- 它把“下次记得这样做”变成预测型模型卡片，写清适用条件、动作、预期结果、可信度、来源和使用方式。
+- 它把“下次记得这样做”变成 LogicGuard 模型，把结论、证据、论证桥梁、假设、反例、边界和缺口分开表达。
 - 它把 agent 记忆保留为本地、文件化、Git 可追踪、可审查的结构，而不是藏在黑盒记忆服务里。
-- 它让记忆有维护节律：任务前检索和任务后写回，随后由 Sleep、Dream、Architect 和可选组织维护继续整理。
+- 它让记忆有全自动维护节律：任务前进入精确模型、任务后写回观察，随后由 Sleep 整理模型、Dream 做不可变压力测试、系统更新和可选组织维护继续收敛。
 - 它让 Skill 共享更有上下文：共享的不只是脚本，还有说明“什么时候该用、为什么该用”的经验卡片。
 
 ### 它解决什么问题
@@ -269,19 +283,21 @@ A good starting order is:
 - 这个经验来自谁、哪个来源、是否已经被信任
 - 如果一个 Skill 很关键，它到底在哪类任务里有用
 
-`Khaos Brain` 把这些内容做成卡片。卡片不是黑盒向量，不是散乱笔记，也不是只能靠人手维护的规则列表。它们是文件型、可阅读、可搜索、可审查、可合并、可回滚的经验单元。
+`Khaos Brain` 把这些内容做成 LogicGuard 模型，并生成人能阅读的卡片投影。它不是黑盒向量，不是散乱笔记，也不是只能靠人手维护的规则列表。每个检索结果都绑定精确 generation、model revision、根 ArgumentBlock 和 mesh revision；缺少精确权威就明确失败，不回退读取 YAML 或浮动最新版本。
 
 ### 为什么它像一个“脑”
 
 系统刻意采用脑式节律：
 
 - **醒着做任务：** agent 在任务前检索相关经验，在任务后写回观察。
-- **睡眠整理：** `KB Sleep` 合并重复卡片、拆分臃肿卡片、修复弱经验、维护 confidence。
-- **做梦探索：** `KB Dream` 在有边界的范围内探索相近但证据不足的机会。
-- **结构审查：** `KB Architect` 检查 installer、automation、rollback、proposal queue 和维护机制本身。
+- **睡眠整理：** `KB Sleep` 是唯一正常运行时模型写入者。它把每条经验整理成精确 LogicGuard revision，检查证据、warrant、假设、反驳和边界缺口，再把模型、ModelMesh、卡片投影和索引作为一个 generation 原子发布。
+- **快速而守门的检索：** 日常查询先用路线和词法找到入口，再读取精确模型、根 ArgumentBlock、缺口和已验证的 mesh 邻域；`related_cards`、共同出现或 YAML 投影都不能授权扩展。
+- **做梦验证：** `KB Dream` 固定一个不可变 generation，测试移除证据、移除假设、加强反驳/反例和压力边界；它只能把模型缺口交给 Sleep，并且结束前必须证明权威没有被改写。
+- **系统维护：** 一个很窄的 system-update automation 只负责检查和执行已授权的软件更新；普通产品改动仍走明确的开发流程，不再由自修改维护 lane 处理。
 - **组织维护：** 共享组织来源有自己的 candidate、review 和 maintenance 路径。
+- **受守门的完整执行：** 五个计划任务各自拥有独立的 SkillGuard 路由、完整原生阶段清单、不重叠证据、当前运行时就绪证明、正例/故意浅跑校准、真实原生回执和深度终态闭环；只做完开头几步不能算成功。
 
-安装后，这些节律可以通过本地 automations 运行。任务 preflight/postflight 让检索和写回贴近日常工作；Sleep、Dream、Architect 和 organization maintenance 则在后续窗口持续改进卡片库。
+安装后，这些节律由本地 automations 全自动运行，不要求人工阅读文件或维护 review queue。任务 preflight/postflight 负责检索与证据写回；Sleep、Dream、system update 和 organization maintenance 在后续窗口持续收敛系统。
 
 ### 个人模式和组织模式
 
@@ -332,7 +348,7 @@ A good starting order is:
 ### 为什么它比普通 AI 记忆产品更值得试
 
 - **可见：** card 可以直接打开，source、author、confidence、status、skill dependencies 都可见。
-- **可维护：** Sleep、Dream、Architect 和 organization maintenance 把 memory 当成活系统。
+- **可维护：** 增量 Sleep、收敛式 Dream、system update 和 organization maintenance 把 memory 当成活系统。
 - **本地优先：** organization mode 不覆盖个人记忆。
 - **组织可用：** 团队共享 route、lesson、maintenance method 和 reviewed skill。
 - **Git-native：** history、diff、review、rollback、private access 和 automation 都可以复用 GitHub。
@@ -367,7 +383,9 @@ python scripts/install_codex_kb.py --json
 python scripts/install_codex_kb.py --check --json
 ```
 
-检查通过后，这台机器就有 global preflight skill、postflight rules、`KB Sleep`、`KB Dream`、`KB Architect`，以及 organization contribution / maintenance 入口。
+检查通过后，这台机器就有 global preflight skill、postflight rules、`KB Sleep`、`KB Dream`、`Khaos Brain System Update`，以及 organization contribution / maintenance 入口。每个计划任务都由独立 SkillGuard 路由通过完整原生阶段清单、当前 provider/runtime 就绪检查、正例/故意浅跑校准、真实原生回执和深度终态闭环覆盖。旧电脑升级时还会自动删除已退役的 Architect Skill 与计划任务，并按当前 Chaos Brain 标准清理、归档和收紧历史经验债务与维护债务。旧受管格式只允许作为升级输入：AI 事务会把它直接转换成精确 LogicGuard models、分域 ModelMeshes、确定性卡片投影和精确 active index，最后才发布 generation pointer，删除旧权威并要求残留数为零。日常运行没有兼容层、YAML 语义 fallback 或浮动 head；缺少当前事实就明确失败。失败升级会保留可重试检查点；五个任务会一直保持暂停，直到更新任务的最终合成 SkillGuard 门批准精确的哈希绑定恢复方案，并且该方案被逐项应用和回读成功。
+
+完整迁移阶段、失败回滚、暂停状态保留和成功门槛见 [Chaos Brain 升级契约](docs/chaos_brain_upgrade.md)。
 
 ### 桌面卡片查看器
 
@@ -445,8 +463,9 @@ Windows exe、桌面快捷方式和 Codex UI-opening skill 见 [Windows desktop 
 ├─ VERSION
 ├─ docs/
 ├─ .agents/
-├─ kb/
-├─ local_kb/
+├─ .local/khaos-brain/logicguard-authority/  # 本机精确 model/mesh generations
+├─ kb/                                      # 可读投影、历史与 taxonomy
+├─ local_kb/                                # 模型、投影、检索与维护运行时
 ├─ schemas/
 ├─ scripts/
 ├─ templates/

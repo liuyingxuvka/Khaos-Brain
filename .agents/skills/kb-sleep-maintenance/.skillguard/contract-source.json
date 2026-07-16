@@ -1,0 +1,324 @@
+{
+  "schema_version": "skillguard.contract_source.v2",
+  "skill_id": "kb-sleep-maintenance",
+  "model_id": "khaos-brain.kb-sleep-maintenance.executable-contract.v2",
+  "model_path": ".flowguard/kb_sleep_skill_contract_model.py",
+  "confirmed": true,
+  "release_eligible": false,
+  "implementation_paths": [
+    ".agents/skills/kb-sleep-maintenance",
+    ".flowguard/kb_sleep_skill_contract_model.py",
+    ".agents/skills/local-kb-retrieve/scripts/kb_sleep.py",
+    "local_kb/lifecycle.py",
+    "local_kb/candidate_lifecycle.py",
+    "local_kb/calibration.py",
+    "local_kb/logicguard_models.py",
+    "local_kb/model_projection.py",
+    "local_kb/model_maintenance.py",
+    "local_kb/active_index.py",
+    "local_kb/maintenance.py",
+    "local_kb/maintenance_lanes.py",
+    "tests/test_kb_lifecycle.py",
+    "tests/test_kb_sleep_convergence.py",
+    "tests/test_kb_retrieval_calibration.py",
+    "tests/test_khaos_logicguard_models.py",
+    "tests/test_khaos_model_projection.py",
+    "tests/test_khaos_sleep_model_maintenance.py",
+    "tests/test_maintenance_lanes.py",
+    "tests/test_process_control.py",
+    "local_kb/automation_contracts.py",
+    "local_kb/automation_runtime.py",
+    "local_kb/process_control.py",
+    "local_kb/install.py",
+    "scripts/build_kb_automation_skillguard_contracts.py",
+    "scripts/check_kb_automation_run_receipt.py",
+    "scripts/check_kb_skillguard.py",
+    "scripts/run_kb_guarded_automation.py",
+    "tests/test_kb_automation_skillguard.py"
+  ],
+  "projection_consumers": [
+    {
+      "consumer_id": "projection:kb-sleep-maintenance:target-runtime-sources",
+      "kind": "target_runtime_source",
+      "input_selectors": [
+        {
+          "kind": "role",
+          "role": "runtime_source"
+        }
+      ]
+    },
+    {
+      "consumer_id": "projection:kb-sleep-maintenance:target-tests",
+      "kind": "target_test_source",
+      "input_selectors": [
+        {
+          "kind": "role",
+          "role": "test_dev"
+        }
+      ]
+    }
+  ],
+  "step_bindings": [
+    {
+      "step_id": "step:kb-sleep-maintenance:intake",
+      "action": {
+        "kind": "inventory",
+        "summary": "Load the target-owned inputs and prove every intake obligation before mutation."
+      },
+      "check_ids": [
+        "check:kb-sleep-maintenance:intake-runtime"
+      ],
+      "output_artifact_ids": []
+    },
+    {
+      "step_id": "step:kb-sleep-maintenance:execute",
+      "action": {
+        "kind": "native",
+        "summary": "Run the native automation owner through every declared execution branch."
+      },
+      "check_ids": [
+        "check:kb-sleep-maintenance:native-runtime"
+      ],
+      "output_artifact_ids": [
+        "artifact:kb-sleep-maintenance:native-receipt"
+      ]
+    },
+    {
+      "step_id": "step:kb-sleep-maintenance:verify",
+      "action": {
+        "kind": "validator",
+        "summary": "Require the current terminal receipt plus positive and shallow target-owned checks before closure."
+      },
+      "check_ids": [
+        "check:kb-sleep-maintenance:terminal-runtime",
+        "check:kb-sleep-maintenance:depth-positive",
+        "check:kb-sleep-maintenance:depth-shallow"
+      ],
+      "output_artifact_ids": []
+    }
+  ],
+  "checks": [
+    {
+      "check_id": "check:kb-sleep-maintenance:intake-runtime",
+      "kind": "command",
+      "evidence_class": "hard",
+      "covers_obligation_ids": [
+        "obligation:kb-sleep-maintenance:lane-delta-intake"
+      ],
+      "timeout_seconds": 120,
+      "command": "python",
+      "args": [
+        "scripts/check_kb_automation_run_receipt.py",
+        "--skill",
+        "kb-sleep-maintenance",
+        "--phase",
+        "intake",
+        "--json"
+      ],
+      "cwd_token": "repository_root",
+      "expected": {
+        "exit_code": 0
+      }
+    },
+    {
+      "check_id": "check:kb-sleep-maintenance:native-runtime",
+      "kind": "command",
+      "evidence_class": "hard",
+      "covers_obligation_ids": [
+        "obligation:kb-sleep-maintenance:observation-disposition",
+        "obligation:kb-sleep-maintenance:candidate-outcomes",
+        "obligation:kb-sleep-maintenance:evidence-calibration",
+        "obligation:kb-sleep-maintenance:logicguard-model-revision",
+        "obligation:kb-sleep-maintenance:grounded-model-mesh",
+        "obligation:kb-sleep-maintenance:dream-handoff-once"
+      ],
+      "timeout_seconds": 120,
+      "command": "python",
+      "args": [
+        "scripts/check_kb_automation_run_receipt.py",
+        "--skill",
+        "kb-sleep-maintenance",
+        "--phase",
+        "execute",
+        "--json"
+      ],
+      "cwd_token": "repository_root",
+      "expected": {
+        "exit_code": 0
+      }
+    },
+    {
+      "check_id": "check:kb-sleep-maintenance:terminal-runtime",
+      "kind": "command",
+      "evidence_class": "hard",
+      "covers_obligation_ids": [
+        "obligation:kb-sleep-maintenance:atomic-model-generation",
+        "obligation:kb-sleep-maintenance:index-watermark-commit",
+        "obligation:kb-sleep-maintenance:failure-fail-closed",
+        "obligation:kb-sleep-maintenance:timeout-tree-cleanup"
+      ],
+      "timeout_seconds": 120,
+      "command": "python",
+      "args": [
+        "scripts/check_kb_automation_run_receipt.py",
+        "--skill",
+        "kb-sleep-maintenance",
+        "--phase",
+        "verify",
+        "--json"
+      ],
+      "cwd_token": "repository_root",
+      "expected": {
+        "exit_code": 0
+      }
+    },
+    {
+      "check_id": "check:kb-sleep-maintenance:depth-positive",
+      "kind": "command",
+      "evidence_class": "hard",
+      "covers_obligation_ids": [
+        "obligation:kb-sleep-maintenance:depth-calibration"
+      ],
+      "timeout_seconds": 300,
+      "command": "python",
+      "args": [
+        "scripts/check_kb_automation_run_receipt.py",
+        "--skill",
+        "kb-sleep-maintenance",
+        "--phase",
+        "all",
+        "--fixture",
+        "positive",
+        "--json"
+      ],
+      "cwd_token": "repository_root",
+      "expected": {
+        "exit_code": 0
+      },
+      "native_route_id": "route:kb-sleep-maintenance:run",
+      "evidence_domain_id": "target:kb-sleep-maintenance:fixture-calibration"
+    },
+    {
+      "check_id": "check:kb-sleep-maintenance:depth-shallow",
+      "kind": "command",
+      "evidence_class": "hard",
+      "covers_obligation_ids": [
+        "obligation:kb-sleep-maintenance:depth-calibration"
+      ],
+      "timeout_seconds": 300,
+      "command": "python",
+      "args": [
+        "scripts/check_kb_automation_run_receipt.py",
+        "--skill",
+        "kb-sleep-maintenance",
+        "--phase",
+        "all",
+        "--fixture",
+        "shallow",
+        "--json"
+      ],
+      "cwd_token": "repository_root",
+      "expected": {
+        "exit_code": 0
+      },
+      "native_route_id": "route:kb-sleep-maintenance:run",
+      "evidence_domain_id": "target:kb-sleep-maintenance:fixture-calibration"
+    }
+  ],
+  "artifacts": [
+    {
+      "artifact_id": "artifact:kb-sleep-maintenance:native-receipt",
+      "kind": "native_output",
+      "producer_step_id": "step:kb-sleep-maintenance:execute",
+      "validators": [
+        "immutable-receipt",
+        "run-id-bound",
+        "receipt-hash-bound",
+        "target-owned-native-output"
+      ],
+      "validator_check_ids": [
+        "check:kb-sleep-maintenance:intake-runtime",
+        "check:kb-sleep-maintenance:native-runtime",
+        "check:kb-sleep-maintenance:terminal-runtime"
+      ],
+      "covers_obligation_ids": [
+        "obligation:kb-sleep-maintenance:lane-delta-intake",
+        "obligation:kb-sleep-maintenance:observation-disposition",
+        "obligation:kb-sleep-maintenance:candidate-outcomes",
+        "obligation:kb-sleep-maintenance:evidence-calibration",
+        "obligation:kb-sleep-maintenance:logicguard-model-revision",
+        "obligation:kb-sleep-maintenance:grounded-model-mesh",
+        "obligation:kb-sleep-maintenance:dream-handoff-once",
+        "obligation:kb-sleep-maintenance:atomic-model-generation",
+        "obligation:kb-sleep-maintenance:index-watermark-commit",
+        "obligation:kb-sleep-maintenance:failure-fail-closed",
+        "obligation:kb-sleep-maintenance:timeout-tree-cleanup"
+      ],
+      "claim_boundary": "This witness binds the immutable target-owned native receipt to its exact run, checks, and non-calibration native obligations; it does not prove post-run finalization."
+    }
+  ],
+  "closure_profiles": [
+    {
+      "profile_id": "enforced",
+      "required_obligation_ids": [
+        "obligation:kb-sleep-maintenance:lane-delta-intake",
+        "obligation:kb-sleep-maintenance:observation-disposition",
+        "obligation:kb-sleep-maintenance:candidate-outcomes",
+        "obligation:kb-sleep-maintenance:evidence-calibration",
+        "obligation:kb-sleep-maintenance:logicguard-model-revision",
+        "obligation:kb-sleep-maintenance:grounded-model-mesh",
+        "obligation:kb-sleep-maintenance:dream-handoff-once",
+        "obligation:kb-sleep-maintenance:atomic-model-generation",
+        "obligation:kb-sleep-maintenance:index-watermark-commit",
+        "obligation:kb-sleep-maintenance:failure-fail-closed",
+        "obligation:kb-sleep-maintenance:timeout-tree-cleanup",
+        "obligation:kb-sleep-maintenance:depth-calibration"
+      ]
+    }
+  ],
+  "judgment_rubrics": [],
+  "depth_profile": {
+    "schema_version": "skillguard.depth_profile.v2",
+    "profile_id": "profile:kb-sleep-maintenance:declared-check-supervision",
+    "target_skill_id": "kb-sleep-maintenance",
+    "integration_mode": "native-integrated",
+    "native_owner_id": "kb-sleep-maintenance",
+    "native_route_ids": [
+      "route:kb-sleep-maintenance:run"
+    ],
+    "native_check_ids": [
+      "check:kb-sleep-maintenance:intake-runtime",
+      "check:kb-sleep-maintenance:native-runtime",
+      "check:kb-sleep-maintenance:terminal-runtime",
+      "check:kb-sleep-maintenance:depth-positive",
+      "check:kb-sleep-maintenance:depth-shallow"
+    ],
+    "skillguard_adds_domain_route": false,
+    "enforcement_level": "enforced",
+    "required_closure_profiles": [
+      "enforced"
+    ],
+    "provider_runtime": {
+      "provider_id": "skillguard-local-provider",
+      "required_runtime_contract_id": "skillguard-declared-check-supervision-current",
+      "required_capability_ids": [
+        "declared-check-inventory.v1",
+        "declared-check-receipt-reconciliation.v1",
+        "installation-receipt-binding.v1",
+        "installation-currentness-replay.v1",
+        "provider-runtime-enrollment.v1",
+        "single-flight-check-execution.v1"
+      ],
+      "required_enrollment_status": "enrolled",
+      "readiness_check_ids": [
+        "check:kb-sleep-maintenance:intake-runtime",
+        "check:kb-sleep-maintenance:native-runtime",
+        "check:kb-sleep-maintenance:terminal-runtime",
+        "check:kb-sleep-maintenance:depth-positive",
+        "check:kb-sleep-maintenance:depth-shallow"
+      ]
+    },
+    "claim_boundary": "Only exact current receipts for the target skill's declared checks are supervised. The target skill retains all domain judgment, including positive/shallow behavior and conditional update finalization."
+  },
+  "claim_boundary": "SkillGuard supervises the complete native kb-sleep-maintenance route, all target-specific obligations, and the sole current enforced closure. It cannot create a parallel executor or certify future runs."
+}

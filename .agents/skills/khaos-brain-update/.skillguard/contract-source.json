@@ -1,0 +1,467 @@
+{
+  "schema_version": "skillguard.contract_source.v2",
+  "skill_id": "khaos-brain-update",
+  "model_id": "khaos-brain.khaos-brain-update.executable-contract.v2",
+  "model_path": ".flowguard/khaos_brain_update_skill_contract_model.py",
+  "confirmed": true,
+  "release_eligible": false,
+  "route_branch_closure_required": true,
+  "implementation_paths": [
+    ".agents/skills/khaos-brain-update",
+    ".flowguard/khaos_brain_update_skill_contract_model.py",
+    "scripts/run_khaos_brain_system_update.py",
+    "local_kb/software_update.py",
+    "local_kb/install.py",
+    "local_kb/transactional_install.py",
+    "local_kb/maintenance_migration.py",
+    "local_kb/logicguard_models.py",
+    "local_kb/model_projection.py",
+    "local_kb/model_maintenance.py",
+    "local_kb/active_index.py",
+    "local_kb/settings_migration.py",
+    "local_kb/card_schema_migration.py",
+    "local_kb/org_migration.py",
+    "tests/test_software_update.py",
+    "tests/test_kb_automation_native_receipts.py",
+    "tests/test_codex_install.py",
+    "tests/test_khaos_logicguard_migration.py",
+    "tests/test_kb_upgrade_migration.py",
+    "tests/test_kb_automation_activation.py",
+    "tests/test_process_control.py",
+    "local_kb/automation_contracts.py",
+    "local_kb/automation_runtime.py",
+    "local_kb/process_control.py",
+    "scripts/build_kb_automation_skillguard_contracts.py",
+    "scripts/check_kb_automation_run_receipt.py",
+    "scripts/check_kb_skillguard.py",
+    "scripts/run_kb_guarded_automation.py",
+    "tests/test_kb_automation_skillguard.py"
+  ],
+  "projection_consumers": [
+    {
+      "consumer_id": "projection:khaos-brain-update:target-runtime-sources",
+      "kind": "target_runtime_source",
+      "input_selectors": [
+        {
+          "kind": "role",
+          "role": "runtime_source"
+        }
+      ]
+    },
+    {
+      "consumer_id": "projection:khaos-brain-update:target-tests",
+      "kind": "target_test_source",
+      "input_selectors": [
+        {
+          "kind": "role",
+          "role": "test_dev"
+        }
+      ]
+    }
+  ],
+  "step_bindings": [
+    {
+      "step_id": "step:khaos-brain-update:intake",
+      "action": {
+        "kind": "inventory",
+        "summary": "Load the target-owned inputs and prove every intake obligation before mutation."
+      },
+      "check_ids": [
+        "check:khaos-brain-update:intake-runtime"
+      ],
+      "output_artifact_ids": []
+    },
+    {
+      "step_id": "step:khaos-brain-update:execute",
+      "action": {
+        "kind": "native",
+        "summary": "Run the native automation owner through every declared execution branch."
+      },
+      "check_ids": [
+        "check:khaos-brain-update:native-runtime"
+      ],
+      "output_artifact_ids": [
+        "artifact:khaos-brain-update:native-receipt"
+      ]
+    },
+    {
+      "step_id": "step:khaos-brain-update:verify",
+      "action": {
+        "kind": "validator",
+        "summary": "Require the current terminal receipt plus positive and shallow target-owned checks before closure."
+      },
+      "check_ids": [
+        "check:khaos-brain-update:terminal-runtime",
+        "check:khaos-brain-update:branch-terminal-runtime",
+        "check:khaos-brain-update:depth-positive",
+        "check:khaos-brain-update:depth-shallow"
+      ],
+      "output_artifact_ids": []
+    },
+    {
+      "step_id": "step:khaos-brain-update:finalize",
+      "action": {
+        "kind": "validator",
+        "summary": "Validate and consume the immutable staged-restoration authorization receipt; this step is selected only by the finalization route."
+      },
+      "check_ids": [
+        "check:khaos-brain-update:finalization-runtime"
+      ],
+      "output_artifact_ids": [
+        "artifact:khaos-brain-update:finalization-receipt"
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check_id": "check:khaos-brain-update:intake-runtime",
+      "kind": "command",
+      "evidence_class": "hard",
+      "covers_obligation_ids": [
+        "obligation:khaos-brain-update:authorization-system-check",
+        "obligation:khaos-brain-update:preserve-state-rollback"
+      ],
+      "timeout_seconds": 120,
+      "command": "python",
+      "args": [
+        "scripts/check_kb_automation_run_receipt.py",
+        "--skill",
+        "khaos-brain-update",
+        "--phase",
+        "intake",
+        "--json"
+      ],
+      "cwd_token": "repository_root",
+      "expected": {
+        "exit_code": 0
+      }
+    },
+    {
+      "check_id": "check:khaos-brain-update:native-runtime",
+      "kind": "command",
+      "evidence_class": "hard",
+      "covers_obligation_ids": [
+        "obligation:khaos-brain-update:fast-forward-only",
+        "obligation:khaos-brain-update:migration-debt-settlement",
+        "obligation:khaos-brain-update:logicguard-authority-cutover",
+        "obligation:khaos-brain-update:transaction-retirement"
+      ],
+      "timeout_seconds": 120,
+      "command": "python",
+      "args": [
+        "scripts/check_kb_automation_run_receipt.py",
+        "--skill",
+        "khaos-brain-update",
+        "--phase",
+        "execute",
+        "--json"
+      ],
+      "cwd_token": "repository_root",
+      "expected": {
+        "exit_code": 0
+      }
+    },
+    {
+      "check_id": "check:khaos-brain-update:terminal-runtime",
+      "kind": "command",
+      "evidence_class": "hard",
+      "covers_obligation_ids": [
+        "obligation:khaos-brain-update:zero-retired-authority",
+        "obligation:khaos-brain-update:aggregate-hard-gates",
+        "obligation:khaos-brain-update:restore-or-stay-paused",
+        "obligation:khaos-brain-update:final-machine-receipt",
+        "obligation:khaos-brain-update:timeout-tree-cleanup"
+      ],
+      "timeout_seconds": 120,
+      "command": "python",
+      "args": [
+        "scripts/check_kb_automation_run_receipt.py",
+        "--skill",
+        "khaos-brain-update",
+        "--phase",
+        "verify",
+        "--json"
+      ],
+      "cwd_token": "repository_root",
+      "expected": {
+        "exit_code": 0
+      }
+    },
+    {
+      "check_id": "check:khaos-brain-update:branch-terminal-runtime",
+      "kind": "command",
+      "evidence_class": "hard",
+      "covers_obligation_ids": [
+        "obligation:khaos-brain-update:authorization-system-check",
+        "obligation:khaos-brain-update:preserve-state-rollback",
+        "obligation:khaos-brain-update:fast-forward-only",
+        "obligation:khaos-brain-update:migration-debt-settlement",
+        "obligation:khaos-brain-update:logicguard-authority-cutover",
+        "obligation:khaos-brain-update:transaction-retirement",
+        "obligation:khaos-brain-update:zero-retired-authority",
+        "obligation:khaos-brain-update:aggregate-hard-gates",
+        "obligation:khaos-brain-update:restore-or-stay-paused",
+        "obligation:khaos-brain-update:final-machine-receipt",
+        "obligation:khaos-brain-update:timeout-tree-cleanup"
+      ],
+      "timeout_seconds": 120,
+      "command": "python",
+      "args": [
+        "scripts/check_kb_automation_run_receipt.py",
+        "--skill",
+        "khaos-brain-update",
+        "--phase",
+        "all",
+        "--json"
+      ],
+      "cwd_token": "repository_root",
+      "expected": {
+        "exit_code": 0
+      }
+    },
+    {
+      "check_id": "check:khaos-brain-update:depth-positive",
+      "kind": "command",
+      "evidence_class": "hard",
+      "covers_obligation_ids": [
+        "obligation:khaos-brain-update:depth-calibration"
+      ],
+      "timeout_seconds": 300,
+      "command": "python",
+      "args": [
+        "scripts/check_kb_automation_run_receipt.py",
+        "--skill",
+        "khaos-brain-update",
+        "--phase",
+        "all",
+        "--fixture",
+        "positive",
+        "--json"
+      ],
+      "cwd_token": "repository_root",
+      "expected": {
+        "exit_code": 0
+      },
+      "native_route_id": "route:khaos-brain-update:authorize",
+      "evidence_domain_id": "target:khaos-brain-update:fixture-calibration"
+    },
+    {
+      "check_id": "check:khaos-brain-update:depth-shallow",
+      "kind": "command",
+      "evidence_class": "hard",
+      "covers_obligation_ids": [
+        "obligation:khaos-brain-update:depth-calibration"
+      ],
+      "timeout_seconds": 300,
+      "command": "python",
+      "args": [
+        "scripts/check_kb_automation_run_receipt.py",
+        "--skill",
+        "khaos-brain-update",
+        "--phase",
+        "all",
+        "--fixture",
+        "shallow",
+        "--json"
+      ],
+      "cwd_token": "repository_root",
+      "expected": {
+        "exit_code": 0
+      },
+      "native_route_id": "route:khaos-brain-update:authorize",
+      "evidence_domain_id": "target:khaos-brain-update:fixture-calibration"
+    },
+    {
+      "check_id": "check:khaos-brain-update:finalization-runtime",
+      "kind": "command",
+      "evidence_class": "hard",
+      "covers_obligation_ids": [
+        "obligation:khaos-brain-update:staged-restoration-authorization"
+      ],
+      "timeout_seconds": 120,
+      "command": "python",
+      "args": [
+        "scripts/check_kb_automation_run_receipt.py",
+        "--skill",
+        "khaos-brain-update",
+        "--finalization",
+        "--json"
+      ],
+      "cwd_token": "repository_root",
+      "expected": {
+        "exit_code": 0
+      },
+      "native_route_id": "route:khaos-brain-update:finalize",
+      "evidence_domain_id": "target:khaos-brain-update:finalization-receipt"
+    }
+  ],
+  "artifacts": [
+    {
+      "artifact_id": "artifact:khaos-brain-update:native-receipt",
+      "kind": "native_output",
+      "producer_step_id": "step:khaos-brain-update:execute",
+      "validators": [
+        "immutable-receipt",
+        "run-id-bound",
+        "receipt-hash-bound",
+        "target-owned-native-output"
+      ],
+      "validator_check_ids": [
+        "check:khaos-brain-update:intake-runtime",
+        "check:khaos-brain-update:native-runtime",
+        "check:khaos-brain-update:terminal-runtime",
+        "check:khaos-brain-update:branch-terminal-runtime"
+      ],
+      "covers_obligation_ids": [
+        "obligation:khaos-brain-update:authorization-system-check",
+        "obligation:khaos-brain-update:preserve-state-rollback",
+        "obligation:khaos-brain-update:fast-forward-only",
+        "obligation:khaos-brain-update:migration-debt-settlement",
+        "obligation:khaos-brain-update:logicguard-authority-cutover",
+        "obligation:khaos-brain-update:transaction-retirement",
+        "obligation:khaos-brain-update:zero-retired-authority",
+        "obligation:khaos-brain-update:aggregate-hard-gates",
+        "obligation:khaos-brain-update:restore-or-stay-paused",
+        "obligation:khaos-brain-update:final-machine-receipt",
+        "obligation:khaos-brain-update:timeout-tree-cleanup"
+      ],
+      "claim_boundary": "This witness binds the immutable target-owned native receipt to its exact run, checks, and non-calibration native obligations; it does not prove post-run finalization."
+    },
+    {
+      "artifact_id": "artifact:khaos-brain-update:finalization-receipt",
+      "kind": "native_output",
+      "producer_step_id": "step:khaos-brain-update:finalize",
+      "validators": [
+        "immutable-staged-restoration-authorization",
+        "snapshot-status-and-user-pause-bound",
+        "planned-automation-toml-hashes-bound",
+        "native-receipt-hash-bound",
+        "first-authorization-closure-bound",
+        "deferred-install-check-bound"
+      ],
+      "validator_check_ids": [
+        "check:khaos-brain-update:finalization-runtime"
+      ],
+      "covers_obligation_ids": [
+        "obligation:khaos-brain-update:staged-restoration-authorization"
+      ],
+      "claim_boundary": "This witness authorizes only an exact immutable staged restoration plan. It does not prove that live automation state was restored or CURRENT was marked; those target-native actions occur only after this SkillGuard closure passes."
+    }
+  ],
+  "closure_profiles": [
+    {
+      "profile_id": "enforced",
+      "required_obligation_ids": [
+        "obligation:khaos-brain-update:authorization-system-check",
+        "obligation:khaos-brain-update:preserve-state-rollback",
+        "obligation:khaos-brain-update:fast-forward-only",
+        "obligation:khaos-brain-update:migration-debt-settlement",
+        "obligation:khaos-brain-update:logicguard-authority-cutover",
+        "obligation:khaos-brain-update:transaction-retirement",
+        "obligation:khaos-brain-update:zero-retired-authority",
+        "obligation:khaos-brain-update:aggregate-hard-gates",
+        "obligation:khaos-brain-update:restore-or-stay-paused",
+        "obligation:khaos-brain-update:final-machine-receipt",
+        "obligation:khaos-brain-update:timeout-tree-cleanup",
+        "obligation:khaos-brain-update:staged-restoration-authorization",
+        "obligation:khaos-brain-update:depth-calibration"
+      ],
+      "route_branch_requirements": [
+        {
+          "native_route_id": "route:khaos-brain-update:authorize",
+          "branch_ids": [
+            "no-update",
+            "waiting-for-user",
+            "ui-running"
+          ],
+          "required_obligation_ids": [
+            "obligation:khaos-brain-update:authorization-system-check",
+            "obligation:khaos-brain-update:preserve-state-rollback",
+            "obligation:khaos-brain-update:fast-forward-only",
+            "obligation:khaos-brain-update:migration-debt-settlement",
+            "obligation:khaos-brain-update:logicguard-authority-cutover",
+            "obligation:khaos-brain-update:transaction-retirement",
+            "obligation:khaos-brain-update:zero-retired-authority",
+            "obligation:khaos-brain-update:aggregate-hard-gates",
+            "obligation:khaos-brain-update:restore-or-stay-paused",
+            "obligation:khaos-brain-update:final-machine-receipt",
+            "obligation:khaos-brain-update:timeout-tree-cleanup"
+          ],
+          "applicability_rules": [
+            {
+              "obligation_id": "obligation:khaos-brain-update:staged-restoration-authorization",
+              "allowed_disposition": "not_applicable",
+              "verifier_check_id": "check:khaos-brain-update:branch-terminal-runtime"
+            }
+          ]
+        },
+        {
+          "native_route_id": "route:khaos-brain-update:authorize",
+          "branch_ids": [
+            "prepared-update"
+          ],
+          "required_obligation_ids": [
+            "obligation:khaos-brain-update:authorization-system-check",
+            "obligation:khaos-brain-update:preserve-state-rollback",
+            "obligation:khaos-brain-update:fast-forward-only",
+            "obligation:khaos-brain-update:migration-debt-settlement",
+            "obligation:khaos-brain-update:logicguard-authority-cutover",
+            "obligation:khaos-brain-update:transaction-retirement",
+            "obligation:khaos-brain-update:zero-retired-authority",
+            "obligation:khaos-brain-update:aggregate-hard-gates",
+            "obligation:khaos-brain-update:restore-or-stay-paused",
+            "obligation:khaos-brain-update:final-machine-receipt",
+            "obligation:khaos-brain-update:timeout-tree-cleanup"
+          ],
+          "applicability_rules": []
+        }
+      ]
+    }
+  ],
+  "judgment_rubrics": [],
+  "depth_profile": {
+    "schema_version": "skillguard.depth_profile.v2",
+    "profile_id": "profile:khaos-brain-update:declared-check-supervision",
+    "target_skill_id": "khaos-brain-update",
+    "integration_mode": "native-integrated",
+    "native_owner_id": "khaos-brain-update",
+    "native_route_ids": [
+      "route:khaos-brain-update:authorize"
+    ],
+    "native_check_ids": [
+      "check:khaos-brain-update:intake-runtime",
+      "check:khaos-brain-update:native-runtime",
+      "check:khaos-brain-update:terminal-runtime",
+      "check:khaos-brain-update:branch-terminal-runtime",
+      "check:khaos-brain-update:depth-positive",
+      "check:khaos-brain-update:depth-shallow"
+    ],
+    "skillguard_adds_domain_route": false,
+    "enforcement_level": "enforced",
+    "required_closure_profiles": [
+      "enforced"
+    ],
+    "provider_runtime": {
+      "provider_id": "skillguard-local-provider",
+      "required_runtime_contract_id": "skillguard-declared-check-supervision-current",
+      "required_capability_ids": [
+        "declared-check-inventory.v1",
+        "declared-check-receipt-reconciliation.v1",
+        "installation-receipt-binding.v1",
+        "installation-currentness-replay.v1",
+        "provider-runtime-enrollment.v1",
+        "single-flight-check-execution.v1"
+      ],
+      "required_enrollment_status": "enrolled",
+      "readiness_check_ids": [
+        "check:khaos-brain-update:intake-runtime",
+        "check:khaos-brain-update:native-runtime",
+        "check:khaos-brain-update:terminal-runtime",
+        "check:khaos-brain-update:depth-positive",
+        "check:khaos-brain-update:depth-shallow"
+      ]
+    },
+    "claim_boundary": "Only exact current receipts for the target skill's declared checks are supervised. The target skill retains all domain judgment, including positive/shallow behavior and conditional update finalization."
+  },
+  "claim_boundary": "SkillGuard supervises the update authorization route and, in a fresh composed run, authorizes one exact staged restoration plan through the sole enforced closure. That closure does not claim that live automation files were already restored or CURRENT was already marked; the target-native executor must apply the authorized hashes, read them back, run the normal installation check, and fail closed before marking CURRENT."
+}

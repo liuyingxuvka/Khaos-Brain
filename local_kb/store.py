@@ -16,6 +16,9 @@ except ImportError as exc:  # pragma: no cover
     ) from exc
 
 
+_SAFE_YAML_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
+
 DEFAULT_SCOPES = ("public", "private", "candidates")
 DEFAULT_ORGANIZATION_SCOPES = ("main",)
 DEFAULT_ORGANIZATION_READ_STATUSES = ("trusted", "candidate")
@@ -93,15 +96,28 @@ def build_organization_entry_source(
 
 def _organization_scope_targets(org_root: Path, scopes: Iterable[str]) -> list[tuple[str, Path]]:
     kb_root = Path(org_root) / "kb"
+    obsolete_roots = [
+        relative
+        for relative in ("kb/trusted", "kb/candidates")
+        if (Path(org_root) / relative).exists()
+    ]
+    if obsolete_roots:
+        raise RuntimeError(
+            "Organization KB has obsolete runtime roots: "
+            + ", ".join(obsolete_roots)
+            + ". Run the direct organization-layout migration."
+        )
     targets: list[tuple[str, Path]] = []
     seen: set[Path] = set()
     for scope in tuple(scopes):
         if scope == "main":
             main = kb_root / "main"
-            if main.exists():
-                candidates = [("main", main)]
-            else:
-                candidates = [("trusted", kb_root / "trusted"), ("candidates", kb_root / "candidates")]
+            if not main.is_dir():
+                raise RuntimeError(
+                    "Organization KB current layout is unavailable: kb/main is missing. "
+                    "Run the direct organization-layout migration."
+                )
+            candidates = [("main", main)]
         else:
             candidates = [(scope, kb_root / scope)]
         for resolved_scope, target in candidates:
@@ -119,7 +135,11 @@ def resolve_repo_root(value: str | os.PathLike[str]) -> Path:
 
 def load_yaml_file(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
-        return yaml.safe_load(handle) or {}
+        # Preserve SafeLoader semantics while using LibYAML's C implementation
+        # when PyYAML provides it.  The catalog contains thousands of bounded
+        # card projections, so the pure-Python loader otherwise dominates every
+        # authority verification without adding any safety or validation value.
+        return yaml.load(handle, Loader=_SAFE_YAML_LOADER) or {}
 
 
 def rejected_candidate_entry_ids(repo_root: Path) -> set[str]:

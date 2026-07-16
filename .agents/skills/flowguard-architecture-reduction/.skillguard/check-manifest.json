@@ -1,0 +1,561 @@
+{
+  "check_declarations_hash": "E2DA99991A89D14EC4C24F607E89BE5C34C2BC005FD3CDB235E4D28CA251D5FD",
+  "checks": [
+    {
+      "args": [
+        ".flowguard/architecture_reduction/model.py"
+      ],
+      "assertion_scope": "current_full_flowguard_model",
+      "check_id": "check:flowguard-architecture-reduction:plane-boundary",
+      "command": "python",
+      "coverage_rationale": "The check is the single declared owner for its mapped obligation set.",
+      "coverage_scope": "declared_obligations",
+      "covers_obligation_ids": [
+        "obligation:flowguard-architecture-reduction:plane-boundary"
+      ],
+      "cwd_token": "repository_root",
+      "depends_on_check_ids": [],
+      "evidence_class": "hard",
+      "evidence_domain_id": "evidence-domain:check:flowguard-architecture-reduction:plane-boundary",
+      "execution_owner_id": "owner:check:flowguard-architecture-reduction:plane-boundary",
+      "expected": {
+        "exit_code": 0
+      },
+      "input_component_ids": [
+        "component:documentation_model:6e9a75b8d418f59a",
+        "component:runtime_source:e664a0b48e1248df"
+      ],
+      "input_selectors": [
+        {
+          "kind": "path",
+          "path": ".flowguard/architecture_reduction/model.py"
+        }
+      ],
+      "kind": "model_assertion",
+      "owner_declaration_hash": "sha256:b2af3acca7d0c38e96c25508be72f29d5861a1f76c48af19a079ad8c3a72e334",
+      "owner_input_projection_hash": "sha256:0519fe7c0cd7111ae5d0d283c2d28dfc309c6b8e9c820f203153687ac435f151",
+      "projection_declaration_hash": "sha256:a4c8f7d60b5ca4c9e3caec19e3c337eefa6edf2507eb4431068f7a170ed4478a",
+      "semantic_check_id": "semantic:check:flowguard-architecture-reduction:plane-boundary",
+      "timeout_seconds": 30
+    },
+    {
+      "args": [
+        "-m",
+        "pytest",
+        "tests/test_architecture_reduction.py",
+        "-q"
+      ],
+      "check_id": "check:flowguard-architecture-reduction:native-authority",
+      "command": "python",
+      "coverage_rationale": "The check is the single declared owner for its mapped obligation set.",
+      "coverage_scope": "declared_obligations",
+      "covers_obligation_ids": [
+        "obligation:flowguard-architecture-reduction:native-authority"
+      ],
+      "cwd_token": "repository_root",
+      "depends_on_check_ids": [],
+      "evidence_class": "hard",
+      "evidence_domain_id": "evidence-domain:check:flowguard-architecture-reduction:native-authority",
+      "execution_owner_id": "owner:check:flowguard-architecture-reduction:native-authority",
+      "expected": {
+        "exit_code": 0
+      },
+      "input_component_ids": [
+        "component:documentation_model:1bfcae36cacebcf4",
+        "component:documentation_model:5969ad1a7bb2f924",
+        "component:documentation_model:6e9a75b8d418f59a",
+        "component:runtime_source:754eaa48f0daca9b",
+        "component:runtime_source:84af75b41c7a6ce7",
+        "component:runtime_source:e664a0b48e1248df",
+        "component:test_dev:267ffa6f56a1e67c"
+      ],
+      "input_selectors": [
+        {
+          "kind": "path",
+          "path": ".flowguard/architecture_reduction/model.py"
+        },
+        {
+          "kind": "path",
+          "path": "tests/test_architecture_reduction.py"
+        },
+        {
+          "kind": "role",
+          "role": "documentation_model"
+        },
+        {
+          "kind": "role",
+          "role": "runtime_source"
+        },
+        {
+          "kind": "role",
+          "role": "test_dev"
+        }
+      ],
+      "kind": "command",
+      "owner_declaration_hash": "sha256:eb226f865b37b4f6ddd622206c8d7fce92e33d5346e96cf271071888178b5d21",
+      "owner_input_projection_hash": "sha256:3aa7717dfa04746dc7ae8ca371123ec649ece3553ad8c2bcddda5a94a21571f7",
+      "projection_declaration_hash": "sha256:a0bfc2218473720f41545225d416cf374acca1a7897a34a4566293155789f4b0",
+      "semantic_check_id": "semantic:check:flowguard-architecture-reduction:native-authority",
+      "timeout_seconds": 300
+    },
+    {
+      "args": [
+        ".flowguard/architecture_reduction/model.py"
+      ],
+      "assertion_scope": "current_full_flowguard_model",
+      "check_id": "check:flowguard-architecture-reduction:evidence-closure",
+      "command": "python",
+      "coverage_rationale": "The check is the single declared owner for its mapped obligation set.",
+      "coverage_scope": "declared_obligations",
+      "covers_obligation_ids": [
+        "obligation:flowguard-architecture-reduction:evidence-closure"
+      ],
+      "cwd_token": "repository_root",
+      "depends_on_check_ids": [],
+      "evidence_class": "hard",
+      "evidence_domain_id": "evidence-domain:check:flowguard-architecture-reduction:evidence-closure",
+      "execution_owner_id": "owner:check:flowguard-architecture-reduction:evidence-closure",
+      "expected": {
+        "exit_code": 0
+      },
+      "input_component_ids": [
+        "component:documentation_model:6e9a75b8d418f59a",
+        "component:runtime_source:e664a0b48e1248df"
+      ],
+      "input_selectors": [
+        {
+          "kind": "path",
+          "path": ".flowguard/architecture_reduction/model.py"
+        }
+      ],
+      "kind": "model_assertion",
+      "owner_declaration_hash": "sha256:60c2e0496f00d1cde8bab3e1b9cddf48492baa08abe449ef34abc905701b21fa",
+      "owner_input_projection_hash": "sha256:0519fe7c0cd7111ae5d0d283c2d28dfc309c6b8e9c820f203153687ac435f151",
+      "projection_declaration_hash": "sha256:c179ff4d8dd870d3811661c08f373b38e59b5d76cc6b2210727d016c7215afdd",
+      "semantic_check_id": "semantic:check:flowguard-architecture-reduction:evidence-closure",
+      "timeout_seconds": 30
+    }
+  ],
+  "claim_boundary": "This manifest binds checks to exact model obligations. Passing checks do not by themselves prove target execution, user-visible quality, full closure, installation, or publication.",
+  "compiler_version": "skillguard.contract_compiler.v2",
+  "content_impact_plan": {
+    "all_owner_component_ids": [
+      "component:documentation_model:6e9a75b8d418f59a",
+      "component:runtime_source:e664a0b48e1248df"
+    ],
+    "check_projections": [
+      {
+        "check_id": "check:flowguard-architecture-reduction:plane-boundary",
+        "covers_obligation_ids": [
+          "obligation:flowguard-architecture-reduction:plane-boundary"
+        ],
+        "evidence_class": "hard",
+        "execution_owner_id": "owner:check:flowguard-architecture-reduction:plane-boundary",
+        "projection_declaration_hash": "sha256:a4c8f7d60b5ca4c9e3caec19e3c337eefa6edf2507eb4431068f7a170ed4478a",
+        "semantic_check_id": "semantic:check:flowguard-architecture-reduction:plane-boundary"
+      },
+      {
+        "check_id": "check:flowguard-architecture-reduction:native-authority",
+        "covers_obligation_ids": [
+          "obligation:flowguard-architecture-reduction:native-authority"
+        ],
+        "evidence_class": "hard",
+        "execution_owner_id": "owner:check:flowguard-architecture-reduction:native-authority",
+        "projection_declaration_hash": "sha256:a0bfc2218473720f41545225d416cf374acca1a7897a34a4566293155789f4b0",
+        "semantic_check_id": "semantic:check:flowguard-architecture-reduction:native-authority"
+      },
+      {
+        "check_id": "check:flowguard-architecture-reduction:evidence-closure",
+        "covers_obligation_ids": [
+          "obligation:flowguard-architecture-reduction:evidence-closure"
+        ],
+        "evidence_class": "hard",
+        "execution_owner_id": "owner:check:flowguard-architecture-reduction:evidence-closure",
+        "projection_declaration_hash": "sha256:c179ff4d8dd870d3811661c08f373b38e59b5d76cc6b2210727d016c7215afdd",
+        "semantic_check_id": "semantic:check:flowguard-architecture-reduction:evidence-closure"
+      }
+    ],
+    "components": [
+      {
+        "classification_rule_ids": [
+          "skillguard.content_role_classifier.current:contract_schema"
+        ],
+        "component_hash": "sha256:65f4fbd5e1e2b177dc8533b7b14b901a5bef409d161001408a75dfc75ddddb49",
+        "component_id": "component:contract_schema:112fa9e36247a4bd",
+        "consumer_ids": [
+          "projection:contract-compile",
+          "projection:installation"
+        ],
+        "install_disposition": "copy",
+        "member_paths": [
+          ".agents/skills/flowguard-architecture-reduction/.skillguard/contract-source.json"
+        ],
+        "role": "contract_schema"
+      },
+      {
+        "classification_rule_ids": [
+          "skillguard.content_role_classifier.current:documentation_model"
+        ],
+        "component_hash": "sha256:fa3502076ef6e703eb9f4739d0d3626f19435df2255f4900df5c2f334038aaeb",
+        "component_id": "component:documentation_model:5969ad1a7bb2f924",
+        "consumer_ids": [
+          "owner:check:flowguard-architecture-reduction:native-authority",
+          "projection:installation"
+        ],
+        "install_disposition": "copy",
+        "member_paths": [
+          ".agents/skills/flowguard-architecture-reduction/SKILL.md",
+          ".agents/skills/flowguard-architecture-reduction/references/architecture_reduction_protocol.md"
+        ],
+        "role": "documentation_model"
+      },
+      {
+        "classification_rule_ids": [
+          "skillguard.content_role_classifier.current:documentation_model"
+        ],
+        "component_hash": "sha256:dba53ec4a90fd6438e6b54c3f050c71698cb8f1607b189d872441f2a27fafb2c",
+        "component_id": "component:documentation_model:6e9a75b8d418f59a",
+        "consumer_ids": [
+          "owner:check:flowguard-architecture-reduction:evidence-closure",
+          "owner:check:flowguard-architecture-reduction:native-authority",
+          "owner:check:flowguard-architecture-reduction:plane-boundary",
+          "projection:contract-compile"
+        ],
+        "install_disposition": "source_only",
+        "member_paths": [
+          ".flowguard/architecture_reduction/model.py"
+        ],
+        "role": "documentation_model"
+      },
+      {
+        "classification_rule_ids": [
+          "skillguard.content_role_classifier.current:documentation_model"
+        ],
+        "component_hash": "sha256:c595d73b9f350823e4e4602b94e7ded78e67269479a934a275bbf48cd5b62214",
+        "component_id": "component:documentation_model:1bfcae36cacebcf4",
+        "consumer_ids": [
+          "owner:check:flowguard-architecture-reduction:native-authority"
+        ],
+        "install_disposition": "source_only",
+        "member_paths": [
+          ".flowguard/architecture_reduction/run_checks.py"
+        ],
+        "role": "documentation_model"
+      },
+      {
+        "classification_rule_ids": [
+          "skillguard.content_role_classifier.current:runtime_source"
+        ],
+        "component_hash": "sha256:208d3762840d04c43d0c4219f2cb7c315209d1a0d70aa0c4efed17f3aa190272",
+        "component_id": "component:runtime_source:754eaa48f0daca9b",
+        "consumer_ids": [
+          "owner:check:flowguard-architecture-reduction:native-authority",
+          "projection:installation"
+        ],
+        "install_disposition": "copy",
+        "member_paths": [
+          ".agents/skills/flowguard-architecture-reduction/agents/openai.yaml"
+        ],
+        "role": "runtime_source"
+      },
+      {
+        "classification_rule_ids": [
+          "skillguard.content_role_classifier.current:runtime_source"
+        ],
+        "component_hash": "sha256:f840ca6b0ad40724f61d14999a93471c6cb72efd9fa6d8e4fbc904c403125cec",
+        "component_id": "component:runtime_source:e664a0b48e1248df",
+        "consumer_ids": [
+          "owner:check:flowguard-architecture-reduction:evidence-closure",
+          "owner:check:flowguard-architecture-reduction:native-authority",
+          "owner:check:flowguard-architecture-reduction:plane-boundary",
+          "projection:contract-compile"
+        ],
+        "install_disposition": "source_only",
+        "member_paths": [
+          "flowguard/skill_contract_model.py"
+        ],
+        "role": "runtime_source"
+      },
+      {
+        "classification_rule_ids": [
+          "skillguard.content_role_classifier.current:runtime_source"
+        ],
+        "component_hash": "sha256:b3eb67ee340aef1a1afb5bdd97cc2557b7bbc0476d05af7d39c36488eb637705",
+        "component_id": "component:runtime_source:84af75b41c7a6ce7",
+        "consumer_ids": [
+          "owner:check:flowguard-architecture-reduction:native-authority"
+        ],
+        "install_disposition": "source_only",
+        "member_paths": [
+          "flowguard/architecture_reduction.py"
+        ],
+        "role": "runtime_source"
+      },
+      {
+        "classification_rule_ids": [
+          "skillguard.content_role_classifier.current:test_dev"
+        ],
+        "component_hash": "sha256:54bf9ba81e4ae5829b2b51ef9fe405be100aa60dda81f19268a4d5497398d1a7",
+        "component_id": "component:test_dev:267ffa6f56a1e67c",
+        "consumer_ids": [
+          "owner:check:flowguard-architecture-reduction:native-authority"
+        ],
+        "install_disposition": "source_only",
+        "member_paths": [
+          "tests/test_architecture_reduction.py"
+        ],
+        "role": "test_dev"
+      }
+    ],
+    "full_admission_reason_codes": [
+      "explicit_final_gate",
+      "explicit_release_gate",
+      "impact_policy_or_compiler_changed",
+      "shared_validation_runtime_changed",
+      "all_owner_component_changed"
+    ],
+    "health": {
+      "ambiguous_role_paths": [],
+      "dependency_parse_errors": [],
+      "duplicate_owner_ids": [],
+      "invalid_dependency_edges": [],
+      "owner_cycles": [],
+      "unmapped_paths": []
+    },
+    "impact_graph_hash": "sha256:fe828b0068c29b0a6290075b71baebb2e6e310e4270d5017b8c95e7ab4817c99",
+    "inventory": [
+      {
+        "classification_rule_id": "skillguard.content_role_classifier.current:contract_schema",
+        "content_hash": "sha256:d06b58e0ceb17e350501e2cf8691655616ceaeb6375522d165c7e97da4a9c525",
+        "install_disposition": "copy",
+        "path": ".agents/skills/flowguard-architecture-reduction/.skillguard/contract-source.json",
+        "role": "contract_schema"
+      },
+      {
+        "classification_rule_id": "skillguard.content_role_classifier.current:documentation_model",
+        "content_hash": "sha256:7e74ae053f10eb99e110273c9433d8abe63b487a3719cc7221f447902b9256ae",
+        "install_disposition": "copy",
+        "path": ".agents/skills/flowguard-architecture-reduction/SKILL.md",
+        "role": "documentation_model"
+      },
+      {
+        "classification_rule_id": "skillguard.content_role_classifier.current:runtime_source",
+        "content_hash": "sha256:73800d13d649aba8388581129624bba78b453066bd7d406a47bd841da03cacf1",
+        "install_disposition": "copy",
+        "path": ".agents/skills/flowguard-architecture-reduction/agents/openai.yaml",
+        "role": "runtime_source"
+      },
+      {
+        "classification_rule_id": "skillguard.content_role_classifier.current:documentation_model",
+        "content_hash": "sha256:8ec96d506eeb394de436ca0e2e6bc0372417025b48c09bde8023f7489d123899",
+        "install_disposition": "copy",
+        "path": ".agents/skills/flowguard-architecture-reduction/references/architecture_reduction_protocol.md",
+        "role": "documentation_model"
+      },
+      {
+        "classification_rule_id": "skillguard.content_role_classifier.current:documentation_model",
+        "content_hash": "sha256:816e0786a8709ac0641c0a7bc0ac1bc9c08458c9b551702ae377877928ff0099",
+        "install_disposition": "source_only",
+        "path": ".flowguard/architecture_reduction/model.py",
+        "role": "documentation_model"
+      },
+      {
+        "classification_rule_id": "skillguard.content_role_classifier.current:documentation_model",
+        "content_hash": "sha256:6b63392ecf7e9925239d5265efb49fdeca4cf94b6abbbf008dd9d701b38a5568",
+        "install_disposition": "source_only",
+        "path": ".flowguard/architecture_reduction/run_checks.py",
+        "role": "documentation_model"
+      },
+      {
+        "classification_rule_id": "skillguard.content_role_classifier.current:runtime_source",
+        "content_hash": "sha256:3bfeb5c9fbb304547bca5a0ace77bfcf2ac3f33294936e3d3e1c6cb5cf1ddf8f",
+        "install_disposition": "source_only",
+        "path": "flowguard/architecture_reduction.py",
+        "role": "runtime_source"
+      },
+      {
+        "classification_rule_id": "skillguard.content_role_classifier.current:runtime_source",
+        "content_hash": "sha256:950be5371110546ec94ae5c0c3d6818cf378a4ed706e1e2410ddadc4fa0148d5",
+        "install_disposition": "source_only",
+        "path": "flowguard/skill_contract_model.py",
+        "role": "runtime_source"
+      },
+      {
+        "classification_rule_id": "skillguard.content_role_classifier.current:test_dev",
+        "content_hash": "sha256:d48de26bd808116fd36514aeb1bd8f96426431c272ec97fabcb1cd0aa15b3f0a",
+        "install_disposition": "source_only",
+        "path": "tests/test_architecture_reduction.py",
+        "role": "test_dev"
+      }
+    ],
+    "inventory_hash": "sha256:fad027433e64cf894bb6a44ed245c20e36e7a19337c91f165dea18a21ec85449",
+    "member_root_path": ".agents/skills/flowguard-architecture-reduction",
+    "owner_receipt_root_ref": {
+      "path_token": "owner_evidence_root",
+      "relative_path": "check-executions"
+    },
+    "owners": [
+      {
+        "check_ids": [
+          "check:flowguard-architecture-reduction:evidence-closure"
+        ],
+        "depends_on_owner_ids": [],
+        "evidence_domain_id": "evidence-domain:check:flowguard-architecture-reduction:evidence-closure",
+        "execution_owner_id": "owner:check:flowguard-architecture-reduction:evidence-closure",
+        "input_component_ids": [
+          "component:documentation_model:6e9a75b8d418f59a",
+          "component:runtime_source:e664a0b48e1248df"
+        ],
+        "input_selectors": [
+          {
+            "kind": "path",
+            "path": ".flowguard/architecture_reduction/model.py"
+          }
+        ],
+        "owner_declaration_hash": "sha256:60c2e0496f00d1cde8bab3e1b9cddf48492baa08abe449ef34abc905701b21fa",
+        "owner_input_projection_hash": "sha256:0519fe7c0cd7111ae5d0d283c2d28dfc309c6b8e9c820f203153687ac435f151"
+      },
+      {
+        "check_ids": [
+          "check:flowguard-architecture-reduction:native-authority"
+        ],
+        "depends_on_owner_ids": [],
+        "evidence_domain_id": "evidence-domain:check:flowguard-architecture-reduction:native-authority",
+        "execution_owner_id": "owner:check:flowguard-architecture-reduction:native-authority",
+        "input_component_ids": [
+          "component:documentation_model:1bfcae36cacebcf4",
+          "component:documentation_model:5969ad1a7bb2f924",
+          "component:documentation_model:6e9a75b8d418f59a",
+          "component:runtime_source:754eaa48f0daca9b",
+          "component:runtime_source:84af75b41c7a6ce7",
+          "component:runtime_source:e664a0b48e1248df",
+          "component:test_dev:267ffa6f56a1e67c"
+        ],
+        "input_selectors": [
+          {
+            "kind": "path",
+            "path": ".flowguard/architecture_reduction/model.py"
+          },
+          {
+            "kind": "path",
+            "path": "tests/test_architecture_reduction.py"
+          },
+          {
+            "kind": "role",
+            "role": "documentation_model"
+          },
+          {
+            "kind": "role",
+            "role": "runtime_source"
+          },
+          {
+            "kind": "role",
+            "role": "test_dev"
+          }
+        ],
+        "owner_declaration_hash": "sha256:eb226f865b37b4f6ddd622206c8d7fce92e33d5346e96cf271071888178b5d21",
+        "owner_input_projection_hash": "sha256:3aa7717dfa04746dc7ae8ca371123ec649ece3553ad8c2bcddda5a94a21571f7"
+      },
+      {
+        "check_ids": [
+          "check:flowguard-architecture-reduction:plane-boundary"
+        ],
+        "depends_on_owner_ids": [],
+        "evidence_domain_id": "evidence-domain:check:flowguard-architecture-reduction:plane-boundary",
+        "execution_owner_id": "owner:check:flowguard-architecture-reduction:plane-boundary",
+        "input_component_ids": [
+          "component:documentation_model:6e9a75b8d418f59a",
+          "component:runtime_source:e664a0b48e1248df"
+        ],
+        "input_selectors": [
+          {
+            "kind": "path",
+            "path": ".flowguard/architecture_reduction/model.py"
+          }
+        ],
+        "owner_declaration_hash": "sha256:b2af3acca7d0c38e96c25508be72f29d5861a1f76c48af19a079ad8c3a72e334",
+        "owner_input_projection_hash": "sha256:0519fe7c0cd7111ae5d0d283c2d28dfc309c6b8e9c820f203153687ac435f151"
+      }
+    ],
+    "policy_id": "skillguard.content_impact_policy.current",
+    "portfolio_target_edges": [],
+    "projection_consumers": [
+      {
+        "consumer_id": "projection:contract-compile",
+        "consumer_projection_hash": "sha256:52e25670c6354657150e7d02709bcc6bb12a27c416fce3f83d7c1c2f562f33b7",
+        "impact_plan_schema_version": "skillguard.content_impact_plan.current",
+        "impact_policy_id": "skillguard.content_impact_policy.current",
+        "input_component_ids": [
+          "component:contract_schema:112fa9e36247a4bd",
+          "component:documentation_model:6e9a75b8d418f59a",
+          "component:runtime_source:e664a0b48e1248df"
+        ],
+        "input_projection_hash": "sha256:aaf815085bd1c8c4aa1929c0db8cb253f231c93ce94aab6e2335210c59173b19",
+        "kind": "contract_compile",
+        "projection_declaration_hash": "sha256:1188c1398fac465b07a43d21c05c2644e8f9e7a0465ece2b01c8a8829b6955f3"
+      },
+      {
+        "consumer_id": "projection:global-router",
+        "consumer_projection_hash": "sha256:c05984df180fa719bed1a62a48db6052b1a7e03b87e7a9e6eda3430a1905cf86",
+        "impact_plan_schema_version": "skillguard.content_impact_plan.current",
+        "impact_policy_id": "skillguard.content_impact_policy.current",
+        "input_component_ids": [],
+        "input_projection_hash": "sha256:37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "kind": "global_router",
+        "projection_declaration_hash": "sha256:667973c38b6c505040402a17baf7ebb4fb1ebe562415b046f317c029a3861f2a"
+      },
+      {
+        "consumer_id": "projection:installation",
+        "consumer_projection_hash": "sha256:2fd6ee217d731e36193f9a117a6bc2e55a124dfa29ebda53dae2f4f4469ca019",
+        "impact_plan_schema_version": "skillguard.content_impact_plan.current",
+        "impact_policy_id": "skillguard.content_impact_policy.current",
+        "input_component_ids": [
+          "component:contract_schema:112fa9e36247a4bd",
+          "component:documentation_model:5969ad1a7bb2f924",
+          "component:runtime_source:754eaa48f0daca9b"
+        ],
+        "input_projection_hash": "sha256:3715caf96fa63221dd68d7908692455d12a666ce95e08c7ba13a91815fbae574",
+        "kind": "installation",
+        "projection_declaration_hash": "sha256:dc26de34706f5e8fa6128ce00cb47fc7233030db193b0676b061eff80af43739"
+      },
+      {
+        "consumer_id": "projection:portfolio",
+        "consumer_projection_hash": "sha256:9829573143198c085bf05b11cfa1f5d2f0b51f7dcf833f143c0b53b00bf4bbae",
+        "impact_plan_schema_version": "skillguard.content_impact_plan.current",
+        "impact_policy_id": "skillguard.content_impact_policy.current",
+        "input_component_ids": [],
+        "input_projection_hash": "sha256:37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "kind": "portfolio",
+        "projection_declaration_hash": "sha256:9194e37d395a5756ddd87565ee97fe8dcdae46c150b4b03754291a80060b8b26"
+      },
+      {
+        "consumer_id": "projection:source-maintenance",
+        "consumer_projection_hash": "sha256:13be01e10a981898727db9510b3c43dc1fddb727f0fd9bbb8c5009db65106e6c",
+        "impact_plan_schema_version": "skillguard.content_impact_plan.current",
+        "impact_policy_id": "skillguard.content_impact_policy.current",
+        "input_component_ids": [],
+        "input_projection_hash": "sha256:37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "kind": "source_maintenance",
+        "projection_declaration_hash": "sha256:b55f389a1ff76e45148a5e9c63699fe47970e1d99e9b1d3805bec3f98aafa235"
+      }
+    ],
+    "schema_version": "skillguard.content_impact_plan.current",
+    "unknown_mapping_disposition": "block"
+  },
+  "contract_hash": "17A4CA6E2ECB97159093E2F47D57A5D9829AA4F25B6E9E15FFB68383684B282D",
+  "manifest_hash": "83390453AAE968B9648D36D9B6A566EA5A90298D6BE2714EAEE37207AD121B03",
+  "model_id": "flowguard.architecture_reduction.skill_contract.v2",
+  "schema_version": "skillguard.check_manifest.v2",
+  "skill_id": "flowguard-architecture-reduction",
+  "source_fingerprints": {
+    "binding": "D06B58E0CEB17E350501E2CF8691655616CEAEB6375522D165C7E97DA4A9C525",
+    "entrypoint": "7E74AE053F10EB99E110273C9433D8ABE63B487A3719CC7221F447902B9256AE",
+    "implementation:.agents/skills/flowguard-architecture-reduction": "E798F0DF8DCAC2170B8F8274B5A2B669C836BDD2742076307058AEC7AA548669",
+    "implementation:.flowguard/architecture_reduction": "9442907DAEDEB7778E15ABCB5043F8A497736C2B63B03D1032D5EE925FC4695A",
+    "implementation:flowguard/architecture_reduction.py": "3BFEB5C9FBB304547BCA5A0ACE77BFCF2AC3F33294936E3D3E1C6CB5CF1DDF8F",
+    "implementation:flowguard/skill_contract_model.py": "950BE5371110546EC94AE5C0C3D6818CF378A4ED706E1E2410DDADC4FA0148D5",
+    "implementation:tests/test_architecture_reduction.py": "D48DE26BD808116FD36514AEB1BD8F96426431C272EC97FABCB1CD0AA15B3F0A",
+    "model": "816E0786A8709AC0641C0A7BC0AC1BC9C08458C9B551702AE377877928FF0099",
+    "model_export": "73EE8829FDF511DBF016748F2A742DA05B571B8AB8EBBA05734DFE5B050C7A13"
+  }
+}

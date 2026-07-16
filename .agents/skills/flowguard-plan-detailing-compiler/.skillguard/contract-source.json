@@ -1,0 +1,226 @@
+{
+  "artifacts": [],
+  "checks": [
+    {
+      "check_id": "check:flowguard-plan-detailing-compiler:plane-boundary",
+      "coverage_rationale": "The check is the single declared owner for its mapped obligation set.",
+      "coverage_scope": "declared_obligations",
+      "covers_obligation_ids": [
+        "obligation:flowguard-plan-detailing-compiler:plane-boundary"
+      ],
+      "depends_on_check_ids": [],
+      "evidence_class": "hard",
+      "evidence_domain_id": "evidence-domain:check:flowguard-plan-detailing-compiler:plane-boundary",
+      "execution_owner_id": "owner:check:flowguard-plan-detailing-compiler:plane-boundary",
+      "input_selectors": [
+        {
+          "kind": "path",
+          "path": "examples/plan_detailing_compiler/model.py"
+        }
+      ],
+      "kind": "model_assertion",
+      "semantic_check_id": "semantic:check:flowguard-plan-detailing-compiler:plane-boundary",
+      "timeout_seconds": 30
+    },
+    {
+      "args": [
+        "-m",
+        "pytest",
+        "tests/test_plan_detailing.py",
+        "-q"
+      ],
+      "check_id": "check:flowguard-plan-detailing-compiler:native-authority",
+      "command": "python",
+      "coverage_rationale": "The check is the single declared owner for its mapped obligation set.",
+      "coverage_scope": "declared_obligations",
+      "covers_obligation_ids": [
+        "obligation:flowguard-plan-detailing-compiler:native-authority"
+      ],
+      "cwd_token": "repository_root",
+      "depends_on_check_ids": [],
+      "evidence_class": "hard",
+      "evidence_domain_id": "evidence-domain:check:flowguard-plan-detailing-compiler:native-authority",
+      "execution_owner_id": "owner:check:flowguard-plan-detailing-compiler:native-authority",
+      "expected": {
+        "exit_code": 0
+      },
+      "input_selectors": [
+        {
+          "kind": "path",
+          "path": "examples/plan_detailing_compiler/model.py"
+        },
+        {
+          "kind": "path",
+          "path": "tests/test_plan_detailing.py"
+        },
+        {
+          "kind": "role",
+          "role": "runtime_source"
+        },
+        {
+          "kind": "role",
+          "role": "documentation_model"
+        },
+        {
+          "kind": "role",
+          "role": "test_dev"
+        }
+      ],
+      "kind": "command",
+      "semantic_check_id": "semantic:check:flowguard-plan-detailing-compiler:native-authority",
+      "timeout_seconds": 300
+    },
+    {
+      "check_id": "check:flowguard-plan-detailing-compiler:evidence-closure",
+      "coverage_rationale": "The check is the single declared owner for its mapped obligation set.",
+      "coverage_scope": "declared_obligations",
+      "covers_obligation_ids": [
+        "obligation:flowguard-plan-detailing-compiler:evidence-closure"
+      ],
+      "depends_on_check_ids": [],
+      "evidence_class": "hard",
+      "evidence_domain_id": "evidence-domain:check:flowguard-plan-detailing-compiler:evidence-closure",
+      "execution_owner_id": "owner:check:flowguard-plan-detailing-compiler:evidence-closure",
+      "input_selectors": [
+        {
+          "kind": "path",
+          "path": "examples/plan_detailing_compiler/model.py"
+        }
+      ],
+      "kind": "model_assertion",
+      "semantic_check_id": "semantic:check:flowguard-plan-detailing-compiler:evidence-closure",
+      "timeout_seconds": 30
+    }
+  ],
+  "claim_boundary": "The compiler proves only that the plan is structured enough for its stated scope and references any active DPF optimization once at plan level; it does not execute steps, copy optimizer state into each row, or produce final evidence.",
+  "closure_profiles": [
+    {
+      "profile_id": "enforced",
+      "required_obligation_ids": [
+        "obligation:flowguard-plan-detailing-compiler:plane-boundary",
+        "obligation:flowguard-plan-detailing-compiler:native-authority",
+        "obligation:flowguard-plan-detailing-compiler:evidence-closure"
+      ]
+    }
+  ],
+  "confirmed": true,
+  "content_impact_policy": {
+    "full_admission_reason_codes": [
+      "explicit_final_gate",
+      "explicit_release_gate",
+      "impact_policy_or_compiler_changed",
+      "shared_validation_runtime_changed",
+      "all_owner_component_changed"
+    ],
+    "owner_receipt_root_ref": {
+      "path_token": "owner_evidence_root",
+      "relative_path": "check-executions"
+    },
+    "policy_id": "skillguard.content_impact_policy.current",
+    "unknown_mapping_disposition": "block"
+  },
+  "default_route_id": "route:plan_detailing_compiler",
+  "depth_profile": {
+    "schema_version": "skillguard.depth_profile.v2",
+    "profile_id": "profile:flowguard-plan-detailing-compiler:fixed-enforced-declared-check-supervision",
+    "target_skill_id": "flowguard-plan-detailing-compiler",
+    "integration_mode": "native-integrated",
+    "native_owner_id": "development_process_flow",
+    "native_route_ids": [
+      "route:plan_detailing_compiler"
+    ],
+    "native_check_ids": [
+      "check:flowguard-plan-detailing-compiler:plane-boundary",
+      "check:flowguard-plan-detailing-compiler:native-authority",
+      "check:flowguard-plan-detailing-compiler:evidence-closure"
+    ],
+    "skillguard_adds_domain_route": false,
+    "enforcement_level": "enforced",
+    "required_closure_profiles": [
+      "enforced"
+    ],
+    "provider_runtime": {
+      "provider_id": "skillguard-local-provider",
+      "required_runtime_contract_id": "skillguard-declared-check-supervision-current",
+      "required_capability_ids": [
+        "declared-check-inventory.v1",
+        "declared-check-receipt-reconciliation.v1",
+        "installation-receipt-binding.v1",
+        "installation-currentness-replay.v1",
+        "provider-runtime-enrollment.v1",
+        "single-flight-check-execution.v1"
+      ],
+      "required_enrollment_status": "enrolled",
+      "readiness_check_ids": [
+        "check:flowguard-plan-detailing-compiler:native-authority"
+      ]
+    },
+    "claim_boundary": "flowguard-plan-detailing-compiler owns every check's domain meaning; SkillGuard only reconciles the exact current declared-check inventory and terminal receipts in one fixed enforced closure."
+  },
+  "implementation_paths": [
+    ".agents/skills/flowguard-plan-detailing-compiler",
+    "examples/plan_detailing_compiler",
+    "flowguard/plan_detailing.py",
+    "flowguard/skill_contract_model.py",
+    "tests/test_plan_detailing.py"
+  ],
+  "integration_mode": "native-integrated",
+  "judgment_rubrics": [],
+  "may_define_parallel_execution_route": false,
+  "may_define_skillguard_runtime_route": false,
+  "model_id": "flowguard.plan_detailing_compiler.skill_contract.v2",
+  "model_path": "examples/plan_detailing_compiler/model.py",
+  "native_check_bindings": [
+    {
+      "authority": "target-native",
+      "check_id": "check:flowguard-plan-detailing-compiler:native-authority",
+      "owner_id": "development_process_flow"
+    }
+  ],
+  "native_route_bindings": [
+    {
+      "authority": "target-native",
+      "owner_id": "development_process_flow",
+      "route_id": "route:plan_detailing_compiler"
+    }
+  ],
+  "native_route_owner": "development_process_flow",
+  "release_eligible": false,
+  "schema_version": "skillguard.contract_source.v2",
+  "skill_id": "flowguard-plan-detailing-compiler",
+  "step_bindings": [
+    {
+      "action": {
+        "kind": "inventory",
+        "summary": "Identify agent-operation ownership and typed product or process target commitments before detailing."
+      },
+      "check_ids": [
+        "check:flowguard-plan-detailing-compiler:plane-boundary"
+      ],
+      "output_artifact_ids": [],
+      "step_id": "step:flowguard-plan-detailing-compiler:intake"
+    },
+    {
+      "action": {
+        "kind": "native",
+        "summary": "Compile the rough plan into ordered steps, validations, receipts, failure branches, and at most one plan-level DPF optimization evidence reference through the existing owner."
+      },
+      "check_ids": [
+        "check:flowguard-plan-detailing-compiler:native-authority"
+      ],
+      "output_artifact_ids": [],
+      "step_id": "step:flowguard-plan-detailing-compiler:execute"
+    },
+    {
+      "action": {
+        "kind": "verifier",
+        "summary": "Block full claims when side effects, rework, target relations, or final evidence are unbound."
+      },
+      "check_ids": [
+        "check:flowguard-plan-detailing-compiler:evidence-closure"
+      ],
+      "output_artifact_ids": [],
+      "step_id": "step:flowguard-plan-detailing-compiler:verify"
+    }
+  ]
+}

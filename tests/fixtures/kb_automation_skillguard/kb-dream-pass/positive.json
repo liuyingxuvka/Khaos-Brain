@@ -1,0 +1,21 @@
+{
+  "case_id": "case:kb-dream-pass:positive-automation-depth",
+  "important_gap_obligation_id": "",
+  "mode": "target-native-complete",
+  "native_evaluator_id": "local_kb.automation_runtime.evaluate_native_payload",
+  "native_receipt_origin": "calibration-fixture",
+  "schema_version": "khaos-brain.target-native-depth-calibration.v1",
+  "skill_id": "kb-dream-pass",
+  "target_obligation_ids": [
+    "obligation:kb-dream-pass:lane-evidence-intake",
+    "obligation:kb-dream-pass:stable-fingerprint",
+    "obligation:kb-dream-pass:bounded-selection",
+    "obligation:kb-dream-pass:sandbox-experiment",
+    "obligation:kb-dream-pass:no-delta-closure",
+    "obligation:kb-dream-pass:typed-handoff-once",
+    "obligation:kb-dream-pass:no-direct-knowledge-write",
+    "obligation:kb-dream-pass:terminal-receipt",
+    "obligation:kb-dream-pass:timeout-tree-cleanup",
+    "obligation:kb-dream-pass:depth-calibration"
+  ]
+}

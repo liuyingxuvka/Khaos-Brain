@@ -3,8 +3,8 @@ from __future__ import annotations
 import os
 
 from local_kb.common import normalize_text, normalize_string_list, parse_route_segments
+from local_kb.model_maintenance import load_current_model_entries
 from local_kb.models import Entry, RouteBranch
-from local_kb.store import load_entries
 
 
 def _matches_prefix(route: list[str], prefix: list[str]) -> bool:
@@ -114,7 +114,7 @@ def build_selected_views(
     selection: str,
     include_cross_index: bool = False,
 ) -> list[dict[str, object]]:
-    entries = load_entries(repo_root)
+    entries, _generation = load_current_model_entries(repo_root)
     current_view = build_route_view(entries, repo_root, route=route, include_cross_index=include_cross_index)
     selected_routes = select_child_routes(current_view, selection)
     return [
@@ -146,4 +146,3 @@ def format_route_view(view: dict[str, object]) -> str:
     else:
         lines.append("- none")
     return "\n".join(lines)
-

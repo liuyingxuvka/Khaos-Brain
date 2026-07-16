@@ -1,0 +1,227 @@
+{
+  "artifacts": [],
+  "checks": [
+    {
+      "check_id": "check:flowguard-existing-model-preflight:plane-boundary",
+      "coverage_rationale": "The check is the single declared owner for its mapped obligation set.",
+      "coverage_scope": "declared_obligations",
+      "covers_obligation_ids": [
+        "obligation:flowguard-existing-model-preflight:plane-boundary"
+      ],
+      "depends_on_check_ids": [],
+      "evidence_class": "hard",
+      "evidence_domain_id": "evidence-domain:check:flowguard-existing-model-preflight:plane-boundary",
+      "execution_owner_id": "owner:check:flowguard-existing-model-preflight:plane-boundary",
+      "input_selectors": [
+        {
+          "kind": "path",
+          "path": ".flowguard/existing_model_preflight/model.py"
+        }
+      ],
+      "kind": "model_assertion",
+      "semantic_check_id": "semantic:check:flowguard-existing-model-preflight:plane-boundary",
+      "timeout_seconds": 30
+    },
+    {
+      "args": [
+        "-m",
+        "pytest",
+        "tests/test_existing_model_preflight.py",
+        "-q"
+      ],
+      "check_id": "check:flowguard-existing-model-preflight:native-authority",
+      "command": "python",
+      "coverage_rationale": "The check is the single declared owner for its mapped obligation set.",
+      "coverage_scope": "declared_obligations",
+      "covers_obligation_ids": [
+        "obligation:flowguard-existing-model-preflight:native-authority"
+      ],
+      "cwd_token": "repository_root",
+      "depends_on_check_ids": [],
+      "evidence_class": "hard",
+      "evidence_domain_id": "evidence-domain:check:flowguard-existing-model-preflight:native-authority",
+      "execution_owner_id": "owner:check:flowguard-existing-model-preflight:native-authority",
+      "expected": {
+        "exit_code": 0
+      },
+      "input_selectors": [
+        {
+          "kind": "path",
+          "path": ".flowguard/existing_model_preflight/model.py"
+        },
+        {
+          "kind": "path",
+          "path": "tests/test_existing_model_preflight.py"
+        },
+        {
+          "kind": "role",
+          "role": "runtime_source"
+        },
+        {
+          "kind": "role",
+          "role": "documentation_model"
+        },
+        {
+          "kind": "role",
+          "role": "test_dev"
+        }
+      ],
+      "kind": "command",
+      "semantic_check_id": "semantic:check:flowguard-existing-model-preflight:native-authority",
+      "timeout_seconds": 300
+    },
+    {
+      "check_id": "check:flowguard-existing-model-preflight:evidence-closure",
+      "coverage_rationale": "The check is the single declared owner for its mapped obligation set.",
+      "coverage_scope": "declared_obligations",
+      "covers_obligation_ids": [
+        "obligation:flowguard-existing-model-preflight:evidence-closure"
+      ],
+      "depends_on_check_ids": [],
+      "evidence_class": "hard",
+      "evidence_domain_id": "evidence-domain:check:flowguard-existing-model-preflight:evidence-closure",
+      "execution_owner_id": "owner:check:flowguard-existing-model-preflight:evidence-closure",
+      "input_selectors": [
+        {
+          "kind": "path",
+          "path": ".flowguard/existing_model_preflight/model.py"
+        }
+      ],
+      "kind": "model_assertion",
+      "semantic_check_id": "semantic:check:flowguard-existing-model-preflight:evidence-closure",
+      "timeout_seconds": 30
+    }
+  ],
+  "claim_boundary": "The report proves only current ownership and affected-surface inventory understanding plus reuse/route selection; it does not validate the downstream proposal, runtime path, or implementation.",
+  "closure_profiles": [
+    {
+      "profile_id": "enforced",
+      "required_obligation_ids": [
+        "obligation:flowguard-existing-model-preflight:plane-boundary",
+        "obligation:flowguard-existing-model-preflight:native-authority",
+        "obligation:flowguard-existing-model-preflight:evidence-closure"
+      ]
+    }
+  ],
+  "confirmed": true,
+  "content_impact_policy": {
+    "full_admission_reason_codes": [
+      "explicit_final_gate",
+      "explicit_release_gate",
+      "impact_policy_or_compiler_changed",
+      "shared_validation_runtime_changed",
+      "all_owner_component_changed"
+    ],
+    "owner_receipt_root_ref": {
+      "path_token": "owner_evidence_root",
+      "relative_path": "check-executions"
+    },
+    "policy_id": "skillguard.content_impact_policy.current",
+    "unknown_mapping_disposition": "block"
+  },
+  "default_route_id": "route:existing_model_preflight",
+  "depth_profile": {
+    "schema_version": "skillguard.depth_profile.v2",
+    "profile_id": "profile:flowguard-existing-model-preflight:fixed-enforced-declared-check-supervision",
+    "target_skill_id": "flowguard-existing-model-preflight",
+    "integration_mode": "native-integrated",
+    "native_owner_id": "existing_model_preflight",
+    "native_route_ids": [
+      "route:existing_model_preflight"
+    ],
+    "native_check_ids": [
+      "check:flowguard-existing-model-preflight:plane-boundary",
+      "check:flowguard-existing-model-preflight:native-authority",
+      "check:flowguard-existing-model-preflight:evidence-closure"
+    ],
+    "skillguard_adds_domain_route": false,
+    "enforcement_level": "enforced",
+    "required_closure_profiles": [
+      "enforced"
+    ],
+    "provider_runtime": {
+      "provider_id": "skillguard-local-provider",
+      "required_runtime_contract_id": "skillguard-declared-check-supervision-current",
+      "required_capability_ids": [
+        "declared-check-inventory.v1",
+        "declared-check-receipt-reconciliation.v1",
+        "installation-receipt-binding.v1",
+        "installation-currentness-replay.v1",
+        "provider-runtime-enrollment.v1",
+        "single-flight-check-execution.v1"
+      ],
+      "required_enrollment_status": "enrolled",
+      "readiness_check_ids": [
+        "check:flowguard-existing-model-preflight:native-authority"
+      ]
+    },
+    "claim_boundary": "flowguard-existing-model-preflight owns every check's domain meaning; SkillGuard only reconciles the exact current declared-check inventory and terminal receipts in one fixed enforced closure."
+  },
+  "implementation_paths": [
+    ".agents/skills/flowguard-existing-model-preflight",
+    ".flowguard/existing_model_preflight",
+    "flowguard/existing_model_preflight.py",
+    "flowguard/behavior_commitment_lookup.py",
+    "flowguard/skill_contract_model.py",
+    "tests/test_existing_model_preflight.py"
+  ],
+  "integration_mode": "native-integrated",
+  "judgment_rubrics": [],
+  "may_define_parallel_execution_route": false,
+  "may_define_skillguard_runtime_route": false,
+  "model_id": "flowguard.existing_model_preflight.skill_contract.v2",
+  "model_path": ".flowguard/existing_model_preflight/model.py",
+  "native_check_bindings": [
+    {
+      "authority": "target-native",
+      "check_id": "check:flowguard-existing-model-preflight:native-authority",
+      "owner_id": "existing_model_preflight"
+    }
+  ],
+  "native_route_bindings": [
+    {
+      "authority": "target-native",
+      "owner_id": "existing_model_preflight",
+      "route_id": "route:existing_model_preflight"
+    }
+  ],
+  "native_route_owner": "existing_model_preflight",
+  "release_eligible": false,
+  "schema_version": "skillguard.contract_source.v2",
+  "skill_id": "flowguard-existing-model-preflight",
+  "step_bindings": [
+    {
+      "action": {
+        "kind": "inventory",
+        "summary": "Classify the task plane and query same-plane commitments before filesystem discovery."
+      },
+      "check_ids": [
+        "check:flowguard-existing-model-preflight:plane-boundary"
+      ],
+      "output_artifact_ids": [],
+      "step_id": "step:flowguard-existing-model-preflight:intake"
+    },
+    {
+      "action": {
+        "kind": "native",
+        "summary": "Run the existing preflight owner and preserve typed related-plane context as non-owning context."
+      },
+      "check_ids": [
+        "check:flowguard-existing-model-preflight:native-authority"
+      ],
+      "output_artifact_ids": [],
+      "step_id": "step:flowguard-existing-model-preflight:execute"
+    },
+    {
+      "action": {
+        "kind": "verifier",
+        "summary": "Require an explainable owner selection or an explicit missing, stale, or ambiguous fallback."
+      },
+      "check_ids": [
+        "check:flowguard-existing-model-preflight:evidence-closure"
+      ],
+      "output_artifact_ids": [],
+      "step_id": "step:flowguard-existing-model-preflight:verify"
+    }
+  ]
+}

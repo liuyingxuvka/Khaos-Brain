@@ -1,0 +1,146 @@
+{
+  "no_card_cases": [
+    {
+      "id": "no-card-nebulonxy",
+      "kind": "no_card",
+      "path_hint": "",
+      "query": "nebulonxy quetzalomega vitrionplex"
+    },
+    {
+      "id": "no-card-amberquark",
+      "kind": "no_card",
+      "path_hint": "",
+      "query": "amberquark zelphorix nimbuscipher"
+    },
+    {
+      "id": "no-card-crystalnarwhal",
+      "kind": "no_card",
+      "path_hint": "",
+      "query": "crystalnarwhal vortexpapaya glyphotonic"
+    },
+    {
+      "id": "no-card-mooncactus",
+      "kind": "no_card",
+      "path_hint": "",
+      "query": "mooncactus hyperlemur prismavocado"
+    },
+    {
+      "id": "no-card-zenithmango",
+      "kind": "no_card",
+      "path_hint": "",
+      "query": "zenithmango cobaltferret aurorapickle"
+    }
+  ],
+  "schema_version": 1,
+  "suite_id": "chaos-brain-real-corpus-v1",
+  "useful_cases": [
+    {
+      "expected_entry_ids": [
+        "model-001"
+      ],
+      "id": "version-lexical",
+      "kind": "lexical",
+      "path_hint": "engineering/debugging/version-change",
+      "query": "breaking regression after dependency upgrade"
+    },
+    {
+      "expected_entry_ids": [
+        "model-001"
+      ],
+      "id": "version-route",
+      "kind": "route_expansion",
+      "path_hint": "engineering/debugging/version-change",
+      "query": "unexpected behavior after a change"
+    },
+    {
+      "expected_entry_ids": [
+        "model-001"
+      ],
+      "id": "version-direct-id",
+      "kind": "direct_id",
+      "path_hint": "",
+      "query": "open id:model-001"
+    },
+    {
+      "expected_entry_ids": [
+        "model-004"
+      ],
+      "id": "version-related",
+      "kind": "related_traversal",
+      "path_hint": "engineering/debugging/version-change",
+      "query": "breaking regression after dependency upgrade"
+    },
+    {
+      "expected_entry_ids": [
+        "model-004"
+      ],
+      "id": "kb-retrieval-lexical",
+      "kind": "lexical",
+      "path_hint": "system/knowledge-library/retrieval",
+      "query": "search the local knowledge base before repository work"
+    },
+    {
+      "expected_entry_ids": [
+        "model-004"
+      ],
+      "id": "kb-retrieval-route",
+      "kind": "route_expansion",
+      "path_hint": "system/knowledge-library/retrieval",
+      "query": "reuse prior lessons"
+    },
+    {
+      "expected_entry_ids": [
+        "model-004"
+      ],
+      "id": "kb-retrieval-direct-id",
+      "kind": "direct_id",
+      "path_hint": "",
+      "query": "model-004"
+    },
+    {
+      "expected_entry_ids": [
+        "model-002"
+      ],
+      "id": "email-lexical",
+      "kind": "lexical",
+      "path_hint": "work/communication/email",
+      "query": "draft a professional work email in English"
+    },
+    {
+      "expected_entry_ids": [
+        "model-002"
+      ],
+      "id": "email-route",
+      "kind": "route_expansion",
+      "path_hint": "writing/business/email",
+      "query": "reply draft language"
+    },
+    {
+      "expected_entry_ids": [
+        "model-002"
+      ],
+      "id": "email-direct-id",
+      "kind": "direct_id",
+      "path_hint": "",
+      "query": "open [model-002]"
+    },
+    {
+      "expected_entry_ids": [
+        "cand-20260429T071120Z-inst677836cf-771be5"
+      ],
+      "id": "installer-lexical",
+      "kind": "lexical",
+      "path_hint": "system/knowledge-library/installation",
+      "query": "repository managed skill installer refresh prompt checks"
+    },
+    {
+      "expected_entry_ids": [
+        "cand-20260429T071120Z-inst677836cf-771be5"
+      ],
+      "id": "installer-direct-id",
+      "kind": "direct_id",
+      "path_hint": "",
+      "query": "id:cand-20260429T071120Z-inst677836cf-771be5"
+    }
+  ]
+}

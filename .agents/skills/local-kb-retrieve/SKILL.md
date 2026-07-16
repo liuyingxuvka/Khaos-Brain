@@ -27,22 +27,22 @@ Rule discipline:
 
 - Keep retrieval scoring as a simple additive rule: structural route evidence + lexical evidence + small confidence/status adjustment.
 - Do not let `confidence` or `status` create a hit by themselves. They may rerank plausible matches, but they should not turn unrelated entries into matches.
-- Keep runtime survival separate from KB repair. During active work, skip malformed or unusable entries and continue; leave cleanup and normalization to sleep maintenance.
+- Keep runtime survival separate from KB repair. A malformed lexical candidate may be excluded, but missing or inconsistent exact LogicGuard authority is a visible failure. Never continue through a readable-card, legacy-YAML, or floating-head fallback; leave repair and republication to Sleep or the versioned upgrade owner.
 - Keep parameters few and fixed. Prefer counts, weights, and thresholds that a human can inspect over adaptive or opaque heuristics.
 - Keep canonical machine interfaces separate from localized display projection. CLI tools, installed launchers, automation payloads, and installer checks should use canonical machine output and encoding-stable JSON; Chinese display belongs in `i18n.zh-CN`, route display labels, and UI view models.
 
 Sleep maintenance lanes:
 
 - `deterministic repair`: schema normalization, field-type cleanup, canonical path alignment, low-ambiguity formatting, and other fixes that can be expressed as fixed rules and validated mechanically.
-- `semantic repair`: candidate creation, card rewrites, merges, promotions, deprecations, taxonomy changes, and other changes that depend on accumulated evidence rather than a single malformed field.
+- `semantic repair`: LogicGuard model revisions, ModelMesh membership or grounded relation changes, candidate creation, merges, promotions, deprecations, taxonomy changes, and other changes that depend on accumulated evidence rather than a single malformed field.
 - Keep semantic auto-apply thresholds simple. Do not restate every threshold here; use the canonical thresholds from `PROJECT_SPEC.md` and `docs/maintenance_runbook.md`.
 - If a change does not satisfy a deterministic rule or a simple semantic threshold, leave it as a proposal for a later maintenance pass.
 
 Independent maintenance thread:
 
 - Use a separate maintenance chat or automation for the library's "sleep" workflow. Do not let deep consolidation interrupt the user's main task thread.
-- In the current implementation, maintenance may safely write history events, consolidation artifacts, rollback manifests, candidate scaffolds, and explicit decision traces for ignored observations, rejected candidates, and confidence reviews.
-- Do not treat the current tooling as permission to rewrite trusted cards or restructure taxonomy silently inside a main task. Those deeper updates should remain AI-authored follow-up work until the maintenance layer grows beyond candidate-level application.
+- In the current implementation, Sleep may safely publish exact model generations, deterministic card projections, history events, consolidation artifacts, rollback manifests, candidate models, and explicit decision traces for ignored observations, rejected candidates, model gaps, and confidence reviews.
+- Do not treat the current tooling as permission to rewrite trusted models or restructure taxonomy silently inside a main task. Durable model and mesh changes belong to Sleep; Dream and ordinary retrieval remain read-only.
 - A practical active-build cadence is once per day. For calmer periods, two or three times per week is usually enough.
 
 1. Summarize the task in one short sentence.
@@ -51,9 +51,9 @@ Independent maintenance thread:
 4. If sub-agents are available and the task is non-trivial, let `kb-scout` handle the initial scan. Otherwise run:
    `python .agents/skills/local-kb-retrieve/scripts/kb_search.py --route-hint "<primary route>" --query "<task summary plus useful keywords>" --top-k 5`
 5. If this is a long mixed plan, mark phase-change KB checkpoints and run a fresh route-specific retrieval before each new action class or risk surface. Skip repeated checks for same-type work where the first retrieval still applies.
-6. Read the returned entries.
+6. Read the returned entries and their exact `logicguard_context`: pinned authority generation, model and mesh revisions, root node or ArgumentBlock, typed nodes and edges, explicit gaps, and grounded mesh neighborhood.
 7. Prefer entries with stronger route alignment, `status: trusted`, and higher `confidence`.
-8. Use retrieved entries as bounded context. Do not overgeneralize beyond the entry scope.
+8. Use retrieved model nodes as bounded context. Do not overgeneralize beyond the root claim, declared assumptions, limitations, rebuttals, or exact grounded mesh neighborhood. A lexical hit selects an entry point; it does not license traversal through legacy `related_cards`.
 9. If no relevant entries are found, continue without forcing the library into the answer; the absence of hits is still a useful signal.
 10. Before finalizing any non-trivial task, run one explicit KB postflight check. First ask whether Codex exposed mistake-first evidence: its own mistake, weak path, missed instruction, failed validation, tool or skill misuse, user correction, or later correction episode. Treat that as the highest-priority observation evidence. Then ask whether this task exposed a reusable lesson, a skill/plugin or subagent/delegation usage lesson, a miss, a route gap, a card weakness, or a KB-process failure.
 11. If the answer is yes, let `kb-recorder` append structured feedback so the scheduled AI consolidation flow can process it later. When more than one card materially influenced the task, record all of those entry ids rather than only the top hit.
@@ -65,7 +65,7 @@ Independent maintenance thread:
 17. Lessons about current model or runtime behavior are valid when they stay bounded and auditable. Preserve the most precise runtime identity that is actually known, and if exact model identity is not surfaced reliably, scope the lesson more conservatively to the active Codex runtime, current environment, or known model family.
 18. When such a lesson is likely to become a card later, keep more than one retrieval path in view: a runtime-facing route such as `codex/runtime-behavior/...` plus any prompting, tool-use, workflow, or planning routes that materially shaped the behavior.
 19. Lessons about a specific user are also valid when they stay bounded, evidence-based, and behaviorally framed. Record them as task-conditioned private predictions about likely preference, correction, or judgment rather than as personality labels or broad character impressions.
-20. Lessons about Codex Skill or plugin use are valid personal-KB evidence when the Skill is new, repeatedly useful, task-critical, missing, misleading, used as fallback, combined with another Skill, or when the task shows that a Skill should be invoked earlier or avoided under known conditions. Do not record generic praise or every routine invocation; record scenario, Skill action/choice, observed result, and future operational use. Preserve a skill-facing route such as `codex/workflow/skills` or `codex/skill-use/<skill-name>` plus the task-facing route that made the Skill relevant.
+20. Lessons about Codex Skill or plugin use are valid personal-KB evidence when the Skill is new, repeatedly useful, task-critical, missing, misleading, selected after an earlier route failed, combined with another Skill, or when the task shows that a Skill should be invoked earlier or avoided under known conditions. Do not record generic praise or every routine invocation; record scenario, Skill action/choice, observed result, and future operational use. Preserve a skill-facing route such as `codex/workflow/skills` or `codex/skill-use/<skill-name>` plus the task-facing route that made the Skill relevant.
 21. Lessons about Codex subagent/delegation use are valid personal-KB evidence when spawning, avoiding, sequencing, waiting for, or parallelizing subagents materially changes speed, coordination overhead, context isolation, main-thread clarity, verification quality, or task outcome. Do not record generic praise for parallelism or every routine sidecar; record scenario, delegation action/choice, observed result, and future operational use. Preserve a workflow-facing route such as `codex/workflow/subagents` plus the task-facing route that made delegation relevant.
 
 Sleep maintenance checklist:
@@ -81,8 +81,8 @@ Sleep maintenance checklist:
 5. If the grouped history looks clean, allow only the lowest-risk automatic apply path:
    `python .agents/skills/local-kb-retrieve/scripts/kb_consolidate.py --json --apply-mode new-candidates`
    Treat broad routes as proposal-only even when they repeat; in the current implementation, current low-risk auto-apply should stay on routes with at least 3 segments.
-   Only create candidate cards from observations with concrete future utility: complete predictive evidence plus actionable `operational_use`. Low-confidence seeds are allowed; low-utility observations should stay history-only or be ignored through an explicit maintenance decision.
-   For direct entry-link maintenance, `python .agents/skills/local-kb-retrieve/scripts/kb_consolidate.py --json --apply-mode related-cards` may update stable `related_cards`.
+   Only create candidate models from observations with concrete future utility: a bounded predictive claim plus actionable `operational_use`. Low-confidence seeds are allowed; missing evidence/warrant/opposition/boundary roles must remain explicit model gaps, while low-utility observations should stay history-only or be ignored through an explicit maintenance decision.
+   For relationship discovery, `python .agents/skills/local-kb-retrieve/scripts/kb_consolidate.py --json --apply-mode related-cards` may batch unresolved grounding proposals for Sleep. It never updates `related_cards` and never creates a canonical ModelMesh edge by itself.
    For stable alternate-route maintenance, `python .agents/skills/local-kb-retrieve/scripts/kb_consolidate.py --json --apply-mode cross-index` may update low-risk `cross_index` routes when repeated route evidence is already strong enough.
 6. Restrict automatic apply to deterministic rules or simple thresholded semantic cases. Keep higher-ambiguity semantic changes proposal-only until the support and contradiction thresholds are met.
 7. Inspect the per-action proposal stubs for the run:
@@ -102,8 +102,8 @@ Sleep maintenance checklist:
 
 Output discipline:
 
-- Briefly state which entry ids influenced the answer.
-- Treat those entry ids as the cards that materially influenced the work, not merely every card that happened to be retrieved.
+- Briefly state which entry ids and exact model revisions influenced the answer.
+- Treat those identities as the model nodes that materially influenced the work, not merely every readable projection that happened to be retrieved.
 - If the entries are weak or ambiguous, say so.
 - Do not expose private entry content unless the user is authorized to see it.
 - User-specific lessons should default to private handling and should describe what this user is likely to prefer or reject in a concrete task context, not who the user “is” in general.
@@ -112,7 +112,7 @@ Output discipline:
 - In a maintenance thread, be explicit about what the tooling actually changed versus what still remains a proposal.
 - For non-trivial work, treat the explicit postflight observation check as part of done rather than optional housekeeping.
 - After meaningful tasks, prefer recording one structured observation even when the outcome was a workflow or rule clarification. Sleep maintenance depends on accumulated evidence, not only on bug-fix episodes.
-- During sleep maintenance, repeated hits are a split-review signal, not an automatic split rule. Keep intact hub cards that still express one predictive relation, and only split overloaded cards that now carry multiple predictive relations.
+- During Sleep maintenance, repeated hits are a split-review signal, not an automatic split rule. Keep intact hub models that still express one bounded predictive relation, and only split overloaded models that now carry multiple predictive relations.
 - Runtime-behavior lessons should be written as predictions about this runtime under concrete conditions, not as vague folklore about “LLMs in general.”
 - Cross-index maintenance should only strengthen direct alternate retrieval paths from repeated actual route evidence in low-risk auto-apply. Pruning or broader route cleanup should remain proposal-first until stronger removal evidence exists.
-- For search entry compatibility, prefer `--route-hint` in prompts and examples. The local search script still accepts the older `--path-hint` name for backward compatibility.
+- Search has one current CLI grammar: use the explicit search entrypoint with `--route-hint`. Removed argument aliases are rejected and are not runtime migration paths.

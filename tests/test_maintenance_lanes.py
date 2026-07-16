@@ -70,6 +70,28 @@ class MaintenanceLaneLockTests(unittest.TestCase):
             self.assertTrue(recovered["acquired"])
             self.assertEqual(recovered["lane"], "kb-dream")
 
+    def test_fresh_lane_lock_with_dead_owner_is_recovered_immediately(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+
+            acquire_lane_lock(repo_root, "kb-sleep", run_id="dead-sleep", poll_seconds=0)
+            with patch(
+                "local_kb.maintenance_lanes.process_owner_is_alive",
+                return_value=False,
+            ):
+                recovered = acquire_lane_lock(
+                    repo_root,
+                    "kb-dream",
+                    run_id="dream-after-crash",
+                    wait=False,
+                    poll_seconds=0,
+                )
+
+            self.assertTrue(recovered["acquired"])
+            self.assertTrue(recovered["recovered"])
+            self.assertEqual(recovered["recovery_reason"], "dead-owner")
+            self.assertEqual(recovered["recovered_lock"]["run_id"], "dead-sleep")
+
     def test_running_status_without_lock_is_reconciled_as_stale(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)
@@ -95,19 +117,6 @@ class MaintenanceLaneLockTests(unittest.TestCase):
 
             self.assertEqual(read_lane_lock(repo_root, "local-maintenance"), {})
             self.assertEqual(read_lane_status(repo_root, "kb-dream")["status"], "failed")
-
-    def test_architect_releases_lock_and_marks_failed_on_exception(self) -> None:
-        from local_kb.architect import run_architect_maintenance
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            repo_root = Path(tmp_dir)
-
-            with patch("local_kb.architect.build_initial_execution_plan", side_effect=RuntimeError("boom")):
-                with self.assertRaises(RuntimeError):
-                    run_architect_maintenance(repo_root, run_id="architect-fail")
-
-            self.assertEqual(read_lane_lock(repo_root, "local-maintenance"), {})
-            self.assertEqual(read_lane_status(repo_root, "kb-architect")["status"], "failed")
 
     def test_organization_contribute_releases_lock_and_marks_failed_on_exception(self) -> None:
         from local_kb.org_automation import run_organization_contribution

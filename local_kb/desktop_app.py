@@ -207,8 +207,8 @@ UI_TEXT = {
         "cancel": "Cancel / 取消",
         "language": "Language / 语言",
         "display_language": "Language / 语言",
-        "language_hint": "Choose the display language. Card source text stays canonical in English.",
-        "english_canonical": "English remains the canonical card source. Chinese is a display layer maintained during sleep.",
+        "language_hint": "Choose the display language. Exact LogicGuard nodes remain semantic authority.",
+        "english_canonical": "English is the primary readable projection; Chinese is a display projection. Exact LogicGuard bindings remain authoritative.",
         "mode": "Mode",
         "mode_hint": "Personal is for one local user. Organization connects a shared GitHub KB for a team.",
         "personal_mode": "Personal",
@@ -219,8 +219,8 @@ UI_TEXT = {
         "organization_connected": "Connected",
         "organization_invalid": "Organization repository is not valid.",
         "organization_validating": "Validating organization repository...",
-        "maintainer_mode": "Participate in organization maintenance",
-        "maintainer_hint": "When enabled, this machine periodically prepares organization repository maintenance proposals.",
+        "organization_maintenance_mode": "Participate in organization maintenance",
+        "organization_maintenance_hint": "When enabled, this machine periodically prepares organization repository maintenance proposals.",
         "validate_and_save": "Validate & Save",
         "settings_title": "Settings / 设置",
         "about_title": "About Khaos Brain",
@@ -231,7 +231,13 @@ UI_TEXT = {
         "routes_section": "Routes",
         "primary": "Primary",
         "also": "Also",
-        "related": "Related",
+        "related": "Grounded model links",
+        "logicguard_model": "LogicGuard model",
+        "exact_binding": "Exact binding",
+        "model_gaps": "Open model gaps",
+        "argument_nodes": "Argument nodes",
+        "grounded_neighborhood": "Grounded ModelMesh neighborhood",
+        "no_gaps": "No declared gaps",
         "source": "Source",
         "source_scope": "Source",
         "local_source": "Local",
@@ -259,7 +265,7 @@ UI_TEXT = {
         "read_only": "Read-only",
         "recent_history": "Recent history",
         "search_title": "Search",
-        "update_prepared_hint": "Update will run during the next Architect pass after the UI is closed.",
+        "update_prepared_hint": "Update is prepared and will run automatically after the UI is closed.",
         "about_body": (
             "A local predictive memory library for Codex.\n\n"
             "Latest version:\n{github_url}\n\n"
@@ -267,7 +273,8 @@ UI_TEXT = {
             "Buy me a coffee via PayPal: {support_url}\n\n"
             "Support is voluntary and does not purchase support, warranty, priority service, "
             "commercial rights, or feature requests.\n\n"
-            "Cards are stored as auditable files. Routes can surface the same card through multiple paths."
+            "Every card is a deterministic projection of an exact local LogicGuard model. "
+            "Routes select the entry point; only grounded ModelMesh relations expand its context."
         ),
     },
     ZH_CN: {
@@ -296,8 +303,8 @@ UI_TEXT = {
         "cancel": "取消 / Cancel",
         "language": "语言 / Language",
         "display_language": "语言 / Language",
-        "language_hint": "选择界面显示语言。卡片源文本仍以英文为规范源。",
-        "english_canonical": "英文仍是卡片的规范源；中文是睡眠维护补齐的显示层。",
+        "language_hint": "选择界面显示语言。精确 LogicGuard 节点仍是语义权威。",
+        "english_canonical": "英文是主要可读投影，中文是显示投影；精确 LogicGuard 绑定才是权威。",
         "mode": "模式",
         "mode_hint": "个人模式只给本机用户使用；组织模式会连接团队共用的 GitHub KB。",
         "personal_mode": "个人",
@@ -308,8 +315,8 @@ UI_TEXT = {
         "organization_connected": "已连接",
         "organization_invalid": "组织仓库未通过校验。",
         "organization_validating": "正在校验组织仓库...",
-        "maintainer_mode": "参与组织维护",
-        "maintainer_hint": "启用后，本机会定期准备组织仓库维护提案。",
+        "organization_maintenance_mode": "参与组织维护",
+        "organization_maintenance_hint": "启用后，本机会定期准备组织仓库维护提案。",
         "validate_and_save": "校验并保存",
         "settings_title": "设置 / Settings",
         "about_title": "关于 Khaos Brain",
@@ -320,7 +327,13 @@ UI_TEXT = {
         "routes_section": "路径",
         "primary": "主路径",
         "also": "也可从",
-        "related": "相关卡片",
+        "related": "已验证模型连接",
+        "logicguard_model": "LogicGuard 模型",
+        "exact_binding": "精确绑定",
+        "model_gaps": "模型待补位置",
+        "argument_nodes": "论证节点",
+        "grounded_neighborhood": "已验证的 ModelMesh 邻域",
+        "no_gaps": "没有已声明的缺口",
         "source": "来源",
         "source_scope": "来源",
         "local_source": "本地",
@@ -348,7 +361,7 @@ UI_TEXT = {
         "read_only": "只读",
         "recent_history": "最近历史",
         "search_title": "搜索",
-        "update_prepared_hint": "关闭 UI 后，下次 Architect 检查会自动升级。",
+        "update_prepared_hint": "升级已准备好；关闭 UI 后系统会自动执行。",
         "about_body": (
             "一个给 Codex 使用的本地预测记忆库。\n\n"
             "最新版本：\n{github_url}\n\n"
@@ -2486,6 +2499,45 @@ class KbDesktopApp(tk.Tk):
         text.insert("end", f"{self._text('primary')}: {_route_label(card.get('domain_path'), self.language, self.repo_root)}\n")
         text.insert("end", f"{self._text('also')}: {'; '.join(cross_routes) or '-'}\n")
         text.insert("end", f"{self._text('related')}: {'; '.join(card.get('related_cards') or []) or '-'}\n\n")
+        logicguard = card.get("logicguard") if isinstance(card.get("logicguard"), dict) else None
+        if logicguard:
+            binding = logicguard.get("binding") if isinstance(logicguard.get("binding"), dict) else {}
+            text.insert("end", f"{self._text('logicguard_model')}\n", "heading")
+            text.insert(
+                "end",
+                f"{self._text('exact_binding')}: "
+                f"{binding.get('logicguard_model_id', '-')}@{binding.get('logicguard_revision_id', '-')} · "
+                f"node={binding.get('logicguard_node_id', '-')} · "
+                f"block={binding.get('logicguard_block_id', '-')}\n"
+                f"mesh={binding.get('logicguard_mesh_id', '-')}@{binding.get('logicguard_mesh_revision_id', '-')}\n",
+                "mono",
+            )
+            gaps = logicguard.get("open_role_gaps") or []
+            text.insert(
+                "end",
+                f"{self._text('model_gaps')}: {', '.join(str(item) for item in gaps) or self._text('no_gaps')}\n\n",
+                "muted",
+            )
+            text.insert("end", f"{self._text('argument_nodes')}\n", "heading")
+            for node in logicguard.get("nodes") or []:
+                if not isinstance(node, dict):
+                    continue
+                role = str(node.get("role") or node.get("type") or "node")
+                node_id = str(node.get("id") or "")
+                node_text = normalize_text(node.get("text") or "-")
+                text.insert("end", f"[{role}] {node_id}: {node_text}\n", "body")
+            neighborhood = logicguard.get("neighborhood") if isinstance(logicguard.get("neighborhood"), dict) else {}
+            cross_edges = neighborhood.get("cross_edges") if isinstance(neighborhood.get("cross_edges"), list) else []
+            text.insert("end", f"\n{self._text('grounded_neighborhood')}: {len(cross_edges)}\n", "heading")
+            for edge in cross_edges:
+                if isinstance(edge, dict):
+                    text.insert(
+                        "end",
+                        f"{edge.get('source', '?')} -> {edge.get('target', '?')} "
+                        f"({edge.get('type', 'related')})\n",
+                        "muted",
+                    )
+            text.insert("end", f"{logicguard.get('claim_boundary') or ''}\n\n", "muted")
         if self._should_show_source_metadata(card):
             text.insert("end", f"{self._text('source')}\n", "heading")
             source_line = _source_line(card, self.language)
@@ -2786,7 +2838,7 @@ class KbDesktopApp(tk.Tk):
         repo_url_var = tk.StringVar(value=str(organization.get("repo_url") or ""))
         maintenance_display_var = tk.StringVar(
             value=_maintenance_display(
-                bool(organization.get("organization_maintenance_requested", organization.get("maintainer_mode_requested"))),
+                bool(organization.get("organization_maintenance_requested")),
                 self.language,
             )
         )
@@ -2879,7 +2931,7 @@ class KbDesktopApp(tk.Tk):
         repo_hint_label.grid(row=5, column=1, sticky="ew", padx=(0, u(18)), pady=(0, u(12)))
         tk.Label(
             org_group,
-            text=self._text("maintainer_mode"),
+            text=self._text("organization_maintenance_mode"),
             bg=BG,
             fg=TEXT,
             anchor="w",
@@ -2901,7 +2953,7 @@ class KbDesktopApp(tk.Tk):
         bind_combo_popup(maintenance_combo)
         tk.Label(
             org_group,
-            text=self._text("maintainer_hint"),
+            text=self._text("organization_maintenance_hint"),
             bg=BG,
             fg=MUTED,
             anchor="w",
@@ -2946,7 +2998,6 @@ class KbDesktopApp(tk.Tk):
             next_organization = dict(organization)
             next_organization["repo_url"] = repo_url_var.get().strip()
             next_organization["organization_maintenance_requested"] = maintenance_requested
-            next_organization["maintainer_mode_requested"] = maintenance_requested
 
             if selected_mode == ORGANIZATION_MODE:
                 previous_url = str(organization.get("repo_url") or "").strip()
@@ -2961,7 +3012,6 @@ class KbDesktopApp(tk.Tk):
                 )
                 next_organization = dict(result["settings"])
                 next_organization["organization_maintenance_requested"] = maintenance_requested
-                next_organization["maintainer_mode_requested"] = maintenance_requested
                 if maintenance_requested and result.get("ok"):
                     next_organization["organization_maintenance_status"] = "pending"
                     next_organization["organization_maintenance_message"] = "GitHub cloud checks have not validated a maintenance proposal yet"

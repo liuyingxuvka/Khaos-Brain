@@ -7,7 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from local_kb.consolidate import consolidate_history
+from tests.current_runtime_helpers import consolidate_current_history as consolidate_history
+from local_kb.maintenance_migration import migrate_legacy_card_generation
 from local_kb.store import load_yaml_file, write_yaml_file
 
 
@@ -130,7 +131,7 @@ class KbRollbackCliTests(unittest.TestCase):
             restored_events = [json.loads(line) for line in restored_lines]
             self.assertEqual(restored_events, snapshot_payload["events"])
 
-    def test_restore_related_card_entries_recovers_previous_yaml(self) -> None:
+    def test_relation_proposals_do_not_advertise_a_card_file_rollback(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)
             history_path = repo_root / "kb" / "history" / "events.jsonl"
@@ -150,8 +151,9 @@ class KbRollbackCliTests(unittest.TestCase):
                     "tags": ["kb"],
                     "trigger_keywords": ["kb"],
                     "if": {"notes": "A"},
-                    "then": {"notes": "A"},
-                    "else": {"notes": ""},
+                    "action": {"description": "A"},
+                    "predict": {"expected_result": "A", "alternatives": []},
+                    "use": {"guidance": "A"},
                 },
             )
             write_yaml_file(
@@ -167,8 +169,9 @@ class KbRollbackCliTests(unittest.TestCase):
                     "tags": ["kb"],
                     "trigger_keywords": ["kb"],
                     "if": {"notes": "B"},
-                    "then": {"notes": "B"},
-                    "else": {"notes": ""},
+                    "action": {"description": "B"},
+                    "predict": {"expected_result": "B", "alternatives": []},
+                    "use": {"guidance": "B"},
                 },
             )
             events = [
@@ -192,12 +195,17 @@ class KbRollbackCliTests(unittest.TestCase):
                 for event in events:
                     handle.write(json.dumps(event) + "\n")
 
-            consolidate_history(
+            migration = migrate_legacy_card_generation(repo_root)
+            self.assertTrue(migration["ok"], migration)
+
+            result = consolidate_history(
                 repo_root=repo_root,
                 run_id="related-rollback-run",
                 apply_mode="related-cards",
             )
-            self.assertEqual(load_yaml_file(model_a_path)["related_cards"], ["model-b"])
+            self.assertEqual(result["apply_summary"]["updated_entry_count"], 0)
+            self.assertEqual(result["apply_summary"]["relationship_proposal_count"], 2)
+            self.assertEqual(load_yaml_file(model_a_path)["related_cards"], [])
 
             inspect_result = subprocess.run(
                 [
@@ -215,31 +223,7 @@ class KbRollbackCliTests(unittest.TestCase):
                 check=True,
             )
             manifest = json.loads(inspect_result.stdout)
-            self.assertIn("related-card-entries", manifest["restorable_artifact_ids"])
-
-            restore_result = subprocess.run(
-                [
-                    sys.executable,
-                    str(SCRIPT_PATH),
-                    "restore",
-                    "--repo-root",
-                    str(repo_root),
-                    "--run-id",
-                    "related-rollback-run",
-                    "--artifact",
-                    "related-card-entries",
-                    "--json",
-                ],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            restore_payload = json.loads(restore_result.stdout)
-
-            self.assertTrue(restore_payload["restored"])
-            self.assertEqual(restore_payload["entry_count"], 2)
-            self.assertEqual(load_yaml_file(model_a_path)["related_cards"], [])
-            self.assertEqual(load_yaml_file(model_b_path)["related_cards"], [])
+            self.assertNotIn("related-card-entries", manifest["restorable_artifact_ids"])
 
 
 if __name__ == "__main__":

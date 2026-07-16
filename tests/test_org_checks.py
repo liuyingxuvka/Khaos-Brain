@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 import json
 import subprocess
 import sys
@@ -7,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from local_kb.org_checks import check_organization_repository
+from local_kb.org_checks import check_organization_repository, validate_shareable_payload
 from local_kb.store import write_yaml_file
 
 
@@ -20,8 +21,7 @@ class OrganizationChecksTests(unittest.TestCase):
                 "schema_version": 1,
                 "organization_id": "sandbox",
                 "kb": {
-                    "trusted_path": "kb/trusted",
-                    "candidates_path": "kb/candidates",
+                    "main_path": "kb/main",
                     "imports_path": "kb/imports",
                 },
                 "skills": {
@@ -30,8 +30,8 @@ class OrganizationChecksTests(unittest.TestCase):
                 },
             },
         )
-        write_yaml_file(root / "kb" / "trusted" / "trusted.yaml", {"id": "trusted-card", "status": "trusted"})
-        write_yaml_file(root / "kb" / "candidates" / "candidate.yaml", {"id": "candidate-card", "status": "candidate"})
+        write_yaml_file(root / "kb" / "main" / "trusted" / "trusted.yaml", {"id": "trusted-card", "status": "trusted"})
+        write_yaml_file(root / "kb" / "main" / "candidates" / "candidate.yaml", {"id": "candidate-card", "status": "candidate"})
         (root / "kb" / "imports").mkdir(parents=True)
         write_yaml_file(
             root / "skills" / "registry.yaml",
@@ -57,7 +57,7 @@ class OrganizationChecksTests(unittest.TestCase):
 
             result = check_organization_repository(
                 root,
-                changed_files=["kb/candidates/candidate.yaml"],
+                changed_files=["kb/imports/candidate.yaml"],
                 enforce_low_risk=True,
             )
 
@@ -142,6 +142,65 @@ class OrganizationChecksTests(unittest.TestCase):
         self.assertTrue(any("possible secret" in error for error in result["errors"]), result["errors"])
         self.assertTrue(any("local machine path" in error for error in result["errors"]), result["errors"])
 
+    def test_shareable_payload_serializes_yaml_dates_canonically(self) -> None:
+        result = validate_shareable_payload(
+            {"id": "dated-card", "reviewed_on": date(2026, 7, 14)}
+        )
+
+        self.assertTrue(result["ok"], result)
+
+    def test_privacy_scanner_does_not_flag_its_own_path_regex_definitions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_org_repo(root)
+            checker = root / ".github" / "scripts" / "org_kb_check.py"
+            checker.parent.mkdir(parents=True)
+            checker.write_text(
+                "import re\n"
+                "LOCAL_PATH_PATTERNS = (re.compile(r'[A-Za-z]:\\\\Users\\\\'), "
+                "re.compile(r'AppData\\\\'))\n",
+                encoding="utf-8",
+            )
+
+            result = check_organization_repository(root)
+
+        self.assertTrue(result["ok"], result)
+
+    def test_privacy_scanner_still_rejects_an_actual_python_local_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_org_repo(root)
+            source = root / "tools" / "leak.py"
+            source.parent.mkdir(parents=True)
+            source.write_text(
+                "LOCAL = 'C:\\\\Users\\\\alice\\\\private.txt'\n",
+                encoding="utf-8",
+            )
+
+            result = check_organization_repository(root)
+
+        self.assertFalse(result["ok"], result)
+        self.assertTrue(
+            any("local machine path" in error for error in result["errors"]),
+            result["errors"],
+        )
+
+    def test_rejects_secret_in_skill_bundle_source_before_push(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_org_repo(root)
+            source = root / "kb" / "imports" / "alice" / "skills" / "bundle" / "helper.py"
+            source.parent.mkdir(parents=True)
+            source.write_text('TOKEN = "ghp_abcdefghijklmnopqrstuvwxyz123456"\n', encoding="utf-8")
+
+            result = check_organization_repository(
+                root,
+                changed_files=["kb/imports/alice/skills/bundle/helper.py"],
+            )
+
+        self.assertFalse(result["ok"], result)
+        self.assertTrue(any("possible secret" in error for error in result["errors"]), result["errors"])
+
     def test_reports_duplicate_card_content_hashes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -161,7 +220,7 @@ class OrganizationChecksTests(unittest.TestCase):
             duplicate = dict(card)
             duplicate["id"] = "second"
             duplicate["status"] = "candidate"
-            write_yaml_file(root / "kb" / "trusted" / "first.yaml", card)
+            write_yaml_file(root / "kb" / "main" / "trusted" / "first.yaml", card)
             write_yaml_file(root / "kb" / "imports" / "alice" / "second.yaml", duplicate)
 
             result = check_organization_repository(root)

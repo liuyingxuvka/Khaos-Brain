@@ -14,6 +14,8 @@ if str(SCRIPT_REPO_ROOT) not in sys.path:
 
 from local_kb.cli_output import print_json, print_text
 from local_kb.feedback import build_observation, record_observation
+from local_kb.lifecycle import record_outcome_receipt
+from local_kb.common import csv_to_list
 from local_kb.store import history_events_path, resolve_repo_root
 
 
@@ -50,6 +52,12 @@ def main() -> None:
     parser.add_argument("--thread-ref", default="")
     parser.add_argument("--project-ref", default="")
     parser.add_argument("--workspace-root", default="")
+    parser.add_argument("--retrieval-request-id", default="")
+    parser.add_argument("--used-entry-ids", default="")
+    parser.add_argument("--evidence-kind", default="task")
+    parser.add_argument("--evidence-ref", default="")
+    parser.add_argument("--verified", action="store_true")
+    parser.add_argument("--user-correction", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
@@ -79,12 +87,26 @@ def main() -> None:
         workspace_root=args.workspace_root,
     )
     record_observation(repo_root, event)
+    outcome_receipt = None
+    if args.retrieval_request_id:
+        used_entry_ids = csv_to_list(args.used_entry_ids or args.entry_ids)
+        outcome_receipt = record_outcome_receipt(
+            repo_root,
+            request_id=args.retrieval_request_id,
+            used_entry_ids=used_entry_ids,
+            outcome=args.outcome or "unknown",
+            evidence_kind=args.evidence_kind,
+            evidence_ref=args.evidence_ref,
+            verified=args.verified,
+            user_correction=args.user_correction,
+        )
 
     if args.json:
         print_json(
             {
                 "event": event,
                 "history_path": str(history_events_path(repo_root)),
+                "outcome_receipt": outcome_receipt,
             }
         )
         return

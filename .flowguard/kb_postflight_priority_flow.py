@@ -17,13 +17,13 @@ import json
 from typing import Iterable
 
 from flowguard import (
-    Explorer,
     FunctionResult,
     Invariant,
     InvariantResult,
     Workflow,
     run_exact_sequence,
 )
+from flowguard.explorer import Explorer
 
 
 @dataclass(frozen=True)

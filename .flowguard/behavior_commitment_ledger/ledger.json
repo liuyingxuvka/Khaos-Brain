@@ -1,0 +1,1734 @@
+{
+  "artifact_type": "flowguard_behavior_commitment_ledger",
+  "format_version": "1",
+  "ledger": {
+    "change_mode": "model_miss_check",
+    "claim_scope": "routine",
+    "commitments": [
+      {
+        "actor": "Codex task",
+        "actor_kind": "end_user",
+        "behavior_plane": "product_runtime",
+        "business_intent_id": "intent:serve-predictive-retrieval",
+        "child_model_ids": [],
+        "commitment_id": "commitment:kb-retrieval-current-index",
+        "commitment_kind": "workflow",
+        "evidence": {
+          "code_contract_ids": [
+            "contract:kb-retrieval-current-index"
+          ],
+          "coverage_case_ids": [],
+          "coverage_receipt_ids": [],
+          "coverage_shard_ids": [],
+          "current": false,
+          "evidence_state": "missing",
+          "metadata": {},
+          "model_obligation_ids": [
+            "obligation:kb-retrieval-current-index"
+          ],
+          "proof_artifact_ids": [],
+          "risk_gate_ids": [],
+          "test_evidence_ids": [
+            "test:kb-retrieval-current-index"
+          ],
+          "test_mesh_state": "shard_current"
+        },
+        "excluded_behavior_ids": [
+          "filtered-scan-on-index-failure",
+          "unindexed-card-scan-before-current-standard"
+        ],
+        "expected_result": "results or a no-card receipt come only from the validated current active index",
+        "expected_terminal": "ranked_current_results_or_no_card",
+        "external_differences": [],
+        "failure_boundary": "a missing, stale, or invalid index returns an explicit unavailable error and never scans another authority",
+        "in_scope": true,
+        "label": "Serve predictive retrieval only from the validated current index",
+        "lookup_binding": {
+          "error_signatures": [],
+          "metadata": {},
+          "path_patterns": [
+            "local_kb/search.py",
+            "local_kb/active_index.py",
+            ".agents/skills/local-kb-retrieve/scripts/kb_search.py"
+          ],
+          "task_terms": [
+            "retrieval",
+            "active index",
+            "no fallback",
+            "stale index"
+          ],
+          "tool_ids": [],
+          "workflow_families": [
+            "predictive_kb_retrieval"
+          ]
+        },
+        "metadata": {},
+        "miss_origin_state": "no_miss",
+        "model_sync_state": "owner_model_current",
+        "owner": "",
+        "path_authority": {
+          "behavior_commitment_id": "",
+          "business_intent": "",
+          "business_intent_id": "",
+          "evidence_current": false,
+          "evidence_refs": [],
+          "fallback_candidate_ids": [],
+          "legacy_plural_migrated": false,
+          "metadata": {},
+          "path_sensitive": false,
+          "ppa_confidence": "",
+          "ppa_coverage_receipt_ids": [],
+          "ppa_coverage_shard_ids": [],
+          "ppa_decision": "",
+          "ppa_ok": null,
+          "ppa_report_id": "",
+          "ppa_risk_gate_ids": [],
+          "primary_path_id": "",
+          "primary_path_migration_ambiguous": false,
+          "proof_artifact_ids": [],
+          "runtime_observation_ids": [],
+          "scoped_out_reason": ""
+        },
+        "preconditions": [
+          "current maintenance standard is committed"
+        ],
+        "primary_owner_model_id": "kb_convergence_upgrade_model.LifecycleConvergenceBlock",
+        "rationale": "The active index is the sole retrieval authority; an alternate reader would recreate stale eligibility risk.",
+        "relations": [],
+        "replacement_state": "active",
+        "scoped_out_reason": "",
+        "side_effects": [],
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_refs": [],
+        "source_surface_ids": [
+          "surface:retrieval-api",
+          "surface:retrieval-cli",
+          "surface:retrieval-spec"
+        ],
+        "state_writes": [],
+        "supporting_model_ids": [],
+        "surface_delegation_only": false,
+        "trigger": "requests predictive knowledge",
+        "validation_boundary": "FlowGuard lifecycle model, focused retrieval tests, and aggregate readiness",
+        "variant_of_business_intent_id": ""
+      },
+      {
+        "actor": "Chaos Brain lifecycle writers",
+        "actor_kind": "automation",
+        "behavior_plane": "product_runtime",
+        "business_intent_id": "intent:serialize-lifecycle-mutation",
+        "child_model_ids": [],
+        "commitment_id": "commitment:lifecycle-writer-exclusive-current-owner",
+        "commitment_kind": "workflow",
+        "evidence": {
+          "code_contract_ids": [
+            "contract:lifecycle-writer-exclusive-current-owner"
+          ],
+          "coverage_case_ids": [],
+          "coverage_receipt_ids": [],
+          "coverage_shard_ids": [],
+          "current": false,
+          "evidence_state": "missing",
+          "metadata": {},
+          "model_obligation_ids": [
+            "obligation:lifecycle-writer-exclusive-current-owner"
+          ],
+          "proof_artifact_ids": [],
+          "risk_gate_ids": [],
+          "test_evidence_ids": [
+            "test:lifecycle-writer-exclusive-current-owner"
+          ],
+          "test_mesh_state": "shard_current"
+        },
+        "excluded_behavior_ids": [
+          "ownerless-directory-lock",
+          "live-owner-lock-steal",
+          "same-thread-self-deadlock",
+          "hidden-writer-lock-release-failure"
+        ],
+        "expected_result": "one exact PID/thread/token owner performs the mutation; live competing owners are not displaced; the active owner thread may safely reenter; dead or interrupted owners are recovered",
+        "expected_terminal": "writer_released_or_visible_non_success",
+        "external_differences": [],
+        "failure_boundary": "a live owner remains authoritative, while an unrecoverable acquisition or release failure blocks Sleep, Dream, postflight, and index completion visibly",
+        "in_scope": true,
+        "label": "Serialize lifecycle mutation through one recoverable identified writer",
+        "lookup_binding": {
+          "error_signatures": [
+            "Lifecycle writer lock is busy"
+          ],
+          "metadata": {},
+          "path_patterns": [
+            "local_kb/lifecycle.py",
+            "local_kb/active_index.py",
+            "kb/history/lifecycle/.writer.lock"
+          ],
+          "task_terms": [
+            "lifecycle writer lock",
+            "Sleep lock timeout",
+            "Dream lock timeout",
+            "ownerless writer lock"
+          ],
+          "tool_ids": [],
+          "workflow_families": [
+            "lifecycle_mutation",
+            "active_index_activation"
+          ]
+        },
+        "metadata": {},
+        "miss_origin_state": "no_miss",
+        "model_sync_state": "owner_model_current",
+        "owner": "",
+        "path_authority": {
+          "behavior_commitment_id": "",
+          "business_intent": "",
+          "business_intent_id": "",
+          "evidence_current": false,
+          "evidence_refs": [],
+          "fallback_candidate_ids": [],
+          "legacy_plural_migrated": false,
+          "metadata": {},
+          "path_sensitive": false,
+          "ppa_confidence": "",
+          "ppa_coverage_receipt_ids": [],
+          "ppa_coverage_shard_ids": [],
+          "ppa_decision": "",
+          "ppa_ok": null,
+          "ppa_report_id": "",
+          "ppa_risk_gate_ids": [],
+          "primary_path_id": "",
+          "primary_path_migration_ambiguous": false,
+          "proof_artifact_ids": [],
+          "runtime_observation_ids": [],
+          "scoped_out_reason": ""
+        },
+        "preconditions": [
+          "the lifecycle authority root is current"
+        ],
+        "primary_owner_model_id": "kb_convergence_upgrade_model.LifecycleConvergenceBlock",
+        "rationale": "Lifecycle mutation and active-index activation need one shared ownership contract; directory existence alone cannot distinguish a live writer from interrupted state or prove terminal release.",
+        "relations": [],
+        "replacement_state": "active",
+        "scoped_out_reason": "",
+        "side_effects": [
+          "acquire identified writer lock",
+          "release exact owner token"
+        ],
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_refs": [],
+        "source_surface_ids": [
+          "surface:lifecycle-writer-lock",
+          "surface:active-index-lifecycle-lock",
+          "surface:lifecycle-writer-lock-spec"
+        ],
+        "state_writes": [
+          "lifecycle events",
+          "lifecycle projection",
+          "active-index authority"
+        ],
+        "supporting_model_ids": [],
+        "surface_delegation_only": false,
+        "trigger": "mutates lifecycle state or activates a rebuilt index generation",
+        "validation_boundary": "FlowGuard lifecycle known-bad proofs, focused lock protocol tests, real Sleep/Dream receipts, and aggregate readiness",
+        "variant_of_business_intent_id": ""
+      },
+      {
+        "actor": "KB Sleep",
+        "actor_kind": "automation",
+        "behavior_plane": "product_runtime",
+        "business_intent_id": "intent:converge-sleep-without-duplicate-work",
+        "child_model_ids": [],
+        "commitment_id": "commitment:sleep-no-delta-single-owner",
+        "commitment_kind": "workflow",
+        "evidence": {
+          "code_contract_ids": [
+            "contract:sleep-no-delta-single-owner"
+          ],
+          "coverage_case_ids": [],
+          "coverage_receipt_ids": [],
+          "coverage_shard_ids": [],
+          "current": false,
+          "evidence_state": "missing",
+          "metadata": {},
+          "model_obligation_ids": [
+            "obligation:sleep-no-delta-single-owner"
+          ],
+          "proof_artifact_ids": [],
+          "risk_gate_ids": [],
+          "test_evidence_ids": [
+            "test:sleep-no-delta-single-owner"
+          ],
+          "test_mesh_state": "shard_current"
+        },
+        "excluded_behavior_ids": [
+          "duplicate-sleep-model-publication",
+          "parked-evidence-delta-without-checkpoint",
+          "calibration-only-active-index-invalidation",
+          "handoff-acknowledgement-before-model-publication",
+          "dream-handoff-per-item-lifecycle-replay",
+          "quadratic-lifecycle-idempotency-lookup"
+        ],
+        "expected_result": "Sleep publishes the model at most once, persists one same-state calibration snapshot for each new parked evidence digest, gives final index validation to one owner, settles pending Dream handoff observations through the same bounded atomic lifecycle batch, replays lifecycle duplicate membership in linear event-count work, and acknowledges handoffs only after model publication commits",
+        "expected_terminal": "no_delta_reused_or_current_index_rebuilt_once",
+        "external_differences": [],
+        "failure_boundary": "a duplicate model publication, missing calibration watermark, calibration-only eligibility invalidation, per-handoff full lifecycle replay, quadratic duplicate-key work inside one replay, or handoff acknowledgement before model commit blocks convergence",
+        "in_scope": true,
+        "label": "Converge no-delta Sleep through one model publication and one evidence watermark",
+        "lookup_binding": {
+          "error_signatures": [],
+          "metadata": {},
+          "path_patterns": [
+            "local_kb/lifecycle.py",
+            "local_kb/candidate_lifecycle.py",
+            "local_kb/active_index.py"
+          ],
+          "task_terms": [
+            "Sleep no delta",
+            "calibration watermark",
+            "duplicate model publication",
+            "Dream handoff batch",
+            "lifecycle replay linear index",
+            "Dream handoff acknowledgement"
+          ],
+          "tool_ids": [],
+          "workflow_families": [
+            "sleep_convergence",
+            "candidate_calibration"
+          ]
+        },
+        "metadata": {},
+        "miss_origin_state": "no_miss",
+        "model_sync_state": "owner_model_current",
+        "owner": "",
+        "path_authority": {
+          "behavior_commitment_id": "",
+          "business_intent": "",
+          "business_intent_id": "",
+          "evidence_current": false,
+          "evidence_refs": [],
+          "fallback_candidate_ids": [],
+          "legacy_plural_migrated": false,
+          "metadata": {},
+          "path_sensitive": false,
+          "ppa_confidence": "",
+          "ppa_coverage_receipt_ids": [],
+          "ppa_coverage_shard_ids": [],
+          "ppa_decision": "",
+          "ppa_ok": null,
+          "ppa_report_id": "",
+          "ppa_risk_gate_ids": [],
+          "primary_path_id": "",
+          "primary_path_migration_ambiguous": false,
+          "proof_artifact_ids": [],
+          "runtime_observation_ids": [],
+          "scoped_out_reason": ""
+        },
+        "preconditions": [
+          "current model and lifecycle authorities are readable"
+        ],
+        "primary_owner_model_id": "kb_convergence_upgrade_model.LifecycleConvergenceBlock",
+        "rationale": "A no-delta model identity and a same-state evidence checkpoint are different responsibilities; neither licenses repeating the complete publication pipeline.",
+        "relations": [],
+        "replacement_state": "active",
+        "scoped_out_reason": "",
+        "side_effects": [
+          "validate current active index"
+        ],
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_refs": [],
+        "source_surface_ids": [
+          "surface:sleep-no-delta-owner",
+          "surface:parked-calibration-watermark",
+          "surface:dream-handoff-post-publication-ack",
+          "surface:dream-handoff-lifecycle-batch",
+          "surface:lifecycle-replay-linear-index",
+          "surface:sleep-no-delta-spec"
+        ],
+        "state_writes": [
+          "entry calibration watermark",
+          "active index when retrieval eligibility is stale"
+        ],
+        "supporting_model_ids": [],
+        "surface_delegation_only": false,
+        "trigger": "the current model is unchanged or parked evidence changes without satisfying reopening",
+        "validation_boundary": "FlowGuard known-bad proofs, focused Sleep tests, real no-delta receipt, and aggregate readiness",
+        "variant_of_business_intent_id": ""
+      },
+      {
+        "actor": "organization maintenance automation",
+        "actor_kind": "automation",
+        "behavior_plane": "product_runtime",
+        "business_intent_id": "intent:consume-organization-knowledge",
+        "child_model_ids": [],
+        "commitment_id": "commitment:organization-current-layout",
+        "commitment_kind": "workflow",
+        "evidence": {
+          "code_contract_ids": [
+            "contract:organization-current-layout"
+          ],
+          "coverage_case_ids": [],
+          "coverage_receipt_ids": [],
+          "coverage_shard_ids": [],
+          "current": false,
+          "evidence_state": "missing",
+          "metadata": {},
+          "model_obligation_ids": [
+            "obligation:organization-current-layout"
+          ],
+          "proof_artifact_ids": [],
+          "risk_gate_ids": [],
+          "test_evidence_ids": [
+            "test:organization-current-layout"
+          ],
+          "test_mesh_state": "shard_current"
+        },
+        "excluded_behavior_ids": [
+          "legacy-trusted-candidates-runtime-reader",
+          "legacy-layout-download-path"
+        ],
+        "expected_result": "organization cards are read from kb/main, incoming material is read from kb/imports, and every distinct maintenance decision has one stable unique id with an exact count",
+        "expected_terminal": "current_layout_valid_or_explicitly_blocked",
+        "external_differences": [],
+        "failure_boundary": "old trusted/candidates roots or an old manifest block runtime use and are handled only by the upgrade migrator",
+        "in_scope": true,
+        "label": "Consume organization knowledge only from the current main/imports schema",
+        "lookup_binding": {
+          "error_signatures": [],
+          "metadata": {},
+          "path_patterns": [
+            "local_kb/org_sources.py",
+            "local_kb/org_cleanup.py",
+            "local_kb/org_maintenance.py",
+            "local_kb/store.py",
+            "local_kb/org_outbox.py",
+            "local_kb/adoption.py",
+            "templates/github/org_kb_check.py"
+          ],
+          "task_terms": [
+            "organization KB",
+            "main imports layout",
+            "trusted candidates layout"
+          ],
+          "tool_ids": [],
+          "workflow_families": [
+            "organization_knowledge_maintenance"
+          ]
+        },
+        "metadata": {},
+        "miss_origin_state": "no_miss",
+        "model_sync_state": "owner_model_current",
+        "owner": "",
+        "path_authority": {
+          "behavior_commitment_id": "",
+          "business_intent": "",
+          "business_intent_id": "",
+          "evidence_current": false,
+          "evidence_refs": [],
+          "fallback_candidate_ids": [],
+          "legacy_plural_migrated": false,
+          "metadata": {},
+          "path_sensitive": false,
+          "ppa_confidence": "",
+          "ppa_coverage_receipt_ids": [],
+          "ppa_coverage_shard_ids": [],
+          "ppa_decision": "",
+          "ppa_ok": null,
+          "ppa_report_id": "",
+          "ppa_risk_gate_ids": [],
+          "primary_path_id": "",
+          "primary_path_migration_ambiguous": false,
+          "proof_artifact_ids": [],
+          "runtime_observation_ids": [],
+          "scoped_out_reason": ""
+        },
+        "preconditions": [
+          "the organization mirror has completed direct canonical migration"
+        ],
+        "primary_owner_model_id": "kb_convergence_upgrade_model.UpgradeMigrationBlock",
+        "rationale": "An old organization layout is migration input, never a second daily authority.",
+        "relations": [],
+        "replacement_state": "active",
+        "scoped_out_reason": "",
+        "side_effects": [],
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_refs": [],
+        "source_surface_ids": [
+          "surface:organization-connect",
+          "surface:organization-validation",
+          "surface:organization-maintenance",
+          "surface:organization-runtime-reader",
+          "surface:organization-outbox-dedupe",
+          "surface:organization-adoption",
+          "surface:organization-github-check",
+          "surface:organization-decision-identity"
+        ],
+        "state_writes": [],
+        "supporting_model_ids": [],
+        "surface_delegation_only": false,
+        "trigger": "connects, validates, downloads, or maintains an organization KB",
+        "validation_boundary": "organization schema migration, current-layout validation, and scheduled production receipt",
+        "variant_of_business_intent_id": ""
+      },
+      {
+        "actor": "Chaos Brain scheduler",
+        "actor_kind": "automation",
+        "behavior_plane": "product_runtime",
+        "business_intent_id": "intent:run-strongest-current-automation-runtime",
+        "child_model_ids": [],
+        "commitment_id": "commitment:automation-current-runtime-policy",
+        "commitment_kind": "workflow",
+        "evidence": {
+          "code_contract_ids": [
+            "contract:automation-current-runtime-policy"
+          ],
+          "coverage_case_ids": [],
+          "coverage_receipt_ids": [],
+          "coverage_shard_ids": [],
+          "current": false,
+          "evidence_state": "missing",
+          "metadata": {},
+          "model_obligation_ids": [
+            "obligation:automation-current-runtime-policy"
+          ],
+          "proof_artifact_ids": [],
+          "risk_gate_ids": [],
+          "test_evidence_ids": [
+            "test:automation-current-runtime-policy"
+          ],
+          "test_mesh_state": "shard_current"
+        },
+        "excluded_behavior_ids": [
+          "fixed-model-fallback",
+          "fixed-reasoning-effort-fallback"
+        ],
+        "expected_result": "the strongest current declared model and deepest supported reasoning effort are written into the automation",
+        "expected_terminal": "current_runtime_resolved_or_install_blocked",
+        "external_differences": [],
+        "failure_boundary": "missing current provider/config authority blocks installation instead of selecting a fixed model or effort",
+        "in_scope": true,
+        "label": "Resolve scheduled automation runtime only from current provider facts",
+        "lookup_binding": {
+          "error_signatures": [],
+          "metadata": {},
+          "path_patterns": [
+            "local_kb/install.py"
+          ],
+          "task_terms": [
+            "automation model",
+            "reasoning effort",
+            "provider runtime",
+            "fixed fallback"
+          ],
+          "tool_ids": [],
+          "workflow_families": [
+            "automation_installation"
+          ]
+        },
+        "metadata": {},
+        "miss_origin_state": "no_miss",
+        "model_sync_state": "owner_model_current",
+        "owner": "",
+        "path_authority": {
+          "behavior_commitment_id": "",
+          "business_intent": "",
+          "business_intent_id": "",
+          "evidence_current": false,
+          "evidence_refs": [],
+          "fallback_candidate_ids": [],
+          "legacy_plural_migrated": false,
+          "metadata": {},
+          "path_sensitive": false,
+          "ppa_confidence": "",
+          "ppa_coverage_receipt_ids": [],
+          "ppa_coverage_shard_ids": [],
+          "ppa_decision": "",
+          "ppa_ok": null,
+          "ppa_report_id": "",
+          "ppa_risk_gate_ids": [],
+          "primary_path_id": "",
+          "primary_path_migration_ambiguous": false,
+          "proof_artifact_ids": [],
+          "runtime_observation_ids": [],
+          "scoped_out_reason": ""
+        },
+        "preconditions": [],
+        "primary_owner_model_id": "kb_convergence_upgrade_model.AutomationRuntimeAssuranceBlock",
+        "rationale": "A fixed backup model is an undeclared authority and can silently weaken later machines.",
+        "relations": [],
+        "replacement_state": "active",
+        "scoped_out_reason": "",
+        "side_effects": [],
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_refs": [],
+        "source_surface_ids": [
+          "surface:automation-runtime-resolver",
+          "surface:automation-installer"
+        ],
+        "state_writes": [],
+        "supporting_model_ids": [],
+        "surface_delegation_only": false,
+        "trigger": "installs or refreshes a retained automation",
+        "validation_boundary": "runtime resolution tests, install check, and SkillGuard provider readiness",
+        "variant_of_business_intent_id": ""
+      },
+      {
+        "actor": "Chaos Brain guarded scheduler",
+        "actor_kind": "automation",
+        "behavior_plane": "product_runtime",
+        "business_intent_id": "intent:prove-complete-scheduled-automation",
+        "child_model_ids": [],
+        "commitment_id": "commitment:automation-proof-bound-depth-terminal",
+        "commitment_kind": "workflow",
+        "evidence": {
+          "code_contract_ids": [
+            "contract:automation-proof-bound-depth-terminal"
+          ],
+          "coverage_case_ids": [],
+          "coverage_receipt_ids": [],
+          "coverage_shard_ids": [],
+          "current": false,
+          "evidence_state": "missing",
+          "metadata": {},
+          "model_obligation_ids": [
+            "obligation:automation-proof-bound-depth-terminal"
+          ],
+          "proof_artifact_ids": [],
+          "risk_gate_ids": [],
+          "test_evidence_ids": [
+            "test:automation-proof-bound-depth-terminal"
+          ],
+          "test_mesh_state": "shard_current"
+        },
+        "excluded_behavior_ids": [
+          "generic-all-obligation-noop-pass",
+          "missing-branch-field-projection",
+          "conditional-finalization-depth-cycle",
+          "background-full-validation-retry",
+          "post-native-live-skillguard-reload",
+          "missing-post-native-dynamic-evidence",
+          "unbounded-supervision-environment"
+        ],
+        "expected_result": "performed obligations project exact existing source fields; not-applicable obligations bind an evaluated false gate, exact run, reason, terminal status, canonical facts hash, matching proof ids, and proven non-mutation; the native receipt crosses into the retained frozen supervisor only through the exact declared dynamic evidence key set with stale inherited values cleared; phase producers feed one aggregate production depth receipt",
+        "expected_terminal": "exact_enforced_closure_or_explicit_block",
+        "external_differences": [],
+        "failure_boundary": "missing or forged disposition proof, nonexistent branch fields, generic shared no-op evidence, missing or stale post-native dynamic evidence, an undeclared supervision environment key, or a conditional-finalization depth cycle blocks closure without rerunning an already current validation owner",
+        "in_scope": true,
+        "label": "Close a scheduled automation only from proof-bound native dispositions and aggregate production depth",
+        "lookup_binding": {
+          "error_signatures": [],
+          "metadata": {},
+          "path_patterns": [
+            "local_kb/automation_runtime.py",
+            "scripts/check_kb_automation_skillguard_depth.py",
+            "scripts/build_kb_automation_skillguard_contracts.py",
+            "scripts/check_kb_skillguard.py",
+            "scripts/run_kb_guarded_automation.py",
+            "scripts/run_installed_skillguard_supervision.py"
+          ],
+          "task_terms": [
+            "scheduled automation depth",
+            "not applicable proof",
+            "production receipt",
+            "conditional finalization",
+            "start-frozen supervision",
+            "dynamic receipt environment"
+          ],
+          "tool_ids": [],
+          "workflow_families": [
+            "guarded_automation_completion"
+          ]
+        },
+        "metadata": {},
+        "miss_origin_state": "no_miss",
+        "model_sync_state": "owner_model_current",
+        "owner": "",
+        "path_authority": {
+          "behavior_commitment_id": "",
+          "business_intent": "",
+          "business_intent_id": "",
+          "evidence_current": false,
+          "evidence_refs": [],
+          "fallback_candidate_ids": [],
+          "legacy_plural_migrated": false,
+          "metadata": {},
+          "path_sensitive": false,
+          "ppa_confidence": "",
+          "ppa_coverage_receipt_ids": [],
+          "ppa_coverage_shard_ids": [],
+          "ppa_decision": "",
+          "ppa_ok": null,
+          "ppa_report_id": "",
+          "ppa_risk_gate_ids": [],
+          "primary_path_id": "",
+          "primary_path_migration_ambiguous": false,
+          "proof_artifact_ids": [],
+          "runtime_observation_ids": [],
+          "scoped_out_reason": ""
+        },
+        "preconditions": [
+          "the exact installed SkillGuard runtime and installation receipt are current",
+          "one official persistent supervision session and exact six-field identity are frozen before native execution"
+        ],
+        "primary_owner_model_id": "kb_convergence_upgrade_model.AutomationRuntimeAssuranceBlock",
+        "rationale": "Static supervision authority, post-native dynamic evidence, depth, branch disposition, and conditional finalization are separate boundaries; conflating them either admits stale or shallow work, loses the current receipt, or creates a self-blocking retry loop.",
+        "relations": [],
+        "replacement_state": "active",
+        "scoped_out_reason": "",
+        "side_effects": [],
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_refs": [],
+        "source_surface_ids": [
+          "surface:automation-native-evidence",
+          "surface:automation-depth-projection",
+          "surface:automation-contract-generation",
+          "surface:automation-terminal-builder",
+          "surface:automation-frozen-supervision-session"
+        ],
+        "state_writes": [],
+        "supporting_model_ids": [],
+        "surface_delegation_only": false,
+        "trigger": "receives one immutable native automation receipt",
+        "validation_boundary": "FlowGuard known-bad cases, focused native-receipt and contract-generation tests, official SkillGuard compile, exact scheduled-production receipts, and aggregate readiness",
+        "variant_of_business_intent_id": ""
+      },
+      {
+        "actor": "Chaos Brain transactional upgrader",
+        "actor_kind": "automation",
+        "behavior_plane": "development_process",
+        "business_intent_id": "intent:upgrade-chaos-brain-to-current",
+        "child_model_ids": [],
+        "commitment_id": "commitment:upgrade-direct-canonicalization",
+        "commitment_kind": "workflow",
+        "evidence": {
+          "code_contract_ids": [
+            "contract:upgrade-direct-canonicalization"
+          ],
+          "coverage_case_ids": [],
+          "coverage_receipt_ids": [],
+          "coverage_shard_ids": [],
+          "current": false,
+          "evidence_state": "missing",
+          "metadata": {},
+          "model_obligation_ids": [
+            "obligation:upgrade-direct-canonicalization"
+          ],
+          "proof_artifact_ids": [],
+          "risk_gate_ids": [],
+          "test_evidence_ids": [
+            "test:upgrade-direct-canonicalization"
+          ],
+          "test_mesh_state": "shard_current"
+        },
+        "excluded_behavior_ids": [
+          "dual-read",
+          "dual-write",
+          "legacy-runtime-repair",
+          "implicit-cli-compatibility",
+          "alternate-success-path",
+          "desktop-runtime-probing",
+          "prefer-python-launcher-fallback",
+          "maintainer-settings-alias-reader",
+          "skill-guidance-field-alias-reader",
+          "pre-schema-update-state-normalization",
+          "check-id-subset-anti-downgrade"
+        ],
+        "expected_result": "the upgrader inventories old material, writes the current form once, removes old authority, and proves residual count zero",
+        "expected_terminal": "canonical_current_state_committed_or_rollback_paused",
+        "external_differences": [],
+        "failure_boundary": "unmigrated, ambiguous, or concurrently changed input rolls back or remains paused and cannot enter normal runtime",
+        "in_scope": true,
+        "label": "Upgrade old Chaos Brain state directly to one canonical current state",
+        "lookup_binding": {
+          "error_signatures": [],
+          "metadata": {},
+          "path_patterns": [
+            "local_kb/maintenance_migration.py",
+            "local_kb/transactional_install.py",
+            "local_kb/install.py",
+            "scripts/run_kb_guarded_automation.py",
+            "scripts/check_kb_skillguard.py",
+            "scripts/run_installed_skillguard_supervision.py",
+            "templates/predictive-kb-preflight/kb_launch.py",
+            "scripts/open_khaos_brain_ui.py",
+            "scripts/install_desktop_shortcut.py",
+            "local_kb/settings.py",
+            "local_kb/settings_migration.py",
+            "local_kb/card_schema_migration.py",
+            "local_kb/org_outbox.py",
+            "local_kb/software_update.py"
+          ],
+          "task_terms": [
+            "upgrade",
+            "direct migration",
+            "compatibility",
+            "fallback",
+            "old residual",
+            "current only"
+          ],
+          "tool_ids": [],
+          "workflow_families": [
+            "Chaos Brain upgrade",
+            "transactional_install"
+          ]
+        },
+        "metadata": {},
+        "miss_origin_state": "no_miss",
+        "model_sync_state": "owner_model_current",
+        "owner": "",
+        "path_authority": {
+          "behavior_commitment_id": "",
+          "business_intent": "",
+          "business_intent_id": "",
+          "evidence_current": false,
+          "evidence_refs": [],
+          "fallback_candidate_ids": [],
+          "legacy_plural_migrated": false,
+          "metadata": {},
+          "path_sensitive": false,
+          "ppa_confidence": "",
+          "ppa_coverage_receipt_ids": [],
+          "ppa_coverage_shard_ids": [],
+          "ppa_decision": "",
+          "ppa_ok": null,
+          "ppa_report_id": "",
+          "ppa_risk_gate_ids": [],
+          "primary_path_id": "",
+          "primary_path_migration_ambiguous": false,
+          "proof_artifact_ids": [],
+          "runtime_observation_ids": [],
+          "scoped_out_reason": ""
+        },
+        "preconditions": [
+          "all five retained automations are transaction-paused"
+        ],
+        "primary_owner_model_id": "kb_convergence_upgrade_model.UpgradeMigrationBlock",
+        "rationale": "Old shapes are bounded migration input; successful normal operation has exactly one current path.",
+        "relations": [],
+        "replacement_state": "active",
+        "scoped_out_reason": "",
+        "side_effects": [
+          "archive retained evidence",
+          "remove former authority",
+          "publish migration receipts"
+        ],
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_refs": [],
+        "source_surface_ids": [
+          "surface:upgrade-installer",
+          "surface:transactional-install-semantic-anti-downgrade",
+          "surface:maintenance-migration",
+          "surface:update-state-canonicalization",
+          "surface:update-state-pre-assurance-migration",
+          "surface:installed-skillguard-current-supervision",
+          "surface:preflight-launcher-canonicalization",
+          "surface:desktop-launcher-current-runtime",
+          "surface:desktop-settings-canonicalization",
+          "surface:card-skill-guidance-canonicalization"
+        ],
+        "state_writes": [
+          "maintenance standard",
+          "organization schema",
+          "desktop settings schema",
+          "card Skill guidance schema",
+          "update-state schema",
+          "installed skills",
+          "automation state"
+        ],
+        "supporting_model_ids": [
+          "kb_convergence_upgrade_model.AutomationRuntimeAssuranceBlock"
+        ],
+        "surface_delegation_only": false,
+        "trigger": "finds an older managed schema, state, route, or installation surface",
+        "validation_boundary": "versioned migration fixtures, semantic anti-downgrade positive/negative regressions, residual scan, FlowGuard known-bad cases, and aggregate readiness",
+        "variant_of_business_intent_id": ""
+      }
+    ],
+    "current_revision": "sleep-handoff-post-publication-20260715",
+    "expected_business_intent_ids": [
+      "intent:serve-predictive-retrieval",
+      "intent:serialize-lifecycle-mutation",
+      "intent:converge-sleep-without-duplicate-work",
+      "intent:consume-organization-knowledge",
+      "intent:run-strongest-current-automation-runtime",
+      "intent:prove-complete-scheduled-automation",
+      "intent:upgrade-chaos-brain-to-current"
+    ],
+    "expected_commitment_ids": [
+      "commitment:kb-retrieval-current-index",
+      "commitment:lifecycle-writer-exclusive-current-owner",
+      "commitment:sleep-no-delta-single-owner",
+      "commitment:organization-current-layout",
+      "commitment:automation-current-runtime-policy",
+      "commitment:automation-proof-bound-depth-terminal",
+      "commitment:upgrade-direct-canonicalization"
+    ],
+    "ledger_id": "ledger:chaos-brain-current-runtime",
+    "metadata": {},
+    "owner": "Chaos Brain upgrade",
+    "project_boundary": "Chaos Brain current runtime and direct upgrade migration",
+    "rationale": "Register the sole current success paths before removing every compatibility and fallback surface.",
+    "require_current_evidence": false,
+    "require_risk_gates_for_broad_claim": true,
+    "source_surfaces": [
+      {
+        "business_intent_ids": [
+          "intent:serve-predictive-retrieval"
+        ],
+        "commitment_ids": [
+          "commitment:kb-retrieval-current-index"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "LifecycleConvergenceBlock",
+        "primary_path_id": "",
+        "rationale": "Primary local retrieval API.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/search.py",
+        "surface_id": "surface:retrieval-api",
+        "surface_kind": "api",
+        "validation_boundary": "retrieval focused tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:serve-predictive-retrieval"
+        ],
+        "commitment_ids": [
+          "commitment:kb-retrieval-current-index"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "LifecycleConvergenceBlock",
+        "primary_path_id": "",
+        "rationale": "Canonical machine retrieval command.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": ".agents/skills/local-kb-retrieve/scripts/kb_search.py",
+        "surface_id": "surface:retrieval-cli",
+        "surface_kind": "cli",
+        "validation_boundary": "CLI contract tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:serve-predictive-retrieval"
+        ],
+        "commitment_ids": [
+          "commitment:kb-retrieval-current-index"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "OpenSpec change",
+        "primary_path_id": "",
+        "rationale": "Normative retrieval behavior.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "openspec/changes/converge-kb-learning-and-upgrade-migration/specs/kb-retrieval-calibration/spec.md",
+        "surface_id": "surface:retrieval-spec",
+        "surface_kind": "openspec",
+        "validation_boundary": "strict OpenSpec validation"
+      },
+      {
+        "business_intent_ids": [
+          "intent:serialize-lifecycle-mutation"
+        ],
+        "commitment_ids": [
+          "commitment:lifecycle-writer-exclusive-current-owner"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "LifecycleConvergenceBlock",
+        "primary_path_id": "",
+        "rationale": "Sole current owner-aware serialization implementation for lifecycle mutation.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/lifecycle.py#_lifecycle_lock",
+        "surface_id": "surface:lifecycle-writer-lock",
+        "surface_kind": "api",
+        "validation_boundary": "owner recovery, reentrancy, live-owner, and release-failure tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:serialize-lifecycle-mutation"
+        ],
+        "commitment_ids": [
+          "commitment:lifecycle-writer-exclusive-current-owner"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "LifecycleConvergenceBlock",
+        "primary_path_id": "",
+        "rationale": "Index activation delegates to the same lifecycle writer authority rather than introducing a second lock contract.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/active_index.py#_activate_built_index",
+        "surface_id": "surface:active-index-lifecycle-lock",
+        "surface_kind": "api",
+        "validation_boundary": "active-index publication and Sleep final-owner tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:serialize-lifecycle-mutation"
+        ],
+        "commitment_ids": [
+          "commitment:lifecycle-writer-exclusive-current-owner"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "OpenSpec change",
+        "primary_path_id": "",
+        "rationale": "Normative owner, recovery, reentrancy, and terminal-release behavior.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "openspec/changes/converge-kb-learning-and-upgrade-migration/specs/kb-experience-lifecycle/spec.md#Requirement: Lifecycle mutation has one recoverable identified writer",
+        "surface_id": "surface:lifecycle-writer-lock-spec",
+        "surface_kind": "openspec",
+        "validation_boundary": "strict OpenSpec validation"
+      },
+      {
+        "business_intent_ids": [
+          "intent:converge-sleep-without-duplicate-work"
+        ],
+        "commitment_ids": [
+          "commitment:sleep-no-delta-single-owner"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "LifecycleConvergenceBlock",
+        "primary_path_id": "",
+        "rationale": "Owns the distinction between final model identity and final index validation.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/lifecycle.py#_run_incremental_sleep_locked",
+        "surface_id": "surface:sleep-no-delta-owner",
+        "surface_kind": "process",
+        "validation_boundary": "single publication and final index-owner tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:converge-sleep-without-duplicate-work"
+        ],
+        "commitment_ids": [
+          "commitment:sleep-no-delta-single-owner"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "LifecycleConvergenceBlock",
+        "primary_path_id": "",
+        "rationale": "Persists a new evidence digest once without changing retrieval eligibility.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/candidate_lifecycle.py#review_entry_lifecycles",
+        "surface_id": "surface:parked-calibration-watermark",
+        "surface_kind": "api",
+        "validation_boundary": "same-state calibration snapshot tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:converge-sleep-without-duplicate-work"
+        ],
+        "commitment_ids": [
+          "commitment:sleep-no-delta-single-owner"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "LifecycleConvergenceBlock",
+        "primary_path_id": "",
+        "rationale": "Acknowledgement is terminal only after the handoff-derived model authority commits.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/lifecycle.py#acknowledge_dream_handoff",
+        "surface_id": "surface:dream-handoff-post-publication-ack",
+        "surface_kind": "api",
+        "validation_boundary": "publication-failure, dead-owner recovery, and exact acknowledgement tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:converge-sleep-without-duplicate-work"
+        ],
+        "commitment_ids": [
+          "commitment:sleep-no-delta-single-owner"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "LifecycleConvergenceBlock",
+        "primary_path_id": "",
+        "rationale": "Typed Dream handoffs are Sleep-owned observations and must share the same bounded admission/disposition batch instead of replaying the full ledger per item.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/lifecycle.py#_run_incremental_sleep_locked",
+        "surface_id": "surface:dream-handoff-lifecycle-batch",
+        "surface_kind": "api",
+        "validation_boundary": "multi-handoff atomic-batch regression plus per-item-replay known-bad rejection"
+      },
+      {
+        "business_intent_ids": [
+          "intent:converge-sleep-without-duplicate-work"
+        ],
+        "commitment_ids": [
+          "commitment:sleep-no-delta-single-owner"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "LifecycleConvergenceBlock",
+        "primary_path_id": "",
+        "rationale": "The ordered durable idempotency projection is not the membership index; duplicate validation must use one in-memory set lookup per lifecycle event.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/lifecycle.py#replay_lifecycle",
+        "surface_id": "surface:lifecycle-replay-linear-index",
+        "surface_kind": "api",
+        "validation_boundary": "linear-scaling regression, real-corpus replay timing, and quadratic known-bad rejection"
+      },
+      {
+        "business_intent_ids": [
+          "intent:converge-sleep-without-duplicate-work"
+        ],
+        "commitment_ids": [
+          "commitment:sleep-no-delta-single-owner"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "OpenSpec change",
+        "primary_path_id": "",
+        "rationale": "Normative no-delta publication and final-index ownership boundary.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "openspec/changes/converge-kb-learning-and-upgrade-migration/specs/kb-sleep-dream-convergence/spec.md#Requirement: One Sleep cycle has one final active-index validation owner",
+        "surface_id": "surface:sleep-no-delta-spec",
+        "surface_kind": "openspec",
+        "validation_boundary": "strict OpenSpec validation"
+      },
+      {
+        "business_intent_ids": [
+          "intent:consume-organization-knowledge"
+        ],
+        "commitment_ids": [
+          "commitment:organization-current-layout"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "UpgradeMigrationBlock",
+        "primary_path_id": "",
+        "rationale": "Clone/fetch, direct migration, and current validation entrypoint.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/org_sources.py",
+        "surface_id": "surface:organization-connect",
+        "surface_kind": "api",
+        "validation_boundary": "organization source tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:consume-organization-knowledge"
+        ],
+        "commitment_ids": [
+          "commitment:organization-current-layout"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "UpgradeMigrationBlock",
+        "primary_path_id": "",
+        "rationale": "Sole runtime schema gate.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/org_sources.py#validate_organization_repo",
+        "surface_id": "surface:organization-validation",
+        "surface_kind": "api",
+        "validation_boundary": "organization schema tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:consume-organization-knowledge"
+        ],
+        "commitment_ids": [
+          "commitment:organization-current-layout"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "UpgradeMigrationBlock",
+        "primary_path_id": "",
+        "rationale": "Scheduled current-layout consumer.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/org_maintenance.py",
+        "surface_id": "surface:organization-maintenance",
+        "surface_kind": "process",
+        "validation_boundary": "organization maintenance tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:consume-organization-knowledge"
+        ],
+        "commitment_ids": [
+          "commitment:organization-current-layout"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "UpgradeMigrationBlock",
+        "primary_path_id": "",
+        "rationale": "Central current-layout reader blocks every obsolete organization root before serving cards.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/store.py#load_organization_entries",
+        "surface_id": "surface:organization-runtime-reader",
+        "surface_kind": "api",
+        "validation_boundary": "multi-source current-layout and obsolete-root rejection tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:consume-organization-knowledge"
+        ],
+        "commitment_ids": [
+          "commitment:organization-current-layout"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "UpgradeMigrationBlock",
+        "primary_path_id": "",
+        "rationale": "Contribution dedupe reads only main/imports through the central current-layout reader.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/org_outbox.py#_organization_existing_hashes",
+        "surface_id": "surface:organization-outbox-dedupe",
+        "surface_kind": "process",
+        "validation_boundary": "organization outbox tests and current-runtime static gate"
+      },
+      {
+        "business_intent_ids": [
+          "intent:consume-organization-knowledge"
+        ],
+        "commitment_ids": [
+          "commitment:organization-current-layout"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "UpgradeMigrationBlock",
+        "primary_path_id": "",
+        "rationale": "Adoption consumes only current organization cards and commits the resulting local active index.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/adoption.py#adopt_organization_entry",
+        "surface_id": "surface:organization-adoption",
+        "surface_kind": "api",
+        "validation_boundary": "organization adoption and active-index commit tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:consume-organization-knowledge"
+        ],
+        "commitment_ids": [
+          "commitment:organization-current-layout"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "UpgradeMigrationBlock",
+        "primary_path_id": "",
+        "rationale": "Repository automation rejects obsolete roots instead of validating an alternate layout.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "templates/github/org_kb_check.py#check_manifest",
+        "surface_id": "surface:organization-github-check",
+        "surface_kind": "cli",
+        "validation_boundary": "installed organization GitHub checker tests and current-runtime static gate"
+      },
+      {
+        "business_intent_ids": [
+          "intent:consume-organization-knowledge"
+        ],
+        "commitment_ids": [
+          "commitment:organization-current-layout"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "UpgradeMigrationBlock",
+        "primary_path_id": "",
+        "rationale": "Distinct merge, split, and other maintenance actions must never collapse onto one receipt identity.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/org_cleanup.py#build_organization_cleanup_proposal",
+        "surface_id": "surface:organization-decision-identity",
+        "surface_kind": "process",
+        "validation_boundary": "organization maintenance decision-id uniqueness and native receipt tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:run-strongest-current-automation-runtime"
+        ],
+        "commitment_ids": [
+          "commitment:automation-current-runtime-policy"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "AutomationRuntimeAssuranceBlock",
+        "primary_path_id": "",
+        "rationale": "Sole runtime policy resolver.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/install.py#resolve_automation_runtime",
+        "surface_id": "surface:automation-runtime-resolver",
+        "surface_kind": "api",
+        "validation_boundary": "runtime resolution tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:run-strongest-current-automation-runtime"
+        ],
+        "commitment_ids": [
+          "commitment:automation-current-runtime-policy"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "AutomationRuntimeAssuranceBlock",
+        "primary_path_id": "",
+        "rationale": "Writes resolved current policy into retained tasks.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/install.py#install_codex_integration",
+        "surface_id": "surface:automation-installer",
+        "surface_kind": "process",
+        "validation_boundary": "transactional install tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:prove-complete-scheduled-automation"
+        ],
+        "commitment_ids": [
+          "commitment:automation-proof-bound-depth-terminal"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "AutomationRuntimeAssuranceBlock",
+        "primary_path_id": "",
+        "rationale": "The native owner is the sole authority for performed, not-applicable, and failed obligation evidence.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/automation_runtime.py#evaluate_native_payload",
+        "surface_id": "surface:automation-native-evidence",
+        "surface_kind": "api",
+        "validation_boundary": "native receipt disposition and branch-source tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:prove-complete-scheduled-automation"
+        ],
+        "commitment_ids": [
+          "commitment:automation-proof-bound-depth-terminal"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "AutomationRuntimeAssuranceBlock",
+        "primary_path_id": "",
+        "rationale": "The depth adapter verifies native facts and never expands catalog entries into synthetic success.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "scripts/check_kb_automation_skillguard_depth.py",
+        "surface_id": "surface:automation-depth-projection",
+        "surface_kind": "process",
+        "validation_boundary": "exact source projection, applicability proof, phase universe, and aggregate production receipt tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:prove-complete-scheduled-automation"
+        ],
+        "commitment_ids": [
+          "commitment:automation-proof-bound-depth-terminal"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "AutomationRuntimeAssuranceBlock",
+        "primary_path_id": "",
+        "rationale": "The generator separates phase owners, aggregate production depth, calibration, and independent conditional finalization.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "scripts/build_kb_automation_skillguard_contracts.py",
+        "surface_id": "surface:automation-contract-generation",
+        "surface_kind": "process",
+        "validation_boundary": "deterministic generation, official SkillGuard compilation, and current-authority validation"
+      },
+      {
+        "business_intent_ids": [
+          "intent:prove-complete-scheduled-automation"
+        ],
+        "commitment_ids": [
+          "commitment:automation-proof-bound-depth-terminal"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "AutomationRuntimeAssuranceBlock",
+        "primary_path_id": "",
+        "rationale": "Terminal construction consumes the exact aggregate production depth receipt; finalization cannot be its own prerequisite.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "scripts/check_kb_skillguard.py#_build_and_write_target_native_terminal",
+        "surface_id": "surface:automation-terminal-builder",
+        "surface_kind": "process",
+        "validation_boundary": "same-run stage-depth/close receipt reuse and no target-check rerun tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:prove-complete-scheduled-automation"
+        ],
+        "commitment_ids": [
+          "commitment:automation-proof-bound-depth-terminal"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "AutomationRuntimeAssuranceBlock",
+        "primary_path_id": "",
+        "rationale": "The long-running supervisor freezes static authority before native work, then admits only the exact current run evidence produced after native completion; it never reloads global SkillGuard or inherits stale receipt authority.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "scripts/check_kb_skillguard.py#_InstalledSupervisionSession",
+        "surface_id": "surface:automation-frozen-supervision-session",
+        "surface_kind": "process",
+        "validation_boundary": "start-frozen identity reuse, exact seven-key dynamic evidence projection, inherited-value clearing, undeclared-key rejection, real scheduled Dream receipt replay, and FlowGuard same-class known-bad proofs"
+      },
+      {
+        "business_intent_ids": [
+          "intent:upgrade-chaos-brain-to-current"
+        ],
+        "commitment_ids": [
+          "commitment:upgrade-direct-canonicalization"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "UpgradeMigrationBlock",
+        "primary_path_id": "",
+        "rationale": "Cross-machine upgrade entrypoint.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "scripts/install_codex_kb.py",
+        "surface_id": "surface:upgrade-installer",
+        "surface_kind": "cli",
+        "validation_boundary": "upgrade fixture matrix"
+      },
+      {
+        "business_intent_ids": [
+          "intent:upgrade-chaos-brain-to-current"
+        ],
+        "commitment_ids": [
+          "commitment:upgrade-direct-canonicalization"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "UpgradeMigrationBlock",
+        "primary_path_id": "",
+        "rationale": "Current-to-current capability is compared through obligation, evidence, and mandatory-owner coverage, not through obsolete check-name, route, or depth-dimension subset preservation.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/transactional_install.py#_current_semantic_downgrade_reasons",
+        "surface_id": "surface:transactional-install-semantic-anti-downgrade",
+        "surface_kind": "process",
+        "validation_boundary": "coverage-preserving check and conditional-owner reorganization positive tests plus lost-obligation/evidence/owner negative tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:upgrade-chaos-brain-to-current"
+        ],
+        "commitment_ids": [
+          "commitment:upgrade-direct-canonicalization"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "UpgradeMigrationBlock",
+        "primary_path_id": "",
+        "rationale": "Direct-to-current data migration owner.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/maintenance_migration.py",
+        "surface_id": "surface:maintenance-migration",
+        "surface_kind": "process",
+        "validation_boundary": "migration receipts and residual scans"
+      },
+      {
+        "business_intent_ids": [
+          "intent:upgrade-chaos-brain-to-current"
+        ],
+        "commitment_ids": [
+          "commitment:upgrade-direct-canonicalization"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "UpgradeMigrationBlock",
+        "primary_path_id": "",
+        "rationale": "Moves exact obsolete failure state out of the daily wrapper.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/software_update.py#canonicalize_obsolete_update_state",
+        "surface_id": "surface:update-state-canonicalization",
+        "surface_kind": "process",
+        "validation_boundary": "update-state migration tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:upgrade-chaos-brain-to-current"
+        ],
+        "commitment_ids": [
+          "commitment:upgrade-direct-canonicalization"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "UpgradeMigrationBlock",
+        "primary_path_id": "",
+        "rationale": "The aggregate production gate may only observe current update state; any later failure restores the exact prior bytes.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/install.py#_install_codex_integration_impl",
+        "surface_id": "surface:update-state-pre-assurance-migration",
+        "surface_kind": "process",
+        "validation_boundary": "pre-assurance migration-order and exact rollback-byte tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:upgrade-chaos-brain-to-current"
+        ],
+        "commitment_ids": [
+          "commitment:upgrade-direct-canonicalization"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "AutomationRuntimeAssuranceBlock",
+        "primary_path_id": "",
+        "rationale": "Execution authority comes only from the exact canonical source root or exact active installed root; display surface labels are diagnostic only and unknown or ambiguous roots block. An installed Skill is then consumed through its verified V2 pair, exact installed-byte control projection, and short behavior-only SkillGuard/global-router projection without recompilation or source substitution.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "scripts/check_kb_skillguard.py#_execute_supervision",
+        "surface_id": "surface:installed-skillguard-current-supervision",
+        "surface_kind": "process",
+        "validation_boundary": "exact managed-root authority classification, installed source-parity, installation-currentness, control/runtime projection byte and path tests, dual calibration check-id validation, and scheduled execution-depth receipts"
+      },
+      {
+        "business_intent_ids": [
+          "intent:upgrade-chaos-brain-to-current"
+        ],
+        "commitment_ids": [
+          "commitment:upgrade-direct-canonicalization"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "UpgradeMigrationBlock",
+        "primary_path_id": "",
+        "rationale": "Installs one explicit command grammar without old argument aliases.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "templates/predictive-kb-preflight/kb_launch.py",
+        "surface_id": "surface:preflight-launcher-canonicalization",
+        "surface_kind": "cli",
+        "validation_boundary": "launcher CLI tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:upgrade-chaos-brain-to-current"
+        ],
+        "commitment_ids": [
+          "commitment:upgrade-direct-canonicalization"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "UpgradeMigrationBlock",
+        "primary_path_id": "",
+        "rationale": "Requires one explicit source or release runtime and rejects path probing or automatic switching.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "scripts/open_khaos_brain_ui.py",
+        "surface_id": "surface:desktop-launcher-current-runtime",
+        "surface_kind": "cli",
+        "validation_boundary": "desktop launcher current-runtime tests and static residual gate"
+      },
+      {
+        "business_intent_ids": [
+          "intent:upgrade-chaos-brain-to-current"
+        ],
+        "commitment_ids": [
+          "commitment:upgrade-direct-canonicalization"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "UpgradeMigrationBlock",
+        "primary_path_id": "",
+        "rationale": "Moves maintainer aliases into the current organization-maintenance settings once and removes normal alias reads/writes.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/settings_migration.py",
+        "surface_id": "surface:desktop-settings-canonicalization",
+        "surface_kind": "process",
+        "validation_boundary": "desktop settings direct-migration and strict-reader tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:upgrade-chaos-brain-to-current"
+        ],
+        "commitment_ids": [
+          "commitment:upgrade-direct-canonicalization"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "UpgradeMigrationBlock",
+        "primary_path_id": "",
+        "rationale": "Collapses four retired Skill-guidance aliases into one current field outside daily card readers.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/card_schema_migration.py",
+        "surface_id": "surface:card-skill-guidance-canonicalization",
+        "surface_kind": "process",
+        "validation_boundary": "card guidance direct-migration and current-reader tests"
+      }
+    ],
+    "validation_boundary": "OpenSpec, FlowGuard, focused tests, SkillGuard, and aggregate readiness"
+  },
+  "schema_version": "1.0"
+}

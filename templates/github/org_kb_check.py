@@ -9,7 +9,7 @@ from typing import Any
 import yaml
 
 
-LOW_RISK_PREFIXES = ("kb/imports/", "kb/candidates/", "skills/candidates/")
+LOW_RISK_PREFIXES = ("kb/imports/", "skills/candidates/")
 MAINTENANCE_MAIN_PREFIXES = ("kb/main/",)
 SKILL_REVIEW_STATES = {"candidate", "approved", "rejected"}
 SECRET_PATTERNS = (
@@ -76,8 +76,22 @@ def check_manifest(root: Path) -> list[str]:
     if not str(manifest.get("organization_id") or "").strip():
         errors.append("organization_id is required")
     kb = manifest.get("kb") if isinstance(manifest.get("kb"), dict) else {}
-    main_path = str(kb.get("main_path") or "").strip() or ("kb/main" if (root / "kb" / "main").exists() else "")
-    card_paths = (main_path, "kb/imports") if main_path else ("kb/trusted", "kb/candidates", "kb/imports")
+    main_path = str(kb.get("main_path") or "").strip()
+    imports_path = str(kb.get("imports_path") or "").strip()
+    if main_path != "kb/main":
+        errors.append("kb.main_path must be exactly kb/main")
+    if imports_path != "kb/imports":
+        errors.append("kb.imports_path must be exactly kb/imports")
+    obsolete_roots = [
+        relative
+        for relative in ("kb/trusted", "kb/candidates")
+        if (root / relative).exists()
+    ]
+    if obsolete_roots:
+        errors.append(
+            "obsolete organization roots are forbidden: " + ", ".join(obsolete_roots)
+        )
+    card_paths = ("kb/main", "kb/imports")
     for relative in (*card_paths, "skills/candidates"):
         if not relative:
             continue

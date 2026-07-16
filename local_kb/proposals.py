@@ -408,7 +408,7 @@ def format_proposal_report(report: dict[str, Any]) -> str:
         related_note = ""
         related_cards = normalize_string_list(stub.get("related_card_suggestion", {}).get("suggested_related_cards", []))
         if related_cards:
-            related_note = f", related_cards={','.join(related_cards)}"
+            related_note = f", unresolved_relation_proposals={','.join(related_cards)}"
         cross_index_note = ""
         cross_index_routes = normalize_string_list(stub.get("cross_index_suggestion", {}).get("suggested_cross_index", []))
         if cross_index_routes:

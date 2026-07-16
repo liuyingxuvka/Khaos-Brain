@@ -111,4 +111,24 @@ def build_maintenance_decision(
 
 
 def record_maintenance_decision(repo_root: Path, event: dict[str, Any]) -> Path:
-    return record_history_event(repo_root, event)
+    history_path = record_history_event(repo_root, event)
+    if str(event.get("event_type") or "").strip().lower() == "candidate-rejected":
+        target = event.get("target", {}) if isinstance(event.get("target"), Mapping) else {}
+        context = event.get("context", {}) if isinstance(event.get("context"), Mapping) else {}
+        entry_id = str(target.get("entry_id") or context.get("entry_id") or "").strip()
+        if entry_id:
+            from local_kb.lifecycle import current_entry_lifecycle, transition_entry
+
+            previous = current_entry_lifecycle(repo_root, entry_id)
+            transition_entry(
+                repo_root,
+                entry_id=entry_id,
+                from_state=str(previous.get("status") or "candidate"),
+                to_state="rejected",
+                reason=str(event.get("rationale") or "Candidate rejected by maintenance."),
+                actor=str(event.get("source", {}).get("agent") or "kb-maintenance"),
+                evidence_ids=list(context.get("resolved_event_ids") or []),
+                provenance_ids=list(context.get("resolved_event_ids") or []),
+                evidence_grade="medium",
+            )
+    return history_path

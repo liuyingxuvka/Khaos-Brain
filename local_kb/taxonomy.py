@@ -5,8 +5,9 @@ from pathlib import Path
 from typing import Any
 
 from local_kb.common import normalize_string_list, normalize_text, parse_route_segments
+from local_kb.model_maintenance import load_current_model_entries
 from local_kb.models import Entry
-from local_kb.store import load_entries, load_yaml_file
+from local_kb.store import load_yaml_file
 
 
 def taxonomy_path(repo_root: Path) -> Path:
@@ -157,7 +158,7 @@ def _child_payload(
 
 def build_taxonomy_view(repo_root: Path, route: str = "") -> dict[str, object]:
     taxonomy = load_taxonomy(repo_root)
-    entries = load_entries(repo_root)
+    entries, _generation = load_current_model_entries(repo_root)
     counts = derive_route_counts(entries)
     prefix = parse_route_segments(route)
     node = _find_taxonomy_node(taxonomy, prefix)
@@ -209,7 +210,7 @@ def build_taxonomy_view(repo_root: Path, route: str = "") -> dict[str, object]:
 
 def build_taxonomy_gap_report(repo_root: Path) -> dict[str, object]:
     taxonomy = load_taxonomy(repo_root)
-    entries = load_entries(repo_root)
+    entries, _generation = load_current_model_entries(repo_root)
     counts = derive_route_counts(entries)
     declared_routes = _declared_routes(taxonomy)
 

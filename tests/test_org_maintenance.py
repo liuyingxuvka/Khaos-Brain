@@ -18,8 +18,7 @@ class OrganizationMaintenanceTests(unittest.TestCase):
                 "schema_version": 1,
                 "organization_id": "sandbox",
                 "kb": {
-                    "trusted_path": "kb/trusted",
-                    "candidates_path": "kb/candidates",
+                    "main_path": "kb/main",
                     "imports_path": "kb/imports",
                 },
                 "skills": {
@@ -28,10 +27,10 @@ class OrganizationMaintenanceTests(unittest.TestCase):
                 },
             },
         )
-        write_yaml_file(root / "kb" / "trusted" / "model.yaml", {"id": "shared-card", "status": "trusted"})
-        write_yaml_file(root / "kb" / "candidates" / "dupe.yaml", {"id": "shared-card", "status": "candidate"})
+        write_yaml_file(root / "kb" / "main" / "trusted" / "model.yaml", {"id": "shared-card", "status": "trusted"})
+        write_yaml_file(root / "kb" / "main" / "candidates" / "dupe.yaml", {"id": "shared-card", "status": "candidate"})
         (root / "kb" / "imports").mkdir(parents=True)
-        write_yaml_file(root / "skills" / "registry.yaml", {"skills": [{"id": "demo-skill", "status": "approved"}]})
+        write_yaml_file(root / "skills" / "registry.yaml", {"skills": [{"id": "demo-skill", "status": "candidate"}]})
         (root / "skills" / "candidates").mkdir(parents=True)
 
     def test_maintenance_report_ignores_duplicate_ids_and_detects_candidates_skills_and_outbox(self) -> None:
@@ -46,14 +45,13 @@ class OrganizationMaintenanceTests(unittest.TestCase):
 
         self.assertTrue(report["ok"], report)
         self.assertEqual(report["organization_id"], "sandbox")
-        self.assertTrue(report["legacy_compatibility"])
-        self.assertIn("compatibility inputs only", report["legacy_notice"])
+        self.assertNotIn("legacy_compatibility", report)
+        self.assertTrue(report["layout_policy"]["current_layout_only"])
         self.assertEqual(report["layout_policy"]["incoming_lane_path"], "kb/imports")
         self.assertEqual(report["layout_policy"]["exchange_surface_path"], "kb/main")
         self.assertEqual(report["layout_policy"]["local_download_excluded_paths"], ["kb/imports"])
         self.assertEqual(report["outbox_count"], 1)
-        self.assertIn("migrate-legacy-compatible-layout-to-main-imports", report["recommendations"])
-        self.assertIn("review-legacy-compatible-candidates", report["recommendations"])
+        self.assertIn("review-main-exchange-surface", report["recommendations"])
         self.assertNotIn("review-duplicate-entry-ids", report["recommendations"])
         self.assertIn("review-local-outbox-proposals", report["recommendations"])
         self.assertIn("review-skill-registry", report["recommendations"])
@@ -124,17 +122,21 @@ class OrganizationMaintenanceTests(unittest.TestCase):
             weak = base_card("weak-card", "Weak org card", "Weak shared candidate.", status="candidate", confidence=0.2)
             strong = base_card("strong-card", "Strong org card", "Strong shared candidate.", status="candidate", confidence=0.9)
             trusted_low = base_card("trusted-low", "Trusted low card", "Trusted but weak.", status="trusted", confidence=0.4)
-            write_yaml_file(org / "kb" / "candidates" / "weak-card.yaml", weak)
-            write_yaml_file(org / "kb" / "candidates" / "strong-card.yaml", strong)
-            write_yaml_file(org / "kb" / "trusted" / "trusted-low.yaml", trusted_low)
+            write_yaml_file(org / "kb" / "main" / "candidates" / "weak-card.yaml", weak)
+            write_yaml_file(org / "kb" / "main" / "candidates" / "strong-card.yaml", strong)
+            write_yaml_file(org / "kb" / "main" / "trusted" / "trusted-low.yaml", trusted_low)
 
             report = build_organization_maintenance_report(
                 org,
                 repo_root=repo_root,
                 apply_reviewed_cleanup=True,
             )
-            promoted = next(item for item in report["cleanup"]["apply"]["applied"] if item["action_type"] == "promote-card")
-            promoted_exists = (org / promoted["updated_path"]).exists()
+            upgraded = next(
+                item
+                for item in report["cleanup"]["apply"]["applied"]
+                if item["action_type"] == "status-adjust" and item["target_path"].endswith("/strong-card.yaml")
+            )
+            upgraded_exists = (org / upgraded["target_path"]).exists()
             post_apply_validation = report["cleanup"]["post_apply_validation"]
 
         self.assertTrue(report["ok"], report)
@@ -149,7 +151,114 @@ class OrganizationMaintenanceTests(unittest.TestCase):
         self.assertTrue(report["cleanup"]["post_apply_check"]["validation_ok"], report)
         self.assertTrue(post_apply_validation["ok"], report)
         self.assertGreaterEqual(post_apply_validation["main_count"], report["main_count"])
-        self.assertTrue(promoted_exists)
+        self.assertTrue(upgraded_exists)
+
+    def test_maintenance_applies_exact_selected_ids(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            org = root / "org"
+            write_valid_org_repo(org, include_sandbox_cards=False)
+            write_yaml_file(
+                org / "kb" / "main" / "candidates" / "weak.yaml",
+                base_card("weak", "Weak card", "Reject this card.", status="candidate", confidence=0.2),
+            )
+
+            report = build_organization_maintenance_report(org, apply_reviewed_cleanup=True)
+            exact = report["cleanup"]["exact_selected_apply"]
+
+        self.assertTrue(report["ok"], report)
+        self.assertTrue(exact["complete"])
+        self.assertTrue(exact["exact"], exact)
+        self.assertEqual(set(exact["selected_action_ids"]), set(exact["applied_action_ids"]))
+        self.assertEqual(exact["missing_selected_action_ids"], [])
+        self.assertEqual(exact["unexpected_applied_action_ids"], [])
+
+    def test_maintenance_records_merge_and_split_checkpoint_decisions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            org = root / "org"
+            write_valid_org_repo(org, include_sandbox_cards=False)
+            left = base_card("left", "Shared decision route", "First route.", status="candidate", confidence=0.7)
+            right = base_card("right", "Shared decision route", "Second route.", status="candidate", confidence=0.72)
+            overloaded = base_card("overloaded", "Overloaded route", "Split independent actions.", status="candidate", confidence=0.7)
+            overloaded["action"] = [
+                {"description": "Do branch A."},
+                {"description": "Do unrelated branch B."},
+            ]
+            write_yaml_file(org / "kb" / "main" / "candidates" / "left.yaml", left)
+            write_yaml_file(org / "kb" / "main" / "candidates" / "right.yaml", right)
+            write_yaml_file(org / "kb" / "main" / "candidates" / "overloaded.yaml", overloaded)
+
+            report = build_organization_maintenance_report(org)
+            checkpoint = report["cleanup"]["merge_split_checkpoint"]
+
+        self.assertTrue(report["ok"], report)
+        self.assertTrue(checkpoint["complete"])
+        self.assertGreaterEqual(checkpoint["reviewed_card_count"], 3)
+        self.assertTrue(checkpoint["merge_decision_ids"], checkpoint)
+        self.assertTrue(checkpoint["split_decision_ids"], checkpoint)
+        self.assertEqual(
+            len(checkpoint["merge_decision_ids"]),
+            len(set(checkpoint["merge_decision_ids"])),
+        )
+        self.assertEqual(
+            len(checkpoint["split_decision_ids"]),
+            len(set(checkpoint["split_decision_ids"])),
+        )
+
+    def test_maintenance_records_one_decision_for_every_reviewed_card(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            org = root / "org"
+            write_valid_org_repo(org, include_sandbox_cards=False)
+            keep = base_card("keep", "Stable card", "Keep this stable card.", status="trusted", confidence=0.8)
+            keep["domain_path"] = ["unique", "stable"]
+            keep["if"] = {"notes": "A unique stable-only condition."}
+            keep["action"] = {"description": "Preserve the unique stable behavior."}
+            keep["predict"] = {"expected_result": "Only the unique stable outcome occurs."}
+            change = base_card("change", "Weak card", "Reject this weak card.", status="candidate", confidence=0.2)
+            watch = base_card("watch", "Broad card", "Review this broad card.", status="candidate", confidence=0.7)
+            watch["action"] = [{"description": "Branch A"}, {"description": "Branch B"}]
+            write_yaml_file(org / "kb" / "main" / "trusted" / "keep.yaml", keep)
+            write_yaml_file(org / "kb" / "main" / "candidates" / "change.yaml", change)
+            write_yaml_file(org / "kb" / "main" / "candidates" / "watch.yaml", watch)
+
+            report = build_organization_maintenance_report(org)
+            checkpoint = report["cleanup"]["card_decision_checkpoint"]
+
+        self.assertTrue(report["ok"], report)
+        self.assertTrue(checkpoint["complete"], checkpoint)
+        self.assertEqual(checkpoint["decision_count"], checkpoint["card_count"])
+        self.assertEqual(len(checkpoint["decision_ids"]), len(set(checkpoint["decision_ids"])))
+        self.assertEqual(
+            {item["decision"] for item in checkpoint["decisions"]},
+            {"keep", "change", "watch"},
+        )
+        for decision in checkpoint["decisions"]:
+            self.assertTrue(decision["reason"])
+            self.assertEqual(
+                set(decision["reviewed_dimensions"]),
+                {"scenario", "action", "prediction", "route", "evidence"},
+            )
+
+    def test_maintenance_postapply_readiness_controls_pr_and_label(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            org = root / "org"
+            write_valid_org_repo(org, include_sandbox_cards=False)
+            write_yaml_file(
+                org / "kb" / "imports" / "alice" / "incoming.yaml",
+                base_card("incoming", "Incoming card", "Move to main.", status="candidate", confidence=0.7),
+            )
+
+            report = build_organization_maintenance_report(org, apply_reviewed_cleanup=True)
+            readiness = report["cleanup"]["github_merge_readiness"]
+
+        self.assertTrue(report["ok"], report)
+        self.assertTrue(readiness["complete"])
+        self.assertTrue(readiness["eligible"], readiness)
+        self.assertEqual(readiness["label"], "org-kb:auto-merge")
+        self.assertIn("maintenance/cleanup_audit.jsonl", readiness["changed_files"])
 
     def test_maintenance_report_uses_main_imports_target_layout(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -186,7 +295,7 @@ class OrganizationMaintenanceTests(unittest.TestCase):
             )
 
         self.assertTrue(report["ok"], report)
-        self.assertFalse(report["legacy_compatibility"])
+        self.assertNotIn("legacy_compatibility", report)
         self.assertEqual(report["main_count"], 2)
         self.assertEqual(report["main_active_count"], 2)
         self.assertEqual(report["imports_count"], 1)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from pathlib import Path
 from typing import Any
@@ -13,21 +14,20 @@ from local_kb.store import append_jsonl, load_yaml_file, write_yaml_file
 
 ORG_CLEANUP_AUDIT_RELATIVE_PATH = Path("maintenance") / "cleanup_audit.jsonl"
 TARGET_CARD_ROOTS = ("kb/main", "kb/imports")
-LEGACY_COMPAT_CARD_ROOTS = ("kb/trusted", "kb/candidates")
-CARD_ROOTS = (*TARGET_CARD_ROOTS, *LEGACY_COMPAT_CARD_ROOTS)
+CARD_ROOTS = TARGET_CARD_ROOTS
 LOW_RISK_APPLY_ACTIONS = {"confidence-adjust", "status-adjust", "mark-duplicate", "accept-import", "promote-card"}
 ORGANIZATION_EXCHANGE_SLEEP_MODEL = {
     "role": "organization-exchange-sleep",
     "description": (
         "Organization maintenance treats the shared repository as an exchange layer, "
         "not a central truth layer. The target layout is kb/imports as the incoming lane "
-        "and kb/main as the exchange surface. Legacy kb/trusted and kb/candidates remain "
-        "compatible inputs, but they are not the target organization structure."
+        "and kb/main as the exchange surface. Obsolete organization layouts are rejected "
+        "by normal maintenance and can only be rewritten by the one-time upgrade migration."
     ),
     "local_final_adoption": True,
     "incoming_lane": "kb/imports",
     "exchange_surface": "kb/main",
-    "legacy_compatibility_paths": list(LEGACY_COMPAT_CARD_ROOTS),
+    "current_layout_only": True,
     "exchange_surface_content_maintenance": "in-scope",
     "trusted_card_content_maintenance": "in-scope",
     "extra_boundaries": ["privacy", "skill-safety"],
@@ -81,7 +81,7 @@ def _status(payload: dict[str, Any]) -> str:
 
 
 def _risk_for_path(path: str) -> str:
-    if path.startswith("kb/main/") or path.startswith("kb/trusted/"):
+    if path.startswith("kb/main/"):
         return "high"
     if path.startswith("kb/imports/"):
         return "low"
@@ -95,23 +95,33 @@ def _action_id(action_type: str, target_path: str, reason: str = "") -> str:
 
 def _action(action_type: str, target_path: str, **payload: Any) -> dict[str, Any]:
     reason = str(payload.get("reason") or "")
+    identity_payload = json.dumps(
+        payload,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
     return {
-        "action_id": _action_id(action_type, target_path, reason),
+        "action_id": _action_id(
+            action_type,
+            target_path,
+            f"{reason}|{identity_payload}",
+        ),
         "action_type": action_type,
         "target_path": target_path,
         **payload,
     }
 
 
-def _safe_segment(value: Any, *, fallback: str = "card") -> str:
+def _safe_segment(value: Any, *, default: str = "card") -> str:
     text = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(value or "").strip()).strip(".-")
-    return text[:120] or fallback
+    return text[:120] or default
 
 
 def _promotion_target_path(record: dict[str, Any], org_root: Path) -> str:
     payload = record["payload"] if isinstance(record.get("payload"), dict) else {}
     route = payload.get("domain_path") if isinstance(payload.get("domain_path"), list) else []
-    route_segments = [_safe_segment(item, fallback="route") for item in route if str(item or "").strip()]
+    route_segments = [_safe_segment(item, default="route") for item in route if str(item or "").strip()]
     entry_id = _safe_segment(record.get("entry_id") or Path(str(record.get("relative_path") or "")).stem)
     target = Path("kb") / "main"
     for segment in route_segments[:6]:
@@ -133,6 +143,47 @@ def _similarity(left: dict[str, Any], right: dict[str, Any]) -> float:
     if not left_tokens or not right_tokens:
         return 0.0
     return len(left_tokens & right_tokens) / max(len(left_tokens), len(right_tokens))
+
+
+def _value_tokens(value: Any) -> set[str]:
+    if isinstance(value, dict):
+        parts = [f"{key} {item}" for key, item in value.items()]
+    elif isinstance(value, list):
+        parts = [str(item) for item in value]
+    else:
+        parts = [str(value or "")]
+    return set(tokenize(normalize_text(" ".join(parts))))
+
+
+def _token_overlap(left: Any, right: Any) -> float:
+    left_tokens = _value_tokens(left)
+    right_tokens = _value_tokens(right)
+    if not left_tokens or not right_tokens:
+        return 0.0
+    return len(left_tokens & right_tokens) / max(len(left_tokens), len(right_tokens))
+
+
+def _similarity_dimensions(left: dict[str, Any], right: dict[str, Any]) -> dict[str, float]:
+    dimensions = {
+        "title": _similarity(left, right),
+        "scenario": _token_overlap(left.get("if"), right.get("if")),
+        "action": _token_overlap(left.get("action"), right.get("action")),
+        "prediction": _token_overlap(left.get("predict"), right.get("predict")),
+        "route": _token_overlap(left.get("domain_path"), right.get("domain_path")),
+        "evidence": _token_overlap(
+            [left.get("evidence"), left.get("evidence_refs"), left.get("provenance")],
+            [right.get("evidence"), right.get("evidence_refs"), right.get("provenance")],
+        ),
+    }
+    meaningful = [
+        dimensions[key]
+        for key in ("scenario", "action", "prediction", "route", "evidence")
+        if dimensions[key] > 0
+    ]
+    dimensions["semantic_composite"] = (
+        sum(meaningful) / len(meaningful) if meaningful else 0.0
+    )
+    return {key: round(value, 3) for key, value in dimensions.items()}
 
 
 def _collect_card_records(org_root: Path) -> list[dict[str, Any]]:
@@ -174,9 +225,23 @@ def _looks_like_test_artifact(record: dict[str, Any]) -> bool:
     return any(phrase in text for phrase in TEST_ARTIFACT_PHRASES)
 
 
+def _overloaded_fields(payload: dict[str, Any]) -> list[str]:
+    overloaded: list[str] = []
+    for field in ("if", "action", "predict", "use"):
+        value = payload.get(field)
+        if isinstance(value, list) and len(value) > 1:
+            overloaded.append(field)
+            continue
+        if not isinstance(value, dict):
+            continue
+        if any(isinstance(item, list) and len(item) > 1 for item in value.values()):
+            overloaded.append(field)
+    return overloaded
+
+
 def _preferred_duplicate_record(records: list[dict[str, Any]]) -> dict[str, Any]:
     status_rank = {"trusted": 0, "approved": 0, "candidate": 1, "deprecated": 2, "rejected": 3}
-    path_rank = {"kb/main/": 0, "kb/trusted/": 1, "kb/imports/": 2, "kb/candidates/": 3}
+    path_rank = {"kb/main/": 0, "kb/imports/": 1}
 
     def sort_key(record: dict[str, Any]) -> tuple[int, int, float, str]:
         relative_path = str(record["relative_path"])
@@ -210,16 +275,74 @@ def _skill_version_actions(records: list[dict[str, Any]]) -> list[dict[str, Any]
                     "dependency": dependency,
                     "version_time": str(dependency.get("version_time") or ""),
                     "content_hash": str(dependency.get("content_hash") or ""),
+                    "original_author": str(dependency.get("original_author") or ""),
                 }
             )
 
     actions: list[dict[str, Any]] = []
     for bundle_id, versions in by_bundle.items():
-        unique_versions = {(item["version_time"], item["content_hash"]) for item in versions}
+        for item in versions:
+            dependency = item["dependency"]
+            missing: list[str] = []
+            if not item["content_hash"].startswith("sha256:"):
+                missing.append("sha256-content-hash")
+            if not item["version_time"]:
+                missing.append("version-time")
+            if not item["original_author"]:
+                missing.append("original-author")
+            if str(dependency.get("update_policy") or "") != "original_author_only":
+                missing.append("original-author-update-policy")
+            if dependency.get("readonly_when_imported") is not True:
+                missing.append("readonly-import")
+            if missing:
+                record = item["record"]
+                actions.append(
+                    _action(
+                        "skill-bundle-safety-block",
+                        record["relative_path"],
+                        entry_id=record["entry_id"],
+                        bundle_id=bundle_id,
+                        issues=missing,
+                        risk="high",
+                        apply_supported=False,
+                        reason="Card-bound Skill metadata is incomplete or violates the original-author safety policy.",
+                    )
+                )
+
+        ordered = sorted(
+            versions,
+            key=lambda item: (item["version_time"], item["content_hash"], item["original_author"]),
+        )
+        lineage_author = next((item["original_author"] for item in ordered if item["original_author"]), "")
+        if lineage_author:
+            for item in ordered:
+                if not item["original_author"] or item["original_author"] == lineage_author:
+                    continue
+                record = item["record"]
+                actions.append(
+                    _action(
+                        "skill-bundle-fork-required",
+                        record["relative_path"],
+                        entry_id=record["entry_id"],
+                        bundle_id=bundle_id,
+                        lineage_original_author=lineage_author,
+                        conflicting_original_author=item["original_author"],
+                        risk="high",
+                        apply_supported=False,
+                        reason="A different author cannot update the original bundle lineage and must publish a new fork bundle_id.",
+                    )
+                )
+
+        lineage_versions = [
+            item
+            for item in versions
+            if not lineage_author or item["original_author"] == lineage_author
+        ]
+        unique_versions = {(item["version_time"], item["content_hash"]) for item in lineage_versions}
         if len(unique_versions) <= 1:
             continue
-        latest = sorted(versions, key=lambda item: (item["version_time"], item["content_hash"]))[-1]
-        for item in versions:
+        latest = sorted(lineage_versions, key=lambda item: (item["version_time"], item["content_hash"]))[-1]
+        for item in lineage_versions:
             if item is latest:
                 continue
             record = item["record"]
@@ -239,6 +362,59 @@ def _skill_version_actions(records: list[dict[str, Any]]) -> list[dict[str, Any]
                 )
             )
     return actions
+
+
+def _card_decisions(
+    records: list[dict[str, Any]],
+    actions: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    decisions: list[dict[str, Any]] = []
+    reviewed_dimensions = ["scenario", "action", "prediction", "route", "evidence"]
+    for record in records:
+        path = str(record["relative_path"])
+        related = [
+            action
+            for action in actions
+            if str(action.get("target_path") or "") == path
+            or str(action.get("related_path") or "") == path
+        ]
+        action_types = [str(action.get("action_type") or "") for action in related]
+        if any(action.get("apply_supported") is not False for action in related):
+            decision = "change"
+        elif related:
+            decision = "watch"
+        else:
+            decision = "keep"
+        reasons = list(
+            dict.fromkeys(
+                str(action.get("reason") or "").strip()
+                for action in related
+                if str(action.get("reason") or "").strip()
+            )
+        )
+        if not reasons:
+            reasons = [
+                "No lifecycle, duplicate, merge, split, confidence, or Skill-policy trigger was found under the current maintenance policy."
+            ]
+        reason = " ".join(reasons)
+        decisions.append(
+            {
+                "decision_id": _action_id("card-decision", path, reason),
+                "entry_id": str(record.get("entry_id") or ""),
+                "target_path": path,
+                "decision": decision,
+                "reason": reason,
+                "reviewed_dimensions": reviewed_dimensions,
+                "action_ids": [str(action.get("action_id") or "") for action in related],
+                "action_types": action_types,
+                "evidence": {
+                    "content_hash": str(record.get("content_hash") or ""),
+                    "status": str(record.get("status") or ""),
+                    "confidence": float(record.get("confidence") or 0.0),
+                },
+            }
+        )
+    return decisions
 
 
 def build_organization_cleanup_proposal(
@@ -274,7 +450,7 @@ def build_organization_cleanup_proposal(
         for duplicate in duplicates:
             if duplicate is canonical:
                 continue
-            proposed_status = "deprecated" if duplicate["relative_path"].startswith(("kb/main/", "kb/trusted/")) else "rejected"
+            proposed_status = "deprecated" if duplicate["relative_path"].startswith("kb/main/") else "rejected"
             actions.append(
                 _action(
                     "mark-duplicate",
@@ -404,12 +580,28 @@ def build_organization_cleanup_proposal(
                 )
             )
 
+        overloaded_fields = _overloaded_fields(record["payload"])
+        if overloaded_fields:
+            actions.append(
+                _action(
+                    "split-card",
+                    path,
+                    entry_id=record["entry_id"],
+                    overloaded_fields=overloaded_fields,
+                    risk="medium",
+                    apply_supported=False,
+                    reason="The card contains multiple independent branches and requires an explicit split or hub decision.",
+                )
+            )
+
     for index, left in enumerate(records):
         for right in records[index + 1 :]:
             if left["content_hash"] == right["content_hash"]:
                 continue
-            similarity = _similarity(left["payload"], right["payload"])
-            if similarity < similar_title_threshold:
+            dimensions = _similarity_dimensions(left["payload"], right["payload"])
+            title_similarity = float(dimensions["title"])
+            semantic_similarity = float(dimensions["semantic_composite"])
+            if title_similarity < similar_title_threshold and semantic_similarity < max(0.82, similar_title_threshold):
                 continue
             actions.append(
                 _action(
@@ -418,14 +610,16 @@ def build_organization_cleanup_proposal(
                     entry_id=left["entry_id"],
                     related_path=right["relative_path"],
                     related_entry_id=right["entry_id"],
-                    similarity=round(similarity, 3),
+                    similarity=max(title_similarity, semantic_similarity),
+                    similarity_dimensions=dimensions,
                     risk="medium",
                     apply_supported=False,
-                    reason="Card titles are similar enough to require a merge review.",
+                    reason="Scenario, action, prediction, route, evidence, and title similarity scores require an explicit merge-or-keep review.",
                 )
             )
 
     actions.extend(_skill_version_actions(records))
+    card_decisions = _card_decisions(records, actions)
     counts: dict[str, int] = {}
     for action in actions:
         action_type = str(action.get("action_type") or "")
@@ -439,13 +633,15 @@ def build_organization_cleanup_proposal(
         "lane_policy": {
             "incoming_lane": "kb/imports",
             "exchange_surface": "kb/main",
-            "legacy_compatibility_paths": list(LEGACY_COMPAT_CARD_ROOTS),
+            "current_layout_only": True,
             "local_download_primary_path": "kb/main",
             "local_download_excluded_paths": ["kb/imports"],
             "contribution_writes": ["kb/imports"],
             "maintenance_moves_reviewed_cards_to": "kb/main",
         },
         "card_count": len(records),
+        "card_decisions": card_decisions,
+        "card_decision_count": len(card_decisions),
         "actions": actions,
         "counts": counts,
     }
@@ -508,9 +704,6 @@ def apply_organization_cleanup_proposal(
             continue
         if target is None or not target.exists():
             skipped.append({"action_id": action_id, "reason": "target path is missing or unsafe", "target_path": target_path})
-            continue
-        if target_path.startswith("kb/trusted/") and not allow_trusted:
-            skipped.append({"action_id": action_id, "reason": "trusted card apply requires allow_trusted", "target_path": target_path})
             continue
         if target_path.startswith("kb/main/") and not allow_trusted:
             skipped.append({"action_id": action_id, "reason": "main card apply requires allow_trusted", "target_path": target_path})
@@ -629,6 +822,8 @@ def apply_organization_cleanup_proposal(
         "dry_run": dry_run,
         "applied_count": len(applied),
         "skipped_count": len(skipped),
+        "applied_action_ids": [str(item.get("action_id") or "") for item in applied],
+        "skipped_action_ids": [str(item.get("action_id") or "") for item in skipped],
         "applied": applied,
         "skipped": skipped,
         "errors": errors,

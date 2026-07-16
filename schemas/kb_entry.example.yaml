@@ -1,3 +1,16 @@
+projection_schema_version: khaos-brain.card-projection.v1
+authority_generation_id: generation-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+authority_scope: public
+logicguard_model_id: khaos-card-model-xxx
+logicguard_node_id: node-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+logicguard_block_id: block-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+logicguard_revision_id: revision-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+logicguard_mesh_id: mesh-public
+logicguard_mesh_revision_id: mesh-rev-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+projection_digest: sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+logicguard_open_role_gaps:
+  - evidence
+  - warrant
 id: model-xxx
 title: Short human-readable title # Prefer a predicted relation or outcome, including runtime-behavior predictions when applicable
 type: model # model | preference | heuristic | fact
@@ -13,9 +26,9 @@ domain_path:
 cross_index:
   - design/presentation/aesthetics
   - communication/slides/visual-quality
-related_cards:
-  - model-yyy
-  - model-zzz
+# Derived display only. Sleep's projector recomputes this list exclusively from
+# grounded exact ModelMesh relations. It is never semantic or retrieval authority.
+related_cards: []
 tags:
   - presentation
   - slides
@@ -36,8 +49,8 @@ predict:
       result: A more structured and engineering-oriented presentation is likely preferred.
 use:
   guidance: How Codex should use this prediction in its own output or behavior.
-# Optional display translations. English fields above remain the canonical source.
-# Sleep maintenance may fill or refresh these fields from an AI-authored plan.
+# Optional display translations preserved by the projector. The exact
+# LogicGuard nodes above remain semantic authority.
 i18n:
   zh-CN:
     title: 中文显示标题

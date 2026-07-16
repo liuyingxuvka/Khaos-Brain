@@ -19,6 +19,11 @@ from local_kb.config import resolve_repo_root  # noqa: E402
 from local_kb.software_update import startup_block_message  # noqa: E402
 
 
+SOURCE_RUNTIME = "source"
+RELEASE_RUNTIME = "release"
+CURRENT_RELEASE_EXECUTABLE = Path("dist") / "KhaosBrain.exe"
+
+
 def _pythonw_executable() -> Path:
     executable = Path(sys.executable)
     if sys.platform == "win32":
@@ -28,35 +33,30 @@ def _pythonw_executable() -> Path:
     return executable
 
 
-def _exe_candidates(repo_root: Path) -> list[Path]:
-    return [
-        repo_root / "dist" / "KhaosBrain.exe",
-        repo_root / "dist" / "KhaosBrain" / "KhaosBrain.exe",
-        repo_root / "KhaosBrain.exe",
-    ]
-
-
-def _launch_command(repo_root: Path, *, prefer_python: bool, language: str) -> tuple[str, list[str]]:
-    if not prefer_python:
-        for exe_path in _exe_candidates(repo_root):
-            if exe_path.exists():
-                command = [str(exe_path), "--repo-root", str(repo_root)]
-                if language:
-                    command.extend(["--language", language])
-                return "exe", command
-
-    command = [
-        str(_pythonw_executable()),
-        str(repo_root / "scripts" / "kb_desktop.py"),
-        "--repo-root",
-        str(repo_root),
-    ]
+def _launch_command(repo_root: Path, *, runtime: str, language: str) -> tuple[str, list[str]]:
+    if runtime == SOURCE_RUNTIME:
+        source_entry = repo_root / "scripts" / "kb_desktop.py"
+        if not source_entry.is_file():
+            raise FileNotFoundError(f"Selected source runtime is unavailable: {source_entry}")
+        command = [
+            str(_pythonw_executable()),
+            str(source_entry),
+            "--repo-root",
+            str(repo_root),
+        ]
+    elif runtime == RELEASE_RUNTIME:
+        release_entry = repo_root / CURRENT_RELEASE_EXECUTABLE
+        if not release_entry.is_file():
+            raise FileNotFoundError(f"Selected release runtime is unavailable: {release_entry}")
+        command = [str(release_entry), "--repo-root", str(repo_root)]
+    else:
+        raise ValueError(f"Unknown Khaos Brain runtime: {runtime}")
     if language:
         command.extend(["--language", language])
-    return "python", command
+    return runtime, command
 
 
-def open_ui(repo_root: Path, *, prefer_python: bool = False, language: str = "") -> dict[str, Any]:
+def open_ui(repo_root: Path, *, runtime: str, language: str = "") -> dict[str, Any]:
     update_message = startup_block_message(repo_root, language=language or None)
     if update_message:
         return {
@@ -65,7 +65,16 @@ def open_ui(repo_root: Path, *, prefer_python: bool = False, language: str = "")
             "message": update_message,
             "repo_root": str(repo_root),
         }
-    mode, command = _launch_command(repo_root, prefer_python=prefer_python, language=language)
+    try:
+        mode, command = _launch_command(repo_root, runtime=runtime, language=language)
+    except (FileNotFoundError, ValueError) as exc:
+        return {
+            "ok": False,
+            "status": "runtime-unavailable",
+            "runtime": runtime,
+            "message": str(exc),
+            "repo_root": str(repo_root),
+        }
     process = subprocess.Popen(command, cwd=str(repo_root), close_fds=True)
     return {
         "ok": True,
@@ -80,12 +89,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Open Khaos Brain's desktop card browser.")
     parser.add_argument("--repo-root", default="auto")
     parser.add_argument("--language", default="", choices=["", "en", "zh-CN"])
-    parser.add_argument("--prefer-python", action="store_true", help="Ignore a built exe and open through Python.")
+    parser.add_argument(
+        "--runtime",
+        required=True,
+        choices=[SOURCE_RUNTIME, RELEASE_RUNTIME],
+        help="Select one current runtime explicitly; the launcher never switches runtimes.",
+    )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
     repo_root = resolve_repo_root(args.repo_root, cwd=SCRIPT_REPO_ROOT)
-    payload = open_ui(repo_root, prefer_python=args.prefer_python, language=args.language)
+    payload = open_ui(repo_root, runtime=args.runtime, language=args.language)
     if args.json:
         print_json(payload)
     else:

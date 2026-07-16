@@ -1,0 +1,14 @@
+[flowguard]
+repository = "https://github.com/liuyingxuvka/FlowGuard"
+adopted_package_version = "0.56.0"
+schema_version = "1.0"
+last_verified_at = "2026-07-16T00:25:45+00:00"
+last_verified_by = "FlowGuard project-upgrade"
+agents_path = "AGENTS.md"
+
+[policy]
+upgrade_when_installed_version_is_newer = true
+latest_schema_first = true
+upgrade_existing_artifacts_when_project_version_is_older = true
+require_adoption_log = true
+require_model_update_for_behavior_changes = true

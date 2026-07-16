@@ -1,0 +1,310 @@
+{
+  "schema_version": "skillguard.contract_source.v2",
+  "skill_id": "kb-organization-contribute",
+  "model_id": "khaos-brain.kb-organization-contribute.executable-contract.v2",
+  "model_path": ".flowguard/kb_org_contribute_skill_contract_model.py",
+  "confirmed": true,
+  "release_eligible": false,
+  "implementation_paths": [
+    ".agents/skills/kb-organization-contribute",
+    ".flowguard/kb_org_contribute_skill_contract_model.py",
+    "scripts/kb_org_outbox.py",
+    "local_kb/org_automation.py",
+    "local_kb/org_outbox.py",
+    "tests/test_org_automation.py",
+    "tests/test_org_outbox.py",
+    "tests/test_skill_sharing.py",
+    "tests/test_e2e_skill_bundle_contribution_flow.py",
+    "tests/test_github_repo_config.py",
+    "tests/test_org_checks.py",
+    "tests/test_process_control.py",
+    "local_kb/automation_contracts.py",
+    "local_kb/automation_runtime.py",
+    "local_kb/process_control.py",
+    "local_kb/install.py",
+    "scripts/build_kb_automation_skillguard_contracts.py",
+    "scripts/check_kb_automation_run_receipt.py",
+    "scripts/check_kb_skillguard.py",
+    "scripts/run_kb_guarded_automation.py",
+    "tests/test_kb_automation_skillguard.py"
+  ],
+  "projection_consumers": [
+    {
+      "consumer_id": "projection:kb-organization-contribute:target-runtime-sources",
+      "kind": "target_runtime_source",
+      "input_selectors": [
+        {
+          "kind": "role",
+          "role": "runtime_source"
+        }
+      ]
+    },
+    {
+      "consumer_id": "projection:kb-organization-contribute:target-tests",
+      "kind": "target_test_source",
+      "input_selectors": [
+        {
+          "kind": "role",
+          "role": "test_dev"
+        }
+      ]
+    }
+  ],
+  "step_bindings": [
+    {
+      "step_id": "step:kb-organization-contribute:intake",
+      "action": {
+        "kind": "inventory",
+        "summary": "Load the target-owned inputs and prove every intake obligation before mutation."
+      },
+      "check_ids": [
+        "check:kb-organization-contribute:intake-runtime"
+      ],
+      "output_artifact_ids": []
+    },
+    {
+      "step_id": "step:kb-organization-contribute:execute",
+      "action": {
+        "kind": "native",
+        "summary": "Run the native automation owner through every declared execution branch."
+      },
+      "check_ids": [
+        "check:kb-organization-contribute:native-runtime"
+      ],
+      "output_artifact_ids": [
+        "artifact:kb-organization-contribute:native-receipt"
+      ]
+    },
+    {
+      "step_id": "step:kb-organization-contribute:verify",
+      "action": {
+        "kind": "validator",
+        "summary": "Require the current terminal receipt plus positive and shallow target-owned checks before closure."
+      },
+      "check_ids": [
+        "check:kb-organization-contribute:terminal-runtime",
+        "check:kb-organization-contribute:depth-positive",
+        "check:kb-organization-contribute:depth-shallow"
+      ],
+      "output_artifact_ids": []
+    }
+  ],
+  "checks": [
+    {
+      "check_id": "check:kb-organization-contribute:intake-runtime",
+      "kind": "command",
+      "evidence_class": "hard",
+      "covers_obligation_ids": [
+        "obligation:kb-organization-contribute:settings-noop-gate",
+        "obligation:kb-organization-contribute:sync-preflight"
+      ],
+      "timeout_seconds": 120,
+      "command": "python",
+      "args": [
+        "scripts/check_kb_automation_run_receipt.py",
+        "--skill",
+        "kb-organization-contribute",
+        "--phase",
+        "intake",
+        "--json"
+      ],
+      "cwd_token": "repository_root",
+      "expected": {
+        "exit_code": 0
+      }
+    },
+    {
+      "check_id": "check:kb-organization-contribute:native-runtime",
+      "kind": "command",
+      "evidence_class": "hard",
+      "covers_obligation_ids": [
+        "obligation:kb-organization-contribute:privacy-shareability",
+        "obligation:kb-organization-contribute:content-hash-dedup",
+        "obligation:kb-organization-contribute:skill-bundle-author-version",
+        "obligation:kb-organization-contribute:branch-pr-auto-merge"
+      ],
+      "timeout_seconds": 120,
+      "command": "python",
+      "args": [
+        "scripts/check_kb_automation_run_receipt.py",
+        "--skill",
+        "kb-organization-contribute",
+        "--phase",
+        "execute",
+        "--json"
+      ],
+      "cwd_token": "repository_root",
+      "expected": {
+        "exit_code": 0
+      }
+    },
+    {
+      "check_id": "check:kb-organization-contribute:terminal-runtime",
+      "kind": "command",
+      "evidence_class": "hard",
+      "covers_obligation_ids": [
+        "obligation:kb-organization-contribute:postflight-terminal",
+        "obligation:kb-organization-contribute:lane-failure-recovery",
+        "obligation:kb-organization-contribute:timeout-tree-cleanup"
+      ],
+      "timeout_seconds": 120,
+      "command": "python",
+      "args": [
+        "scripts/check_kb_automation_run_receipt.py",
+        "--skill",
+        "kb-organization-contribute",
+        "--phase",
+        "verify",
+        "--json"
+      ],
+      "cwd_token": "repository_root",
+      "expected": {
+        "exit_code": 0
+      }
+    },
+    {
+      "check_id": "check:kb-organization-contribute:depth-positive",
+      "kind": "command",
+      "evidence_class": "hard",
+      "covers_obligation_ids": [
+        "obligation:kb-organization-contribute:depth-calibration"
+      ],
+      "timeout_seconds": 300,
+      "command": "python",
+      "args": [
+        "scripts/check_kb_automation_run_receipt.py",
+        "--skill",
+        "kb-organization-contribute",
+        "--phase",
+        "all",
+        "--fixture",
+        "positive",
+        "--json"
+      ],
+      "cwd_token": "repository_root",
+      "expected": {
+        "exit_code": 0
+      },
+      "native_route_id": "route:kb-organization-contribute:run",
+      "evidence_domain_id": "target:kb-organization-contribute:fixture-calibration"
+    },
+    {
+      "check_id": "check:kb-organization-contribute:depth-shallow",
+      "kind": "command",
+      "evidence_class": "hard",
+      "covers_obligation_ids": [
+        "obligation:kb-organization-contribute:depth-calibration"
+      ],
+      "timeout_seconds": 300,
+      "command": "python",
+      "args": [
+        "scripts/check_kb_automation_run_receipt.py",
+        "--skill",
+        "kb-organization-contribute",
+        "--phase",
+        "all",
+        "--fixture",
+        "shallow",
+        "--json"
+      ],
+      "cwd_token": "repository_root",
+      "expected": {
+        "exit_code": 0
+      },
+      "native_route_id": "route:kb-organization-contribute:run",
+      "evidence_domain_id": "target:kb-organization-contribute:fixture-calibration"
+    }
+  ],
+  "artifacts": [
+    {
+      "artifact_id": "artifact:kb-organization-contribute:native-receipt",
+      "kind": "native_output",
+      "producer_step_id": "step:kb-organization-contribute:execute",
+      "validators": [
+        "immutable-receipt",
+        "run-id-bound",
+        "receipt-hash-bound",
+        "target-owned-native-output"
+      ],
+      "validator_check_ids": [
+        "check:kb-organization-contribute:intake-runtime",
+        "check:kb-organization-contribute:native-runtime",
+        "check:kb-organization-contribute:terminal-runtime"
+      ],
+      "covers_obligation_ids": [
+        "obligation:kb-organization-contribute:settings-noop-gate",
+        "obligation:kb-organization-contribute:sync-preflight",
+        "obligation:kb-organization-contribute:privacy-shareability",
+        "obligation:kb-organization-contribute:content-hash-dedup",
+        "obligation:kb-organization-contribute:skill-bundle-author-version",
+        "obligation:kb-organization-contribute:branch-pr-auto-merge",
+        "obligation:kb-organization-contribute:postflight-terminal",
+        "obligation:kb-organization-contribute:lane-failure-recovery",
+        "obligation:kb-organization-contribute:timeout-tree-cleanup"
+      ],
+      "claim_boundary": "This witness binds the immutable target-owned native receipt to its exact run, checks, and non-calibration native obligations; it does not prove post-run finalization."
+    }
+  ],
+  "closure_profiles": [
+    {
+      "profile_id": "enforced",
+      "required_obligation_ids": [
+        "obligation:kb-organization-contribute:settings-noop-gate",
+        "obligation:kb-organization-contribute:sync-preflight",
+        "obligation:kb-organization-contribute:privacy-shareability",
+        "obligation:kb-organization-contribute:content-hash-dedup",
+        "obligation:kb-organization-contribute:skill-bundle-author-version",
+        "obligation:kb-organization-contribute:branch-pr-auto-merge",
+        "obligation:kb-organization-contribute:postflight-terminal",
+        "obligation:kb-organization-contribute:lane-failure-recovery",
+        "obligation:kb-organization-contribute:timeout-tree-cleanup",
+        "obligation:kb-organization-contribute:depth-calibration"
+      ]
+    }
+  ],
+  "judgment_rubrics": [],
+  "depth_profile": {
+    "schema_version": "skillguard.depth_profile.v2",
+    "profile_id": "profile:kb-organization-contribute:declared-check-supervision",
+    "target_skill_id": "kb-organization-contribute",
+    "integration_mode": "native-integrated",
+    "native_owner_id": "kb-organization-contribute",
+    "native_route_ids": [
+      "route:kb-organization-contribute:run"
+    ],
+    "native_check_ids": [
+      "check:kb-organization-contribute:intake-runtime",
+      "check:kb-organization-contribute:native-runtime",
+      "check:kb-organization-contribute:terminal-runtime",
+      "check:kb-organization-contribute:depth-positive",
+      "check:kb-organization-contribute:depth-shallow"
+    ],
+    "skillguard_adds_domain_route": false,
+    "enforcement_level": "enforced",
+    "required_closure_profiles": [
+      "enforced"
+    ],
+    "provider_runtime": {
+      "provider_id": "skillguard-local-provider",
+      "required_runtime_contract_id": "skillguard-declared-check-supervision-current",
+      "required_capability_ids": [
+        "declared-check-inventory.v1",
+        "declared-check-receipt-reconciliation.v1",
+        "installation-receipt-binding.v1",
+        "installation-currentness-replay.v1",
+        "provider-runtime-enrollment.v1",
+        "single-flight-check-execution.v1"
+      ],
+      "required_enrollment_status": "enrolled",
+      "readiness_check_ids": [
+        "check:kb-organization-contribute:intake-runtime",
+        "check:kb-organization-contribute:native-runtime",
+        "check:kb-organization-contribute:terminal-runtime",
+        "check:kb-organization-contribute:depth-positive",
+        "check:kb-organization-contribute:depth-shallow"
+      ]
+    },
+    "claim_boundary": "Only exact current receipts for the target skill's declared checks are supervised. The target skill retains all domain judgment, including positive/shallow behavior and conditional update finalization."
+  },
+  "claim_boundary": "SkillGuard supervises the complete native kb-organization-contribute route, all target-specific obligations, and the sole current enforced closure. It cannot create a parallel executor or certify future runs."
+}

@@ -25,6 +25,35 @@ UPDATE_STATUSES = {
     UPDATE_STATUS_UPGRADING,
     UPDATE_STATUS_FAILED,
 }
+UPDATE_STATE_REQUIRED_FIELDS = frozenset(
+    {
+        "schema_version",
+        "status",
+        "current_version",
+        "latest_version",
+        "current_revision",
+        "latest_revision",
+        "update_available",
+        "user_requested",
+        "last_checked_at",
+        "updated_at",
+        "error",
+    }
+)
+UPDATE_STATE_OPTIONAL_FIELDS = frozenset({"started_at", "completed_at"})
+UPDATE_STATE_ALLOWED_FIELDS = UPDATE_STATE_REQUIRED_FIELDS | UPDATE_STATE_OPTIONAL_FIELDS
+
+# These are the only gate outcomes that mean the scheduled update checked the
+# current state and legitimately had no update work to perform.  Operational
+# contention and failed/upgrading states remain unfinished so a later run must
+# resolve them instead of reporting a successful no-op.
+LEGAL_SYSTEM_UPDATE_NOOP_REASONS = frozenset(
+    {
+        "no-update",
+        "waiting-for-user",
+        "ui-running",
+    }
+)
 
 UI_PROCESS_NAME_MARKERS = {
     "khaosbrain.exe",
@@ -67,6 +96,8 @@ def _normalize_state(repo_root: Path, payload: dict[str, Any] | None = None) -> 
     payload = dict(payload or {})
     status = str(payload.get("status") or "").strip().lower()
     if status not in UPDATE_STATUSES:
+        if payload:
+            raise ValueError(f"Update state status is not current: {status or '<missing>'}")
         status = UPDATE_STATUS_CURRENT
     update_available = bool(payload.get("update_available"))
     user_requested = bool(payload.get("user_requested"))
@@ -109,7 +140,28 @@ def load_update_state(repo_root: Path) -> dict[str, Any]:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return _normalize_state(repo_root, {"status": UPDATE_STATUS_FAILED, "error": "Update state could not be read."})
-    return _normalize_state(repo_root, payload if isinstance(payload, dict) else {})
+    if not isinstance(payload, dict):
+        return _normalize_state(
+            repo_root,
+            {"status": UPDATE_STATUS_FAILED, "error": "Update state must be a current mapping."},
+        )
+    issues: list[str] = []
+    if payload.get("schema_version") != UPDATE_STATE_SCHEMA_VERSION:
+        issues.append("update state schema is not current")
+    missing = sorted(UPDATE_STATE_REQUIRED_FIELDS - set(payload))
+    extra = sorted(set(payload) - UPDATE_STATE_ALLOWED_FIELDS)
+    if missing:
+        issues.append("missing fields: " + ", ".join(missing))
+    if extra:
+        issues.append("unknown fields: " + ", ".join(extra))
+    if str(payload.get("status") or "").strip().lower() not in UPDATE_STATUSES:
+        issues.append("status is not current")
+    if issues:
+        return _normalize_state(
+            repo_root,
+            {"status": UPDATE_STATUS_FAILED, "error": "Update state is not current: " + "; ".join(issues)},
+        )
+    return _normalize_state(repo_root, payload)
 
 
 def save_update_state(repo_root: Path, state: dict[str, Any]) -> Path:
@@ -119,6 +171,86 @@ def save_update_state(repo_root: Path, state: dict[str, Any]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
+
+
+def canonicalize_obsolete_update_state(
+    repo_root: Path,
+    *,
+    install_receipt: dict[str, Any],
+) -> dict[str, Any]:
+    """Settle one exact retired failure only inside a committed upgrade.
+
+    Daily update execution must never call this function. An unrelated failure
+    remains a visible failure and is not reinterpreted.
+    """
+    path = update_state_path(repo_root)
+    if not path.exists():
+        return {
+            "ok": True,
+            "status": "no_delta",
+            "retired_state_found": False,
+            "retired_schema_found": False,
+            "residual_retired_state_count": 0,
+        }
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"Obsolete update state is unreadable and cannot be migrated: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise RuntimeError("Obsolete update state is not a mapping and cannot be migrated")
+    schema = raw.get("schema_version")
+    retired_schema_found = schema is None
+    if schema not in (None, UPDATE_STATE_SCHEMA_VERSION):
+        raise RuntimeError(f"Unknown update state schema cannot be migrated directly: {schema}")
+    if retired_schema_found:
+        unknown = sorted(set(raw) - (UPDATE_STATE_ALLOWED_FIELDS - {"schema_version"}))
+        if unknown:
+            raise RuntimeError("Unknown retired update state fields: " + ", ".join(unknown))
+        state = _normalize_state(repo_root, raw)
+    else:
+        state = load_update_state(repo_root)
+        if str(state.get("error") or "").startswith("Update state is not current:"):
+            raise RuntimeError(str(state["error"]))
+    retired_error = "SkillGuard installation identity is not current"
+    matches_retired_state = bool(
+        str(state.get("status") or "") == UPDATE_STATUS_FAILED
+        and str(state.get("error") or "") == retired_error
+    )
+    if not matches_retired_state and not retired_schema_found:
+        return {
+            "ok": True,
+            "status": "no_delta",
+            "retired_state_found": False,
+            "retired_schema_found": False,
+            "residual_retired_state_count": 0,
+        }
+
+    if not (
+        str(install_receipt.get("status") or "") == "committed"
+        and str(install_receipt.get("receipt_hash") or "")
+    ):
+        raise RuntimeError("A committed current installation receipt is required to settle obsolete update state")
+
+    next_state = dict(state)
+    if matches_retired_state:
+        next_state["status"] = UPDATE_STATUS_CURRENT
+        next_state["error"] = ""
+    save_update_state(repo_root, next_state)
+    current = load_update_state(repo_root)
+    residual = int(
+        str(current.get("status") or "") == UPDATE_STATUS_FAILED
+        and str(current.get("error") or "") == retired_error
+    )
+    if residual:
+        raise RuntimeError("Obsolete update identity failure remains after upgrade settlement")
+    return {
+        "ok": True,
+        "status": "committed",
+        "retired_state_found": matches_retired_state,
+        "retired_schema_found": retired_schema_found,
+        "residual_retired_state_count": 0,
+        "install_receipt_hash": str(install_receipt["receipt_hash"]),
+    }
 
 
 def set_update_request(repo_root: Path, requested: bool) -> dict[str, Any]:
@@ -190,6 +322,9 @@ def check_remote_update(repo_root: Path, *, fetch: bool = True) -> dict[str, Any
     local_revision = _git_stdout(repo_root, ["rev-parse", "HEAD"])
     latest_revision = _git_stdout(repo_root, ["rev-parse", upstream])
     latest_version = _git_stdout(repo_root, ["show", f"{upstream}:VERSION"]) or state.get("latest_version") or current_version(repo_root)
+    remote_check_ok = not errors and bool(local_revision) and bool(latest_revision)
+    if not remote_check_ok and not errors:
+        errors.append("remote update revisions could not be resolved")
     update_available = bool(local_revision and latest_revision and local_revision != latest_revision)
     same_failed_target = (
         state["status"] == UPDATE_STATUS_FAILED
@@ -197,19 +332,33 @@ def check_remote_update(repo_root: Path, *, fetch: bool = True) -> dict[str, Any
         and latest_revision
         and latest_revision == str(state.get("latest_revision") or "").strip()
     )
+    failed_target_already_fast_forwarded = bool(
+        state["status"] == UPDATE_STATUS_FAILED
+        and local_revision
+        and local_revision == str(state.get("latest_revision") or "").strip()
+    )
+    prepared_target_changed = bool(
+        state["status"] == UPDATE_STATUS_PREPARED
+        and state.get("user_requested")
+        and str(state.get("latest_revision") or "").strip()
+        and latest_revision
+        and latest_revision != str(state.get("latest_revision") or "").strip()
+    )
     if update_available:
         status = UPDATE_STATUS_FAILED if same_failed_target else (
-            UPDATE_STATUS_AVAILABLE if state["status"] == UPDATE_STATUS_FAILED else (
+            UPDATE_STATUS_AVAILABLE if state["status"] == UPDATE_STATUS_FAILED or prepared_target_changed else (
                 UPDATE_STATUS_PREPARED if state.get("user_requested") else UPDATE_STATUS_AVAILABLE
             )
         )
+    elif failed_target_already_fast_forwarded:
+        status = UPDATE_STATUS_FAILED
     else:
         status = UPDATE_STATUS_CURRENT
-    user_requested = bool(update_available and state.get("user_requested"))
+    user_requested = bool(update_available and state.get("user_requested") and not prepared_target_changed)
     if state["status"] == UPDATE_STATUS_FAILED:
         user_requested = False
     error = "; ".join(error for error in errors if error)
-    if same_failed_target and not error:
+    if (same_failed_target or failed_target_already_fast_forwarded) and not error:
         error = str(state.get("error") or "").strip()
     next_state = {
         **state,
@@ -224,7 +373,12 @@ def check_remote_update(repo_root: Path, *, fetch: bool = True) -> dict[str, Any
         "error": error,
     }
     save_update_state(repo_root, next_state)
-    return load_update_state(repo_root)
+    return {
+        **load_update_state(repo_root),
+        "remote_check_ok": remote_check_ok,
+        "remote_check_errors": errors,
+        "prepared_target_changed": prepared_target_changed,
+    }
 
 
 def is_khaos_brain_ui_process(process: dict[str, Any]) -> bool:
@@ -269,7 +423,7 @@ def detect_khaos_brain_ui_processes() -> list[dict[str, Any]]:
     return [item for item in processes if is_khaos_brain_ui_process(item)]
 
 
-def architect_update_check(
+def system_update_check(
     repo_root: Path,
     *,
     check_remote: bool = True,
@@ -282,6 +436,18 @@ def architect_update_check(
     ui_running = bool(running_processes)
     apply_ready = False
     reason = "no-update"
+    if check_remote and state.get("remote_check_ok") is not True:
+        return {
+            "ok": False,
+            "apply_ready": False,
+            "reason": "remote-check-failed",
+            "error": "; ".join(str(item) for item in state.get("remote_check_errors") or []),
+            "ui_running": ui_running,
+            "ui_process_count": len(running_processes),
+            "state_path": str(update_state_path(repo_root)),
+            "state": state,
+            "skill": "",
+        }
     if state["status"] == UPDATE_STATUS_UPGRADING:
         reason = "already-upgrading"
     elif state["status"] == UPDATE_STATUS_FAILED:
@@ -344,16 +510,9 @@ def startup_block_message(repo_root: Path, *, language: str | None = None) -> st
 
 
 def _saved_language(repo_root: Path) -> str:
-    path = Path(repo_root) / ".local" / "khaos_brain_desktop_settings.json"
-    if not path.exists():
-        return DEFAULT_LANGUAGE
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return DEFAULT_LANGUAGE
-    if not isinstance(payload, dict):
-        return DEFAULT_LANGUAGE
-    return str(payload.get("language") or DEFAULT_LANGUAGE)
+    from local_kb.settings import load_desktop_settings
+
+    return str(load_desktop_settings(Path(repo_root)).get("language") or DEFAULT_LANGUAGE)
 
 
 def update_badge_label(state: dict[str, Any], language: str = DEFAULT_LANGUAGE) -> str:

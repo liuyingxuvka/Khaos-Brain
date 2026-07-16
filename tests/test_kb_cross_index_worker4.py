@@ -9,6 +9,7 @@ import yaml
 
 from local_kb.consolidate import consolidate_history
 from local_kb.proposals import build_proposal_report, format_proposal_report
+from tests.current_runtime_helpers import activate_current_kb_runtime
 
 
 def write_yaml(path: Path, payload: dict) -> None:
@@ -47,6 +48,7 @@ class CrossIndexMaintenanceTests(unittest.TestCase):
                     "updated_at": "2026-04-20",
                 },
             )
+            activate_current_kb_runtime(repo_root)
 
             write_history(
                 repo_root / "kb" / "history" / "events.jsonl",
@@ -146,6 +148,7 @@ class CrossIndexMaintenanceTests(unittest.TestCase):
                     "updated_at": "2026-04-20",
                 },
             )
+            activate_current_kb_runtime(repo_root)
 
             write_history(
                 repo_root / "kb" / "history" / "events.jsonl",

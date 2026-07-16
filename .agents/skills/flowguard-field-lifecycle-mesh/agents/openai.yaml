@@ -1,0 +1,4 @@
+interface:
+  display_name: "FlowGuard Field Lifecycle Mesh"
+  short_description: "Account fields, projections, and replacement closure"
+  default_prompt: "Use $flowguard-field-lifecycle-mesh for route_id=field_lifecycle_mesh, role=public_owner, native_owner=field_lifecycle_mesh; require complete leaf rows, behavior projections, single owners, and explicit old-field disposition; do not treat inventory as behavior proof or replace MTA/TestMesh; output evidence, failures, blockers, skipped_checks, residual_risk, claim_boundary, and typed_next_actions; claim only the declared field boundary. When creating or materially changing a concrete model instance, first freeze task/instance-specific one-or-many protected failures and the claim boundary, then bind the exact candidate plus native good, per-failure bad, oracle, and current evidence; reusable model types are not permanently single-purpose; FlowGuard owns semantics and SkillGuard only supervises declared checks."

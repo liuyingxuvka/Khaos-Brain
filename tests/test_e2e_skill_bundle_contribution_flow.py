@@ -9,6 +9,7 @@ from local_kb.org_contribution import prepare_organization_import_branch
 from local_kb.org_outbox import build_organization_outbox
 from local_kb.org_sources import _run_git
 from local_kb.store import load_yaml_file, write_yaml_file
+from tests.current_runtime_helpers import activate_current_kb_runtime
 
 
 class SkillBundleContributionFlowE2ETests(unittest.TestCase):
@@ -20,8 +21,7 @@ class SkillBundleContributionFlowE2ETests(unittest.TestCase):
                 "schema_version": 1,
                 "organization_id": "sandbox",
                 "kb": {
-                    "trusted_path": "kb/trusted",
-                    "candidates_path": "kb/candidates",
+                    "main_path": "kb/main",
                     "imports_path": "kb/imports",
                 },
                 "skills": {
@@ -30,8 +30,7 @@ class SkillBundleContributionFlowE2ETests(unittest.TestCase):
                 },
             },
         )
-        write_yaml_file(root / "kb" / "trusted" / "seed.yaml", {"id": "seed", "status": "trusted"})
-        (root / "kb" / "candidates").mkdir(parents=True, exist_ok=True)
+        write_yaml_file(root / "kb" / "main" / "trusted" / "seed.yaml", {"id": "seed", "status": "trusted"})
         (root / "kb" / "imports").mkdir(parents=True, exist_ok=True)
         write_yaml_file(root / "skills" / "registry.yaml", {"skills": []})
         (root / "skills" / "candidates").mkdir(parents=True, exist_ok=True)
@@ -59,9 +58,13 @@ class SkillBundleContributionFlowE2ETests(unittest.TestCase):
                 "if": {"notes": "A reusable card depends on a local Skill."},
                 "action": {"description": "Export the card and Skill bundle together."},
                 "predict": {"expected_result": "Organization imports keep the nested Skill bundle."},
-                "use": {"guidance": "Review the card and its Skill as one proposal."},
+                "use": {
+                    "guidance": "Review the card and its Skill as one proposal.",
+                    "unavailable_skill_guidance": "Keep the card pending when the Skill bundle is unavailable.",
+                },
             },
         )
+        activate_current_kb_runtime(repo)
 
     def _commit_repo(self, root: Path) -> None:
         self.assertEqual(0, _run_git(["init"], cwd=root).returncode)

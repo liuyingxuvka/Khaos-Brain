@@ -31,6 +31,7 @@ from local_kb.ui_data import (
     navigation_children,
 )
 from tests.kb_fixtures import write_sample_kb_repo
+from tests.current_runtime_helpers import activate_current_kb_runtime
 
 
 class KbDesktopUiDataTests(unittest.TestCase):
@@ -76,6 +77,12 @@ class KbDesktopUiDataTests(unittest.TestCase):
         self.assertIn("predict", payload)
         self.assertIn("use", payload)
         self.assertIn("raw", payload)
+        self.assertEqual(payload["logicguard"]["root_claim"], "claim-root")
+        self.assertEqual(
+            payload["logicguard"]["binding"]["logicguard_revision_id"],
+            payload["raw"]["logicguard_revision_id"],
+        )
+        self.assertTrue(payload["logicguard"]["nodes"])
 
     def test_search_payload_returns_results_for_desktop_deck(self) -> None:
         payload = build_search_payload(
@@ -137,6 +144,7 @@ class KbDesktopUiDataTests(unittest.TestCase):
                     "use": {"guidance": "Open detail for the exact dependency list."},
                 },
             )
+            activate_current_kb_runtime(root)
 
             payload = build_route_view_payload(root, route="")
             card = payload["deck"][0]

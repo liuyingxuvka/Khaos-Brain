@@ -7,6 +7,9 @@ from local_kb.common import normalize_string_list, normalize_text, parse_route_s
 from local_kb.consolidate_events import load_history_events
 from local_kb.i18n import DEFAULT_LANGUAGE, localized_entry, localized_route_label, normalize_language
 from local_kb.adoption import blocked_organization_download_hashes, card_exchange_hash, dedupe_local_entries_by_exchange_hash
+from local_kb.model_maintenance import load_current_model_entries
+from local_kb.logicguard_models import read_bound_argument_context
+from local_kb.model_projection import binding_from_projection
 from local_kb.search import get_guidance, get_predicted_result, search_entries, search_multi_source_entries
 from local_kb.skill_sharing import (
     annotate_dependencies_with_registry_status,
@@ -14,7 +17,7 @@ from local_kb.skill_sharing import (
     load_organization_skill_registry,
 )
 from local_kb.source_labels import card_source_summary
-from local_kb.store import load_entries, load_organization_entries
+from local_kb.store import load_organization_entries
 from local_kb.taxonomy import build_taxonomy_gap_report, build_taxonomy_view
 
 
@@ -77,6 +80,22 @@ def summarize_entry(
         "domain_label": _route_label(domain_path, language, repo_root),
         "cross_index": cross_index,
         "related_cards": normalize_string_list(data.get("related_cards", [])),
+        "logicguard_binding": {
+            key: entry.data.get(key)
+            for key in (
+                "authority_scope",
+                "logicguard_model_id",
+                "logicguard_node_id",
+                "logicguard_block_id",
+                "logicguard_revision_id",
+                "logicguard_mesh_id",
+                "logicguard_mesh_revision_id",
+            )
+            if entry.data.get(key)
+        },
+        "logicguard_open_role_gaps": normalize_string_list(
+            entry.data.get("logicguard_open_role_gaps", [])
+        ),
         "tags": data.get("tags", []),
         "trigger_keywords": data.get("trigger_keywords", []),
         "skill_dependency_count": len(skill_dependencies),
@@ -150,7 +169,7 @@ def _load_organization_entries_from_sources(
 
 
 def _load_entries_for_views(repo_root: Path, organization_sources: list[dict[str, Any]] | None = None) -> list[Any]:
-    local_entries = dedupe_local_entries_by_exchange_hash(load_entries(repo_root))
+    local_entries = dedupe_local_entries_by_exchange_hash(load_current_model_entries(repo_root)[0])
     if not organization_sources:
         return local_entries
     blocked_hashes = blocked_organization_download_hashes(repo_root)
@@ -281,7 +300,7 @@ def _load_entries_for_detail(
     *,
     prefer_source_info: dict[str, Any] | None = None,
 ) -> list[Any]:
-    local_entries = load_entries(repo_root)
+    local_entries = load_current_model_entries(repo_root)[0]
     organization_entries = _load_organization_entries_from_sources(organization_sources)
     if (prefer_source_info or {}).get("kind") == "organization":
         return [*organization_entries, *local_entries]
@@ -366,6 +385,18 @@ def build_card_detail_payload(
         data = localized_entry(entry.data, normalized_language)
         summary = summarize_entry(entry, repo_root, language=normalized_language)
         is_local_entry = summary.get("source_info", {}).get("kind") != "organization"
+        logicguard_context = (
+            read_bound_argument_context(
+                repo_root,
+                binding_from_projection(raw_data),
+                hop_limit=1,
+                node_limit=80,
+                edge_limit=160,
+                model_limit=12,
+            )
+            if is_local_entry
+            else None
+        )
         dependencies = extract_skill_dependencies(raw_data)
         registry = _merged_skill_registry(organization_sources)
         return {
@@ -377,6 +408,7 @@ def build_card_detail_payload(
             "source": data.get("source"),
             "updated_at": data.get("updated_at"),
             "raw": raw_data,
+            "logicguard": logicguard_context,
             "skill_dependencies": annotate_dependencies_with_registry_status(
                 dependencies,
                 registry,
@@ -388,7 +420,7 @@ def build_card_detail_payload(
 
 
 def build_overview_payload(repo_root: Path) -> dict[str, Any]:
-    entries = load_entries(repo_root)
+    entries = load_current_model_entries(repo_root)[0]
     status_counts: dict[str, int] = {}
     scope_counts: dict[str, int] = {}
     type_counts: dict[str, int] = {}

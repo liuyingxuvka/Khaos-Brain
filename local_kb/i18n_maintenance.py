@@ -6,7 +6,8 @@ from typing import Any
 from local_kb.common import normalize_string_list, parse_route_segments
 from local_kb.consolidate_events import ACTION_BASE_SCORES, APPLY_MODE_I18N_ZH_CN
 from local_kb.i18n import ZH_CN, has_route_segment_label, missing_i18n_fields, normalize_language
-from local_kb.store import load_entries, load_yaml_file
+from local_kb.model_maintenance import load_current_model_entries
+from local_kb.store import load_yaml_file
 
 
 def _entry_route_refs(data: dict[str, Any]) -> list[str]:
@@ -27,7 +28,7 @@ def collect_route_segment_label_gaps(repo_root: Path, language: str = ZH_CN) -> 
         return []
 
     gaps: dict[str, dict[str, set[str]]] = {}
-    for entry in load_entries(repo_root):
+    for entry in load_current_model_entries(repo_root)[0]:
         data = entry.data
         entry_id = str(data.get("id") or entry.path.stem).strip()
         route_refs = _entry_route_refs(data)
@@ -110,7 +111,7 @@ def build_i18n_actions(repo_root: Path, language: str = ZH_CN) -> list[dict[str,
         return []
 
     actions: list[dict[str, Any]] = []
-    for entry in load_entries(repo_root):
+    for entry in load_current_model_entries(repo_root)[0]:
         data = entry.data
         entry_id = str(data.get("id") or entry.path.stem).strip()
         if not entry_id:

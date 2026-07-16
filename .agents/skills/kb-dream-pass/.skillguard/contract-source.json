@@ -1,0 +1,316 @@
+{
+  "schema_version": "skillguard.contract_source.v2",
+  "skill_id": "kb-dream-pass",
+  "model_id": "khaos-brain.kb-dream-pass.executable-contract.v2",
+  "model_path": ".flowguard/kb_dream_skill_contract_model.py",
+  "confirmed": true,
+  "release_eligible": false,
+  "implementation_paths": [
+    ".agents/skills/kb-dream-pass",
+    ".flowguard/kb_dream_skill_contract_model.py",
+    ".agents/skills/local-kb-retrieve/scripts/kb_dream.py",
+    "local_kb/dream.py",
+    "local_kb/lifecycle.py",
+    "local_kb/logicguard_models.py",
+    "local_kb/model_projection.py",
+    "local_kb/model_maintenance.py",
+    "local_kb/maintenance_lanes.py",
+    "tests/test_kb_dream.py",
+    "tests/test_khaos_logicguard_models.py",
+    "tests/test_process_control.py",
+    "local_kb/automation_contracts.py",
+    "local_kb/automation_runtime.py",
+    "local_kb/process_control.py",
+    "local_kb/install.py",
+    "scripts/build_kb_automation_skillguard_contracts.py",
+    "scripts/check_kb_automation_run_receipt.py",
+    "scripts/check_kb_skillguard.py",
+    "scripts/run_kb_guarded_automation.py",
+    "tests/test_kb_automation_skillguard.py"
+  ],
+  "projection_consumers": [
+    {
+      "consumer_id": "projection:kb-dream-pass:target-runtime-sources",
+      "kind": "target_runtime_source",
+      "input_selectors": [
+        {
+          "kind": "role",
+          "role": "runtime_source"
+        }
+      ]
+    },
+    {
+      "consumer_id": "projection:kb-dream-pass:target-tests",
+      "kind": "target_test_source",
+      "input_selectors": [
+        {
+          "kind": "role",
+          "role": "test_dev"
+        }
+      ]
+    }
+  ],
+  "step_bindings": [
+    {
+      "step_id": "step:kb-dream-pass:intake",
+      "action": {
+        "kind": "inventory",
+        "summary": "Load the target-owned inputs and prove every intake obligation before mutation."
+      },
+      "check_ids": [
+        "check:kb-dream-pass:intake-runtime"
+      ],
+      "output_artifact_ids": []
+    },
+    {
+      "step_id": "step:kb-dream-pass:execute",
+      "action": {
+        "kind": "native",
+        "summary": "Run the native automation owner through every declared execution branch."
+      },
+      "check_ids": [
+        "check:kb-dream-pass:native-runtime"
+      ],
+      "output_artifact_ids": [
+        "artifact:kb-dream-pass:native-receipt"
+      ]
+    },
+    {
+      "step_id": "step:kb-dream-pass:verify",
+      "action": {
+        "kind": "validator",
+        "summary": "Require the current terminal receipt plus positive and shallow target-owned checks before closure."
+      },
+      "check_ids": [
+        "check:kb-dream-pass:terminal-runtime",
+        "check:kb-dream-pass:depth-positive",
+        "check:kb-dream-pass:depth-shallow"
+      ],
+      "output_artifact_ids": []
+    }
+  ],
+  "checks": [
+    {
+      "check_id": "check:kb-dream-pass:intake-runtime",
+      "kind": "command",
+      "evidence_class": "hard",
+      "covers_obligation_ids": [
+        "obligation:kb-dream-pass:lane-evidence-intake"
+      ],
+      "timeout_seconds": 120,
+      "command": "python",
+      "args": [
+        "scripts/check_kb_automation_run_receipt.py",
+        "--skill",
+        "kb-dream-pass",
+        "--phase",
+        "intake",
+        "--json"
+      ],
+      "cwd_token": "repository_root",
+      "expected": {
+        "exit_code": 0
+      }
+    },
+    {
+      "check_id": "check:kb-dream-pass:native-runtime",
+      "kind": "command",
+      "evidence_class": "hard",
+      "covers_obligation_ids": [
+        "obligation:kb-dream-pass:stable-fingerprint",
+        "obligation:kb-dream-pass:bounded-selection",
+        "obligation:kb-dream-pass:sandbox-experiment",
+        "obligation:kb-dream-pass:exact-model-simulation",
+        "obligation:kb-dream-pass:no-delta-closure",
+        "obligation:kb-dream-pass:typed-handoff-once"
+      ],
+      "timeout_seconds": 120,
+      "command": "python",
+      "args": [
+        "scripts/check_kb_automation_run_receipt.py",
+        "--skill",
+        "kb-dream-pass",
+        "--phase",
+        "execute",
+        "--json"
+      ],
+      "cwd_token": "repository_root",
+      "expected": {
+        "exit_code": 0
+      }
+    },
+    {
+      "check_id": "check:kb-dream-pass:terminal-runtime",
+      "kind": "command",
+      "evidence_class": "hard",
+      "covers_obligation_ids": [
+        "obligation:kb-dream-pass:no-direct-knowledge-write",
+        "obligation:kb-dream-pass:canonical-generation-unchanged",
+        "obligation:kb-dream-pass:terminal-receipt",
+        "obligation:kb-dream-pass:timeout-tree-cleanup"
+      ],
+      "timeout_seconds": 120,
+      "command": "python",
+      "args": [
+        "scripts/check_kb_automation_run_receipt.py",
+        "--skill",
+        "kb-dream-pass",
+        "--phase",
+        "verify",
+        "--json"
+      ],
+      "cwd_token": "repository_root",
+      "expected": {
+        "exit_code": 0
+      }
+    },
+    {
+      "check_id": "check:kb-dream-pass:depth-positive",
+      "kind": "command",
+      "evidence_class": "hard",
+      "covers_obligation_ids": [
+        "obligation:kb-dream-pass:depth-calibration"
+      ],
+      "timeout_seconds": 300,
+      "command": "python",
+      "args": [
+        "scripts/check_kb_automation_run_receipt.py",
+        "--skill",
+        "kb-dream-pass",
+        "--phase",
+        "all",
+        "--fixture",
+        "positive",
+        "--json"
+      ],
+      "cwd_token": "repository_root",
+      "expected": {
+        "exit_code": 0
+      },
+      "native_route_id": "route:kb-dream-pass:run",
+      "evidence_domain_id": "target:kb-dream-pass:fixture-calibration"
+    },
+    {
+      "check_id": "check:kb-dream-pass:depth-shallow",
+      "kind": "command",
+      "evidence_class": "hard",
+      "covers_obligation_ids": [
+        "obligation:kb-dream-pass:depth-calibration"
+      ],
+      "timeout_seconds": 300,
+      "command": "python",
+      "args": [
+        "scripts/check_kb_automation_run_receipt.py",
+        "--skill",
+        "kb-dream-pass",
+        "--phase",
+        "all",
+        "--fixture",
+        "shallow",
+        "--json"
+      ],
+      "cwd_token": "repository_root",
+      "expected": {
+        "exit_code": 0
+      },
+      "native_route_id": "route:kb-dream-pass:run",
+      "evidence_domain_id": "target:kb-dream-pass:fixture-calibration"
+    }
+  ],
+  "artifacts": [
+    {
+      "artifact_id": "artifact:kb-dream-pass:native-receipt",
+      "kind": "native_output",
+      "producer_step_id": "step:kb-dream-pass:execute",
+      "validators": [
+        "immutable-receipt",
+        "run-id-bound",
+        "receipt-hash-bound",
+        "target-owned-native-output"
+      ],
+      "validator_check_ids": [
+        "check:kb-dream-pass:intake-runtime",
+        "check:kb-dream-pass:native-runtime",
+        "check:kb-dream-pass:terminal-runtime"
+      ],
+      "covers_obligation_ids": [
+        "obligation:kb-dream-pass:lane-evidence-intake",
+        "obligation:kb-dream-pass:stable-fingerprint",
+        "obligation:kb-dream-pass:bounded-selection",
+        "obligation:kb-dream-pass:sandbox-experiment",
+        "obligation:kb-dream-pass:exact-model-simulation",
+        "obligation:kb-dream-pass:no-delta-closure",
+        "obligation:kb-dream-pass:typed-handoff-once",
+        "obligation:kb-dream-pass:no-direct-knowledge-write",
+        "obligation:kb-dream-pass:canonical-generation-unchanged",
+        "obligation:kb-dream-pass:terminal-receipt",
+        "obligation:kb-dream-pass:timeout-tree-cleanup"
+      ],
+      "claim_boundary": "This witness binds the immutable target-owned native receipt to its exact run, checks, and non-calibration native obligations; it does not prove post-run finalization."
+    }
+  ],
+  "closure_profiles": [
+    {
+      "profile_id": "enforced",
+      "required_obligation_ids": [
+        "obligation:kb-dream-pass:lane-evidence-intake",
+        "obligation:kb-dream-pass:stable-fingerprint",
+        "obligation:kb-dream-pass:bounded-selection",
+        "obligation:kb-dream-pass:sandbox-experiment",
+        "obligation:kb-dream-pass:exact-model-simulation",
+        "obligation:kb-dream-pass:no-delta-closure",
+        "obligation:kb-dream-pass:typed-handoff-once",
+        "obligation:kb-dream-pass:no-direct-knowledge-write",
+        "obligation:kb-dream-pass:canonical-generation-unchanged",
+        "obligation:kb-dream-pass:terminal-receipt",
+        "obligation:kb-dream-pass:timeout-tree-cleanup",
+        "obligation:kb-dream-pass:depth-calibration"
+      ]
+    }
+  ],
+  "judgment_rubrics": [],
+  "depth_profile": {
+    "schema_version": "skillguard.depth_profile.v2",
+    "profile_id": "profile:kb-dream-pass:declared-check-supervision",
+    "target_skill_id": "kb-dream-pass",
+    "integration_mode": "native-integrated",
+    "native_owner_id": "kb-dream-pass",
+    "native_route_ids": [
+      "route:kb-dream-pass:run"
+    ],
+    "native_check_ids": [
+      "check:kb-dream-pass:intake-runtime",
+      "check:kb-dream-pass:native-runtime",
+      "check:kb-dream-pass:terminal-runtime",
+      "check:kb-dream-pass:depth-positive",
+      "check:kb-dream-pass:depth-shallow"
+    ],
+    "skillguard_adds_domain_route": false,
+    "enforcement_level": "enforced",
+    "required_closure_profiles": [
+      "enforced"
+    ],
+    "provider_runtime": {
+      "provider_id": "skillguard-local-provider",
+      "required_runtime_contract_id": "skillguard-declared-check-supervision-current",
+      "required_capability_ids": [
+        "declared-check-inventory.v1",
+        "declared-check-receipt-reconciliation.v1",
+        "installation-receipt-binding.v1",
+        "installation-currentness-replay.v1",
+        "provider-runtime-enrollment.v1",
+        "single-flight-check-execution.v1"
+      ],
+      "required_enrollment_status": "enrolled",
+      "readiness_check_ids": [
+        "check:kb-dream-pass:intake-runtime",
+        "check:kb-dream-pass:native-runtime",
+        "check:kb-dream-pass:terminal-runtime",
+        "check:kb-dream-pass:depth-positive",
+        "check:kb-dream-pass:depth-shallow"
+      ]
+    },
+    "claim_boundary": "Only exact current receipts for the target skill's declared checks are supervised. The target skill retains all domain judgment, including positive/shallow behavior and conditional update finalization."
+  },
+  "claim_boundary": "SkillGuard supervises the complete native kb-dream-pass route, all target-specific obligations, and the sole current enforced closure. It cannot create a parallel executor or certify future runs."
+}

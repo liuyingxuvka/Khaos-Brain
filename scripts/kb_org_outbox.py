@@ -23,6 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build organization KB contribution outbox files.")
     parser.add_argument("--repo-root", default="auto")
     parser.add_argument("--organization-id", default="")
+    parser.add_argument("--run-id", default="")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(
         "--automation",
@@ -58,6 +59,7 @@ def main() -> None:
             remote=args.remote,
             base_branch=args.base_branch,
             record_postflight=not args.no_postflight,
+            run_id=args.run_id,
         )
         print_json(result)
         if not result.get("ok"):

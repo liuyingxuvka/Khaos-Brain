@@ -13,10 +13,20 @@ from local_kb.ui_data import (
     build_skill_registry_payload,
     build_source_view_payload,
 )
+from tests.current_runtime_helpers import activate_current_kb_runtime
 
 
 class MultiSourceSearchTests(unittest.TestCase):
-    def _write_card(self, path: Path, entry_id: str, title: str, route: list[str], *, status: str = "trusted") -> None:
+    def _write_card(
+        self,
+        path: Path,
+        entry_id: str,
+        title: str,
+        route: list[str],
+        *,
+        status: str = "trusted",
+        retrieval_eligible: bool = False,
+    ) -> None:
         write_yaml_file(
             path,
             {
@@ -25,6 +35,7 @@ class MultiSourceSearchTests(unittest.TestCase):
                 "type": "model",
                 "scope": "public",
                 "status": status,
+                "retrieval_eligible": retrieval_eligible,
                 "confidence": 0.9,
                 "domain_path": route,
                 "tags": ["shared", "organization"],
@@ -42,7 +53,8 @@ class MultiSourceSearchTests(unittest.TestCase):
             root = Path(tmp)
             org = root / "org"
             self._write_card(root / "kb" / "public" / "local.yaml", "local-card", "Local shared card", ["shared"])
-            self._write_card(org / "kb" / "trusted" / "org.yaml", "org-card", "Organization shared card", ["shared"])
+            self._write_card(org / "kb" / "main" / "org.yaml", "org-card", "Organization shared card", ["shared"])
+            activate_current_kb_runtime(root)
 
             results = search_multi_source_entries(
                 root,
@@ -66,7 +78,8 @@ class MultiSourceSearchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             org = root / "org"
-            self._write_card(org / "kb" / "trusted" / "org.yaml", "org-card", "Organization shared card", ["shared"])
+            self._write_card(org / "kb" / "main" / "org.yaml", "org-card", "Organization shared card", ["shared"])
+            activate_current_kb_runtime(root)
 
             payload = build_search_payload(
                 root,
@@ -77,6 +90,33 @@ class MultiSourceSearchTests(unittest.TestCase):
 
         self.assertEqual(payload["results"][0]["id"], "org-card")
         self.assertEqual(payload["results"][0]["source_info"]["kind"], "organization")
+
+    def test_normal_runtime_blocks_any_obsolete_organization_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            org = root / "org"
+            self._write_card(
+                org / "kb" / "main" / "current.yaml",
+                "current-card",
+                "Current organization card",
+                ["shared"],
+            )
+            self._write_card(
+                org / "kb" / "trusted" / "obsolete.yaml",
+                "obsolete-card",
+                "Obsolete organization card",
+                ["shared"],
+            )
+            activate_current_kb_runtime(root)
+
+            with self.assertRaisesRegex(RuntimeError, "obsolete runtime roots"):
+                build_search_payload(
+                    root,
+                    query="organization card",
+                    organization_sources=[
+                        {"path": str(org), "organization_id": "sandbox"}
+                    ],
+                )
 
     def test_organization_reads_only_main_active_statuses_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -89,6 +129,7 @@ class MultiSourceSearchTests(unittest.TestCase):
                 "Organization candidate card",
                 ["shared"],
                 status="candidate",
+                retrieval_eligible=True,
             )
             rejected = {
                 "id": "rejected-card",
@@ -107,6 +148,7 @@ class MultiSourceSearchTests(unittest.TestCase):
             }
             write_yaml_file(org / "kb" / "main" / "rejected.yaml", rejected)
             self._write_card(org / "kb" / "imports" / "import.yaml", "import-card", "Organization import card", ["shared"])
+            activate_current_kb_runtime(root)
 
             payload = build_search_payload(
                 root,
@@ -121,13 +163,53 @@ class MultiSourceSearchTests(unittest.TestCase):
         self.assertNotIn("rejected-card", result_ids)
         self.assertNotIn("import-card", result_ids)
 
+    def test_untrusted_organization_candidate_is_visible_without_leaking_local_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            org = root / "org"
+            self._write_card(
+                root / "kb" / "candidates" / "local.yaml",
+                "local-ineligible",
+                "Local boundary candidate signal",
+                ["shared"],
+                status="candidate",
+                retrieval_eligible=False,
+            )
+            self._write_card(
+                org / "kb" / "main" / "org.yaml",
+                "organization-untrusted",
+                "Organization boundary candidate signal",
+                ["shared"],
+                status="candidate",
+                retrieval_eligible=False,
+            )
+            activate_current_kb_runtime(root)
+
+            payload = render_search_payload(
+                search_multi_source_entries(
+                    root,
+                    query="boundary candidate signal",
+                    path_hint="shared",
+                    top_k=5,
+                    organization_sources=[
+                        {"path": str(org), "organization_id": "sandbox"}
+                    ],
+                ),
+                root,
+            )
+
+        self.assertEqual([item["id"] for item in payload], ["organization-untrusted"])
+        self.assertEqual(payload[0]["trust_label"], "untrusted-candidate")
+        self.assertTrue(payload[0]["source_info"]["read_only"])
+
     def test_route_and_source_views_include_organization_sources_when_connected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             org = root / "org"
             self._write_card(root / "kb" / "public" / "local.yaml", "local-card", "Local shared card", ["shared"])
-            self._write_card(org / "kb" / "trusted" / "org.yaml", "org-card", "Organization shared card", ["shared"])
+            self._write_card(org / "kb" / "main" / "org.yaml", "org-card", "Organization shared card", ["shared"])
             sources = [{"path": str(org), "organization_id": "sandbox"}]
+            activate_current_kb_runtime(root)
 
             route_payload = build_route_view_payload(root, route="shared", organization_sources=sources)
             local_payload = build_source_view_payload(root, "local", organization_sources=sources)
@@ -141,7 +223,8 @@ class MultiSourceSearchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             org = root / "org"
-            self._write_card(org / "kb" / "trusted" / "org.yaml", "org-card", "Organization shared card", ["shared"])
+            self._write_card(org / "kb" / "main" / "org.yaml", "org-card", "Organization shared card", ["shared"])
+            activate_current_kb_runtime(root)
             search_payload = build_search_payload(
                 root,
                 query="shared organization",
@@ -168,7 +251,8 @@ class MultiSourceSearchTests(unittest.TestCase):
             root = Path(tmp)
             org = root / "org"
             self._write_card(root / "kb" / "candidates" / "adopted" / "sandbox" / "org-card.yaml", "org-card", "Local adopted copy", ["shared"])
-            self._write_card(org / "kb" / "trusted" / "org.yaml", "org-card", "Organization shared card", ["shared"])
+            self._write_card(org / "kb" / "main" / "org.yaml", "org-card", "Organization shared card", ["shared"])
+            activate_current_kb_runtime(root)
             search_payload = build_search_payload(
                 root,
                 query="shared organization",
@@ -197,7 +281,7 @@ class MultiSourceSearchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             org = root / "org"
-            self._write_card(org / "kb" / "trusted" / "org.yaml", "org-card", "Organization shared card", ["shared"])
+            self._write_card(org / "kb" / "main" / "org.yaml", "org-card", "Organization shared card", ["shared"])
             write_yaml_file(
                 org / "skills" / "registry.yaml",
                 {
@@ -213,6 +297,7 @@ class MultiSourceSearchTests(unittest.TestCase):
                 },
             )
             sources = [{"path": str(org), "organization_id": "sandbox"}]
+            activate_current_kb_runtime(root)
 
             detail = build_card_detail_payload(
                 root,

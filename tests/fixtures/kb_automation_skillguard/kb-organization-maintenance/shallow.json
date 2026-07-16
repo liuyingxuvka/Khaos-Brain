@@ -1,0 +1,22 @@
+{
+  "case_id": "case:kb-organization-maintenance:shallow-automation-depth",
+  "important_gap_obligation_id": "obligation:kb-organization-maintenance:merge-split-decisions",
+  "mode": "target-native-important-obligation-gap",
+  "native_evaluator_id": "local_kb.automation_runtime.evaluate_native_payload",
+  "native_receipt_origin": "calibration-fixture",
+  "schema_version": "khaos-brain.target-native-depth-calibration.v1",
+  "skill_id": "kb-organization-maintenance",
+  "target_obligation_ids": [
+    "obligation:kb-organization-maintenance:settings-participation-gate",
+    "obligation:kb-organization-maintenance:manifest-git-preflight",
+    "obligation:kb-organization-maintenance:card-candidate-intake",
+    "obligation:kb-organization-maintenance:card-decision-coverage",
+    "obligation:kb-organization-maintenance:merge-split-decisions",
+    "obligation:kb-organization-maintenance:skill-safety-version",
+    "obligation:kb-organization-maintenance:exact-selected-apply",
+    "obligation:kb-organization-maintenance:postapply-merge-readiness",
+    "obligation:kb-organization-maintenance:postflight-terminal",
+    "obligation:kb-organization-maintenance:timeout-tree-cleanup",
+    "obligation:kb-organization-maintenance:depth-calibration"
+  ]
+}

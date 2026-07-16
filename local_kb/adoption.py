@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from local_kb.card_ids import new_card_id
+from local_kb.model_maintenance import load_current_model_entries, publish_sleep_model_generation
 from local_kb.models import Entry
 from local_kb.org_sources import utc_timestamp
 from local_kb.skill_sharing import (
@@ -17,11 +18,24 @@ from local_kb.skill_sharing import (
     install_imported_skill_bundle_version,
     resolve_skill_bundle_source_dir,
 )
-from local_kb.store import load_entries, load_organization_entries, load_yaml_file, write_yaml_file
+from local_kb.store import load_organization_entries, load_yaml_file
 
 
 ADOPTION_KEY = "organization_adoption"
 EXCHANGE_LEDGER_RELATIVE_PATH = Path(".local") / "organization_exchange_hashes.json"
+MODEL_PROJECTION_METADATA_KEYS = {
+    "projection_schema_version",
+    "projection_digest",
+    "authority_generation_id",
+    "authority_scope",
+    "logicguard_model_id",
+    "logicguard_node_id",
+    "logicguard_block_id",
+    "logicguard_revision_id",
+    "logicguard_mesh_id",
+    "logicguard_mesh_revision_id",
+    "logicguard_open_role_gaps",
+}
 EXCHANGE_HASH_IGNORED_KEYS = {
     ADOPTION_KEY,
     "organization_proposal",
@@ -33,6 +47,8 @@ EXCHANGE_HASH_IGNORED_KEYS = {
     "updated_at",
     "created_at",
     "i18n",
+    "related_cards",
+    *MODEL_PROJECTION_METADATA_KEYS,
 }
 EXCHANGE_HASH_ORDER_INSENSITIVE_KEYS = {
     "cross_index",
@@ -70,7 +86,10 @@ def _exchange_hash_payload(value: Any, *, key: str = "", top_level: bool = True)
             text_key = str(item_key)
             if top_level and text_key in EXCHANGE_HASH_IGNORED_KEYS:
                 continue
-            normalized[text_key] = _exchange_hash_payload(item_value, key=text_key, top_level=False)
+            normalized_value = _exchange_hash_payload(item_value, key=text_key, top_level=False)
+            if normalized_value in ({}, [], "", None):
+                continue
+            normalized[text_key] = normalized_value
         return normalized
     if isinstance(value, list):
         items = [_exchange_hash_payload(item, key=key, top_level=False) for item in value]
@@ -177,7 +196,10 @@ def adoption_content_hash(data: dict[str, Any]) -> str:
     payload = copy.deepcopy(data)
     payload.pop(ADOPTION_KEY, None)
     payload.pop("id", None)
-    payload = _json_safe(payload)
+    payload.pop("related_cards", None)
+    for field in MODEL_PROJECTION_METADATA_KEYS:
+        payload.pop(field, None)
+    payload = _exchange_hash_payload(payload, top_level=False)
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -213,7 +235,7 @@ def organization_key_from_entry(entry: Entry) -> tuple[str, str, str]:
 
 def adopted_organization_keys(repo_root: Path) -> set[tuple[str, str, str]]:
     keys: set[tuple[str, str, str]] = set()
-    for entry in load_entries(repo_root):
+    for entry in load_current_model_entries(repo_root)[0]:
         key = adoption_key_from_data(entry.data)
         if key[0] and key[1]:
             keys.add(key)
@@ -223,7 +245,7 @@ def adopted_organization_keys(repo_root: Path) -> set[tuple[str, str, str]]:
 
 def local_exchange_hashes(repo_root: Path) -> set[str]:
     hashes: set[str] = set()
-    for entry in load_entries(repo_root):
+    for entry in load_current_model_entries(repo_root)[0]:
         hashes.add(card_exchange_hash(entry.data))
     return hashes
 
@@ -257,7 +279,11 @@ def dedupe_local_entries_by_exchange_hash(entries: list[Entry]) -> list[Entry]:
 
 
 def find_local_entry_by_exchange_hash(repo_root: Path, content_hash: str) -> Entry | None:
-    matches = [entry for entry in load_entries(repo_root) if card_exchange_hash(entry.data) == content_hash]
+    matches = [
+        entry
+        for entry in load_current_model_entries(repo_root)[0]
+        if card_exchange_hash(entry.data) == content_hash
+    ]
     if not matches:
         return None
     return sorted(matches, key=_local_preference_rank)[0]
@@ -276,7 +302,7 @@ def find_adopted_entry_by_source(
     source_exchange_hash: str = "",
 ) -> Entry | None:
     matches: list[Entry] = []
-    for entry in load_entries(repo_root):
+    for entry in load_current_model_entries(repo_root)[0]:
         metadata = entry.data.get(ADOPTION_KEY) if isinstance(entry.data.get(ADOPTION_KEY), dict) else {}
         if str(metadata.get("organization_id") or "").strip() != str(organization_id or "").strip():
             continue
@@ -356,7 +382,17 @@ def adopt_organization_entry(repo_root: Path, entry: Entry) -> dict[str, Any]:
             }
         )
         existing[ADOPTION_KEY] = metadata
-        write_yaml_file(target_path, existing)
+        publication = publish_sleep_model_generation(
+            repo_root,
+            reason="organization-adoption-metadata-update",
+            card_upserts={target_path.relative_to(repo_root).as_posix(): existing},
+        )
+        if not publication.get("ok"):
+            return {
+                "ok": False,
+                "error": str(publication.get("error") or publication.get("status")),
+                "model_generation": publication,
+            }
         record_exchange_hash(
             repo_root,
             source_exchange_hash,
@@ -367,6 +403,11 @@ def adopt_organization_entry(repo_root: Path, entry: Entry) -> dict[str, Any]:
             local_path=str(target_path),
             entry_id=str(existing.get("id") or target_path.stem),
         )
+        active_index_receipt = (
+            publication.get("receipt", {}).get("index_receipt", {})
+            if publication.get("status") == "committed"
+            else publication.get("index_receipt", {})
+        )
         return {
             "ok": True,
             "created": False,
@@ -375,6 +416,7 @@ def adopt_organization_entry(repo_root: Path, entry: Entry) -> dict[str, Any]:
             "state": adoption_state(existing),
             "hit_count": metadata["hit_count"],
             "installed_skill_bundles": installed_skill_bundles,
+            "active_index_receipt": active_index_receipt,
         }
 
     existing_local = find_local_entry_by_exchange_hash(repo_root, source_exchange_hash)
@@ -422,7 +464,17 @@ def adopt_organization_entry(repo_root: Path, entry: Entry) -> dict[str, Any]:
         "state": "clean",
     }
     target_path = adopted_card_path(repo_root, organization_id, str(payload["id"]))
-    write_yaml_file(target_path, payload)
+    publication = publish_sleep_model_generation(
+        repo_root,
+        reason="organization-adoption-created",
+        card_upserts={target_path.relative_to(repo_root).as_posix(): payload},
+    )
+    if not publication.get("ok"):
+        return {
+            "ok": False,
+            "error": str(publication.get("error") or publication.get("status")),
+            "model_generation": publication,
+        }
     installed_skill_bundles = adopt_entry_skill_bundles(repo_root, entry, source_card_id=str(payload["id"]))
     record_exchange_hash(
         repo_root,
@@ -434,6 +486,11 @@ def adopt_organization_entry(repo_root: Path, entry: Entry) -> dict[str, Any]:
         local_path=str(target_path),
         entry_id=str(payload["id"]),
     )
+    active_index_receipt = (
+        publication.get("receipt", {}).get("index_receipt", {})
+        if publication.get("status") == "committed"
+        else publication.get("index_receipt", {})
+    )
     return {
         "ok": True,
         "created": True,
@@ -443,6 +500,7 @@ def adopt_organization_entry(repo_root: Path, entry: Entry) -> dict[str, Any]:
         "hit_count": 1,
         "source_exchange_hash": source_exchange_hash,
         "installed_skill_bundles": installed_skill_bundles,
+        "active_index_receipt": active_index_receipt,
     }
 
 

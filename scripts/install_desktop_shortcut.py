@@ -16,7 +16,11 @@ if str(SCRIPT_REPO_ROOT) not in sys.path:
 
 from local_kb.cli_output import machine_json_text, print_json, print_text  # noqa: E402
 from local_kb.config import resolve_repo_root  # noqa: E402
-from scripts.open_khaos_brain_ui import _exe_candidates, _pythonw_executable  # noqa: E402
+from scripts.open_khaos_brain_ui import (  # noqa: E402
+    RELEASE_RUNTIME,
+    SOURCE_RUNTIME,
+    _launch_command,
+)
 
 
 DEFAULT_SHORTCUT_NAME = "Khaos Brain.lnk"
@@ -26,33 +30,23 @@ def _desktop_dir() -> Path:
     return Path.home() / "Desktop"
 
 
-def _target_and_arguments(repo_root: Path, *, prefer_python: bool, language: str) -> tuple[Path, str]:
-    if not prefer_python:
-        for exe_path in _exe_candidates(repo_root):
-            if exe_path.exists():
-                args = [f'--repo-root "{repo_root}"']
-                if language:
-                    args.append(f'--language "{language}"')
-                return exe_path, " ".join(args)
-
-    args = [f'"{repo_root / "scripts" / "kb_desktop.py"}"', f'--repo-root "{repo_root}"']
-    if language:
-        args.append(f'--language "{language}"')
-    return _pythonw_executable(), " ".join(args)
+def _target_and_arguments(repo_root: Path, *, runtime: str, language: str) -> tuple[Path, str]:
+    _mode, command = _launch_command(repo_root, runtime=runtime, language=language)
+    return Path(command[0]), subprocess.list2cmdline(command[1:])
 
 
 def create_shortcut(
     repo_root: Path,
     *,
     shortcut_name: str = DEFAULT_SHORTCUT_NAME,
-    prefer_python: bool = False,
+    runtime: str,
     language: str = "",
 ) -> dict[str, Any]:
     if sys.platform != "win32":
         raise SystemExit("Desktop shortcut installation is only supported on Windows.")
 
     shortcut_path = _desktop_dir() / shortcut_name
-    target_path, arguments = _target_and_arguments(repo_root, prefer_python=prefer_python, language=language)
+    target_path, arguments = _target_and_arguments(repo_root, runtime=runtime, language=language)
     icon_path = repo_root / "assets" / "khaos-brain.ico"
     icon_location = str(icon_path if icon_path.exists() else target_path)
 
@@ -89,12 +83,17 @@ def main() -> int:
     parser.add_argument("--repo-root", default="auto")
     parser.add_argument("--name", default=DEFAULT_SHORTCUT_NAME)
     parser.add_argument("--language", default="", choices=["", "en", "zh-CN"])
-    parser.add_argument("--prefer-python", action="store_true", help="Create a Python fallback shortcut even when exe exists.")
+    parser.add_argument(
+        "--runtime",
+        required=True,
+        choices=[SOURCE_RUNTIME, RELEASE_RUNTIME],
+        help="Bind the shortcut to exactly one current runtime.",
+    )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
     repo_root = resolve_repo_root(args.repo_root, cwd=SCRIPT_REPO_ROOT)
-    payload = create_shortcut(repo_root, shortcut_name=args.name, prefer_python=args.prefer_python, language=args.language)
+    payload = create_shortcut(repo_root, shortcut_name=args.name, runtime=args.runtime, language=args.language)
     if args.json:
         print_json(payload)
     else:

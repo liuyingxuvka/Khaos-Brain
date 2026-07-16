@@ -18,7 +18,6 @@ import json
 from typing import Iterable
 
 from flowguard import (
-    Explorer,
     FunctionContract,
     FunctionResult,
     Invariant,
@@ -30,6 +29,7 @@ from flowguard import (
     check_trace_contracts,
     run_exact_sequence,
 )
+from flowguard.explorer import Explorer
 
 
 @dataclass(frozen=True)

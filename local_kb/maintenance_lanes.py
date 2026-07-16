@@ -12,7 +12,7 @@ from local_kb.common import utc_now_iso
 
 LANE_STATUS_DIR = Path("kb") / "history" / "lane-status"
 LANE_LOCK_DIR = LANE_STATUS_DIR / "locks"
-CORE_MAINTENANCE_LANES = ("kb-sleep", "kb-dream", "kb-architect")
+CORE_MAINTENANCE_LANES = ("kb-sleep", "kb-dream")
 ORGANIZATION_MAINTENANCE_LANES = ("kb-org-contribute", "kb-org-maintenance")
 MAINTENANCE_LOCK_GROUPS: dict[str, tuple[str, ...]] = {
     "local-maintenance": CORE_MAINTENANCE_LANES,
@@ -80,6 +80,44 @@ def _lock_is_stale(payload: dict[str, Any], *, stale_after_seconds: int) -> bool
     except (TypeError, ValueError):
         return True
     return (time.time() - heartbeat_epoch) > stale_after_seconds
+
+
+def process_owner_is_alive(pid: int) -> bool:
+    """Conservatively determine whether a recorded process owner still exists."""
+
+    if pid <= 0:
+        return False
+    if pid == os.getpid():
+        return True
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            process_query_limited_information = 0x1000
+            handle = ctypes.windll.kernel32.OpenProcess(  # type: ignore[attr-defined]
+                process_query_limited_information, False, int(pid)
+            )
+            if handle:
+                ctypes.windll.kernel32.CloseHandle(handle)  # type: ignore[attr-defined]
+                return True
+            return int(ctypes.windll.kernel32.GetLastError()) == 5  # type: ignore[attr-defined]
+        except (AttributeError, OSError, ValueError):
+            return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except (PermissionError, OSError):
+        return True
+    return True
+
+
+def _lock_owner_is_dead(payload: dict[str, Any]) -> bool:
+    try:
+        pid = int(payload.get("pid") or 0)
+    except (TypeError, ValueError):
+        return False
+    return pid > 0 and not process_owner_is_alive(pid)
 
 
 def _write_lane_lock(
@@ -151,18 +189,39 @@ def acquire_lane_lock(
     lock_dir = lane_lock_dir(repo_root, resolved_group)
     lock_dir.parent.mkdir(parents=True, exist_ok=True)
     waits = 0
+    recovered_lock: dict[str, Any] = {}
+    recovery_reason = ""
     while True:
         try:
             lock_dir.mkdir(parents=True, exist_ok=False)
         except FileExistsError:
             existing = read_lane_lock(repo_root, resolved_group)
-            if existing.get("lane") == lane and (not run_id or existing.get("run_id") in ("", run_id)):
+            owner_dead = _lock_owner_is_dead(existing)
+            if (
+                not owner_dead
+                and existing.get("lane") == lane
+                and (not run_id or existing.get("run_id") in ("", run_id))
+            ):
                 heartbeat = heartbeat_lane_lock(repo_root, lane, run_id=run_id, group=resolved_group, note=note)
                 heartbeat["acquired"] = True
                 heartbeat["reentrant"] = True
                 heartbeat["wait_count"] = waits
                 return heartbeat
-            if not existing or _lock_is_stale(existing, stale_after_seconds=stale_after_seconds):
+            stale = bool(
+                existing
+                and _lock_is_stale(
+                    existing, stale_after_seconds=stale_after_seconds
+                )
+            )
+            if not existing or owner_dead or stale:
+                recovered_lock = dict(existing)
+                recovery_reason = (
+                    "missing-or-invalid-lock"
+                    if not existing
+                    else "dead-owner"
+                    if owner_dead
+                    else "stale-heartbeat"
+                )
                 shutil.rmtree(lock_dir, ignore_errors=True)
                 continue
             blocked = {
@@ -181,6 +240,10 @@ def acquire_lane_lock(
         payload = _write_lane_lock(repo_root, group=resolved_group, lane=lane, run_id=run_id, note=note)
         payload["acquired"] = True
         payload["wait_count"] = waits
+        if recovery_reason:
+            payload["recovered"] = True
+            payload["recovery_reason"] = recovery_reason
+            payload["recovered_lock"] = recovered_lock
         return payload
 
 
@@ -196,12 +259,12 @@ def release_lane_lock(
     lock_dir = lane_lock_dir(repo_root, resolved_group)
     payload = read_lane_lock(repo_root, resolved_group)
     if not payload:
-        return {"group": resolved_group, "lane": lane, "released": False, "reason": "missing"}
+        return {"ok": False, "group": resolved_group, "lane": lane, "released": False, "reason": "missing"}
     owns_lock = payload.get("lane") == lane and (not run_id or payload.get("run_id") in ("", run_id))
     if not owns_lock and not force:
-        return {"group": resolved_group, "lane": lane, "released": False, "reason": "not-owner", "lock": payload}
+        return {"ok": False, "group": resolved_group, "lane": lane, "released": False, "reason": "not-owner", "lock": payload}
     shutil.rmtree(lock_dir, ignore_errors=True)
-    return {"group": resolved_group, "lane": lane, "run_id": run_id, "released": True, "lock": payload}
+    return {"ok": True, "group": resolved_group, "lane": lane, "run_id": run_id, "released": True, "lock": payload}
 
 
 def write_lane_status(
@@ -241,7 +304,14 @@ def reconcile_stale_lane_statuses(
             continue
         group = lane_lock_group(lane)
         lock = read_lane_lock(repo_root, group)
-        if lock and lock.get("lane") == lane and not _lock_is_stale(lock, stale_after_seconds=DEFAULT_STALE_AFTER_SECONDS):
+        if (
+            lock
+            and lock.get("lane") == lane
+            and not _lock_owner_is_dead(lock)
+            and not _lock_is_stale(
+                lock, stale_after_seconds=DEFAULT_STALE_AFTER_SECONDS
+            )
+        ):
             continue
         reconciled.append(
             write_lane_status(
@@ -272,7 +342,13 @@ def build_lane_guard(
     reconcile_stale_lane_statuses(repo_root, lanes=lanes)
     group = lane_lock_group(lane)
     lock = read_lane_lock(repo_root, group)
-    if lock and not _lock_is_stale(lock, stale_after_seconds=DEFAULT_STALE_AFTER_SECONDS):
+    if (
+        lock
+        and not _lock_owner_is_dead(lock)
+        and not _lock_is_stale(
+            lock, stale_after_seconds=DEFAULT_STALE_AFTER_SECONDS
+        )
+    ):
         lock_lane = str(lock.get("lane", "") or "")
         if lock_lane and lock_lane != lane and lock_lane in lanes:
             blockers.append(lock_lane)

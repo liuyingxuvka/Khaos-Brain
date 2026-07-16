@@ -9,7 +9,8 @@ from typing import Any
 
 from local_kb.common import csv_to_list, normalize_string_list, parse_route_segments, slugify
 from local_kb.maintenance import DECISION_EVENT_TYPES
-from local_kb.store import history_events_path, load_entries
+from local_kb.model_maintenance import load_current_model_entries
+from local_kb.store import history_events_path
 
 
 SCHEMA_VERSION = 1
@@ -289,7 +290,11 @@ def normalize_event(raw: dict[str, Any], source_line: int) -> dict[str, Any]:
         "entry_ids": normalize_entry_ids(dream_validation.get("entry_ids", [])),
         "trusted_card_mutation": bool(dream_validation.get("trusted_card_mutation", False)),
         "sleep_handoff": str(dream_validation.get("sleep_handoff", "") or "").strip(),
-        "architect_handoff": str(dream_validation.get("architect_handoff", "") or "").strip(),
+        "system_follow_up": str(
+            dream_validation.get("system_follow_up", "")
+            or dream_validation.get("architect_handoff", "")
+            or ""
+        ).strip(),
         "handoff_action": str(dream_validation.get("handoff_action", "") or "").strip(),
     }
     event["source_agent"] = str(source.get("agent", "") or "").strip()
@@ -1132,7 +1137,7 @@ def summarize_predictive_evidence(events: list[dict[str, Any]]) -> dict[str, Any
 
 
 def build_entry_lookup(repo_root: Path) -> dict[str, dict[str, Any]]:
-    entries = load_entries(repo_root)
+    entries, _generation = load_current_model_entries(repo_root)
     lookup: dict[str, dict[str, Any]] = {}
     for entry in entries:
         entry_id = str(entry.data.get("id", "") or "").strip()
@@ -1142,7 +1147,7 @@ def build_entry_lookup(repo_root: Path) -> dict[str, dict[str, Any]]:
 
 
 def build_entry_path_lookup(repo_root: Path) -> dict[str, Path]:
-    entries = load_entries(repo_root)
+    entries, _generation = load_current_model_entries(repo_root)
     lookup: dict[str, Path] = {}
     for entry in entries:
         entry_id = str(entry.data.get("id", "") or "").strip()

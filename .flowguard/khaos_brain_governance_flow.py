@@ -6,7 +6,7 @@ the older lane/update/i18n models:
 - candidate backlog pressure must reach Sleep review, rejection, watch, or
   promotion decisions instead of only accumulating candidates;
 - Dream validation handoffs must be closed by Sleep or explicitly watched;
-- Architect ready-for-patch work needs an execution outlet or a concrete
+- retained maintenance-change work needs an execution outlet or a concrete
   blocker instead of staying in a permanent patch-plan lane;
 - route drift must be reviewed or normalized before card creation;
 - health rollups must distinguish user-paused organization automations from
@@ -71,8 +71,8 @@ class State:
     trusted_promotion_without_review: bool = False
     dream_handoff_strength: str = "none"
     dream_handoff_status: str = "none"
-    architect_patch_debt: bool = False
-    architect_outlet_status: str = "none"
+    maintenance_change_debt: bool = False
+    maintenance_change_outlet_status: str = "none"
     route_status: str = "clean"
     bad_route_card_created: bool = False
     install_policy_drift: bool = False
@@ -205,59 +205,75 @@ class DreamSleepHandoffBlock:
             return
 
 
-class ArchitectOutletBlock:
+class MaintenanceChangeOutletBlock:
     """Input x State -> Set(Output x State) for ready-for-patch execution outlets."""
 
-    name = "ArchitectOutletBlock"
-    reads = ("architect_patch_debt", "architect_outlet_status")
-    writes = ("architect_patch_debt", "architect_outlet_status")
+    name = "MaintenanceChangeOutletBlock"
+    reads = ("maintenance_change_debt", "maintenance_change_outlet_status")
+    writes = ("maintenance_change_debt", "maintenance_change_outlet_status")
 
     def apply(self, input_obj: Event | StepResult, state: State) -> Iterable[FunctionResult]:
         event = _event_from_input(input_obj)
-        if event.kind == "architect_ready_for_patch":
+        if event.kind == "maintenance_change_ready_for_patch":
             yield FunctionResult(
-                output=StepResult(event, "architect_patch_debt_opened"),
-                new_state=replace(state, architect_patch_debt=True, architect_outlet_status="patch-plan"),
-                label="architect_patch_debt_opened",
+                output=StepResult(event, "maintenance_change_debt_opened"),
+                new_state=replace(
+                    state,
+                    maintenance_change_debt=True,
+                    maintenance_change_outlet_status="patch-plan",
+                ),
+                label="maintenance_change_debt_opened",
                 reason="Ready-for-patch work needs a packet, blocker, or watch decision.",
             )
             return
         yield FunctionResult(
-            output=StepResult(event, "architect_noop"),
+            output=StepResult(event, "maintenance_change_noop"),
             new_state=state,
-            label="architect_noop",
-            reason="Event has no Architect outlet effect.",
+            label="maintenance_change_noop",
+            reason="Event has no maintenance-change outlet effect.",
         )
-        if event.kind == "architect_creates_packet":
+        if event.kind == "maintenance_change_creates_packet":
             yield FunctionResult(
-                output=StepResult(event, "architect_packet_ready"),
-                new_state=replace(state, architect_patch_debt=False, architect_outlet_status="packet"),
-                label="architect_packet_ready",
+                output=StepResult(event, "maintenance_change_packet_ready"),
+                new_state=replace(
+                    state,
+                    maintenance_change_debt=False,
+                    maintenance_change_outlet_status="packet",
+                ),
+                label="maintenance_change_packet_ready",
                 reason="Patch-plan work has a bounded execution packet.",
             )
             return
-        if event.kind == "architect_records_blocker":
+        if event.kind == "maintenance_change_records_blocker":
             yield FunctionResult(
-                output=StepResult(event, "architect_blocker_recorded"),
-                new_state=replace(state, architect_patch_debt=False, architect_outlet_status="blocked"),
-                label="architect_blocker_recorded",
+                output=StepResult(event, "maintenance_change_blocker_recorded"),
+                new_state=replace(
+                    state,
+                    maintenance_change_debt=False,
+                    maintenance_change_outlet_status="blocked",
+                ),
+                label="maintenance_change_blocker_recorded",
                 reason="Patch-plan work cannot proceed and has a concrete blocker.",
             )
             return
-        if event.kind == "architect_applies_packet":
-            status = "applied" if state.architect_outlet_status == "packet" else "unsafe-applied"
+        if event.kind == "maintenance_change_applies_packet":
+            status = "applied" if state.maintenance_change_outlet_status == "packet" else "unsafe-applied"
             yield FunctionResult(
                 output=StepResult(event, status),
-                new_state=replace(state, architect_patch_debt=False, architect_outlet_status=status),
+                new_state=replace(
+                    state,
+                    maintenance_change_debt=False,
+                    maintenance_change_outlet_status=status,
+                ),
                 label=status,
                 reason="Packets may be applied only after the execution outlet exists.",
             )
             return
-        if event.kind == "architect_stalls":
+        if event.kind == "maintenance_change_stalls":
             yield FunctionResult(
-                output=StepResult(event, "architect_patch_stalled"),
-                new_state=replace(state, architect_outlet_status="stalled"),
-                label="architect_patch_stalled",
+                output=StepResult(event, "maintenance_change_stalled"),
+                new_state=replace(state, maintenance_change_outlet_status="stalled"),
+                label="maintenance_change_stalled",
                 reason="Broken path: ready-for-patch work remained without packet or blocker.",
             )
             return
@@ -425,11 +441,13 @@ def dream_handoff_must_close(state: State, trace: object) -> InvariantResult:
     return InvariantResult.pass_()
 
 
-def architect_patch_work_needs_outlet(state: State, trace: object) -> InvariantResult:
-    if state.architect_outlet_status == "unsafe-applied":
-        return InvariantResult.fail("Architect applied work before creating a bounded execution packet.")
-    if _is_terminal_state(state) and (state.architect_patch_debt or state.architect_outlet_status == "stalled"):
-        return InvariantResult.fail("Architect ready-for-patch work ended without a packet, blocker, or closure.")
+def maintenance_change_needs_outlet(state: State, trace: object) -> InvariantResult:
+    if state.maintenance_change_outlet_status == "unsafe-applied":
+        return InvariantResult.fail("Maintenance change was applied before creating a bounded execution packet.")
+    if _is_terminal_state(state) and (
+        state.maintenance_change_debt or state.maintenance_change_outlet_status == "stalled"
+    ):
+        return InvariantResult.fail("Ready-for-patch maintenance work ended without a packet, blocker, or closure.")
     return InvariantResult.pass_()
 
 
@@ -466,9 +484,9 @@ INVARIANTS = (
         dream_handoff_must_close,
     ),
     Invariant(
-        "architect_patch_work_needs_outlet",
-        "Architect ready-for-patch work needs packet, blocker, or closure.",
-        architect_patch_work_needs_outlet,
+        "maintenance_change_needs_outlet",
+        "Ready-for-patch maintenance work needs packet, blocker, or closure.",
+        maintenance_change_needs_outlet,
     ),
     Invariant(
         "route_drift_needs_review_before_card",
@@ -493,8 +511,8 @@ class GovernanceBlock:
         "trusted_promotion_without_review",
         "dream_handoff_strength",
         "dream_handoff_status",
-        "architect_patch_debt",
-        "architect_outlet_status",
+        "maintenance_change_debt",
+        "maintenance_change_outlet_status",
         "route_status",
         "bad_route_card_created",
         "install_policy_drift",
@@ -600,44 +618,60 @@ class GovernanceBlock:
             )
             return
 
-        if kind == "architect_ready_for_patch":
+        if kind == "maintenance_change_ready_for_patch":
             yield FunctionResult(
-                output=StepResult(event, "architect_patch_debt_opened"),
-                new_state=replace(state, architect_patch_debt=True, architect_outlet_status="patch-plan"),
-                label="architect_patch_debt_opened",
+                output=StepResult(event, "maintenance_change_debt_opened"),
+                new_state=replace(
+                    state,
+                    maintenance_change_debt=True,
+                    maintenance_change_outlet_status="patch-plan",
+                ),
+                label="maintenance_change_debt_opened",
                 reason="Ready-for-patch work needs a packet, blocker, or watch decision.",
             )
             return
-        if kind == "architect_creates_packet":
+        if kind == "maintenance_change_creates_packet":
             yield FunctionResult(
-                output=StepResult(event, "architect_packet_ready"),
-                new_state=replace(state, architect_patch_debt=False, architect_outlet_status="packet"),
-                label="architect_packet_ready",
+                output=StepResult(event, "maintenance_change_packet_ready"),
+                new_state=replace(
+                    state,
+                    maintenance_change_debt=False,
+                    maintenance_change_outlet_status="packet",
+                ),
+                label="maintenance_change_packet_ready",
                 reason="Patch-plan work has a bounded execution packet.",
             )
             return
-        if kind == "architect_records_blocker":
+        if kind == "maintenance_change_records_blocker":
             yield FunctionResult(
-                output=StepResult(event, "architect_blocker_recorded"),
-                new_state=replace(state, architect_patch_debt=False, architect_outlet_status="blocked"),
-                label="architect_blocker_recorded",
+                output=StepResult(event, "maintenance_change_blocker_recorded"),
+                new_state=replace(
+                    state,
+                    maintenance_change_debt=False,
+                    maintenance_change_outlet_status="blocked",
+                ),
+                label="maintenance_change_blocker_recorded",
                 reason="Patch-plan work cannot proceed and has a concrete blocker.",
             )
             return
-        if kind == "architect_applies_packet":
-            status = "applied" if state.architect_outlet_status == "packet" else "unsafe-applied"
+        if kind == "maintenance_change_applies_packet":
+            status = "applied" if state.maintenance_change_outlet_status == "packet" else "unsafe-applied"
             yield FunctionResult(
                 output=StepResult(event, status),
-                new_state=replace(state, architect_patch_debt=False, architect_outlet_status=status),
+                new_state=replace(
+                    state,
+                    maintenance_change_debt=False,
+                    maintenance_change_outlet_status=status,
+                ),
                 label=status,
                 reason="Packets may be applied only after the execution outlet exists.",
             )
             return
-        if kind == "architect_stalls":
+        if kind == "maintenance_change_stalls":
             yield FunctionResult(
-                output=StepResult(event, "architect_patch_stalled"),
-                new_state=replace(state, architect_outlet_status="stalled"),
-                label="architect_patch_stalled",
+                output=StepResult(event, "maintenance_change_stalled"),
+                new_state=replace(state, maintenance_change_outlet_status="stalled"),
+                label="maintenance_change_stalled",
                 reason="Broken path: ready-for-patch work remained without packet or blocker.",
             )
             return
@@ -770,9 +804,9 @@ ACCEPTED_SEQUENCE = (
     Event("sleep_reviews_candidates"),
     Event("dream_validates_strong"),
     Event("sleep_reviews_handoff"),
-    Event("architect_ready_for_patch"),
-    Event("architect_creates_packet"),
-    Event("architect_applies_packet"),
+    Event("maintenance_change_ready_for_patch"),
+    Event("maintenance_change_creates_packet"),
+    Event("maintenance_change_applies_packet"),
     Event("route_drift_observed"),
     Event("route_reviewed"),
     Event("route_normalized"),
@@ -792,9 +826,9 @@ MINIMAL_FIX_SEQUENCE = (
     Event("sleep_reviews_candidates"),
     Event("dream_validates_strong"),
     Event("sleep_reviews_handoff"),
-    Event("architect_ready_for_patch"),
-    Event("architect_creates_packet"),
-    Event("architect_applies_packet"),
+    Event("maintenance_change_ready_for_patch"),
+    Event("maintenance_change_creates_packet"),
+    Event("maintenance_change_applies_packet"),
     Event("route_drift_observed"),
     Event("route_reviewed"),
     Event("route_normalized"),
@@ -813,10 +847,13 @@ BAD_SEQUENCES = {
     "dream_handoff_unreviewed": (Event("dream_validates_strong"), Event("finalize_governance")),
     "dream_handoff_dropped": (Event("dream_validates_strong"), Event("sleep_drops_handoff")),
     "weak_dream_promoted": (Event("dream_validates_weak"), Event("promote_dream_handoff")),
-    "architect_ready_for_patch_no_outlet": (Event("architect_ready_for_patch"), Event("finalize_governance")),
-    "architect_ready_for_patch_stalled": (
-        Event("architect_ready_for_patch"),
-        Event("architect_stalls"),
+    "maintenance_change_ready_for_patch_no_outlet": (
+        Event("maintenance_change_ready_for_patch"),
+        Event("finalize_governance"),
+    ),
+    "maintenance_change_ready_for_patch_stalled": (
+        Event("maintenance_change_ready_for_patch"),
+        Event("maintenance_change_stalls"),
         Event("finalize_governance"),
     ),
     "route_drift_card_created": (Event("route_drift_observed"), Event("create_card_from_route")),
@@ -1021,9 +1058,13 @@ def project_live_projection(root: Path = REPO_ROOT) -> dict[str, object]:
     if not isinstance(queue_execution_summary, dict):
         queue_execution_summary = {}
     patch_plan_count = int(queue_execution_summary.get("patch_plan_count") or 0)
-    latest_arch = _latest_dir(root / "kb" / "history" / "architecture" / "runs", "kb-architect-")
-    arch_report = _load_json(latest_arch / "report.json", {}) if latest_arch else {}
-    sandbox_ready_count = int(arch_report.get("sandbox_ready_count") or 0) if isinstance(arch_report, dict) else 0
+    sandbox_ready_count = int(queue_execution_summary.get("sandbox_ready_count") or 0)
+    if sandbox_ready_count == 0:
+        sandbox_ready_count = sum(
+            1
+            for item in queue_items
+            if item.get("sandbox_ready") is True or str(item.get("status") or "") == "ready-for-apply"
+        )
 
     events = list(_iter_history_events(root))
     blank_route_events = sum(1 for event in events if not _event_route_label(event))
@@ -1064,7 +1105,6 @@ def project_live_projection(root: Path = REPO_ROOT) -> dict[str, object]:
     for lane_name, lock_group in (
         ("kb-sleep", "local-maintenance"),
         ("kb-dream", "local-maintenance"),
-        ("kb-architect", "local-maintenance"),
         ("kb-org-contribute", "organization-maintenance"),
         ("kb-org-maintenance", "organization-maintenance"),
     ):
@@ -1135,9 +1175,9 @@ def project_live_projection(root: Path = REPO_ROOT) -> dict[str, object]:
     if queue_status_counts.get("ready-for-patch", 0) > 0 and sandbox_ready_count == 0 and patch_plan_count == 0:
         findings.append(
             {
-                "id": "architect_execution_outlet_gap",
+                "id": "maintenance_change_outlet_gap",
                 "severity": "attention-needed",
-                "message": "Architect has ready-for-patch proposals but no sandbox-ready execution outlet.",
+                "message": "Retained maintenance changes are ready for patching but have no sandbox-ready execution outlet.",
                 "evidence": {
                     "ready_for_patch_count": queue_status_counts.get("ready-for-patch", 0),
                     "ready_for_apply_count": queue_status_counts.get("ready-for-apply", 0),
@@ -1200,7 +1240,6 @@ def project_live_projection(root: Path = REPO_ROOT) -> dict[str, object]:
         "source_artifacts": {
             "latest_sleep_run": str(latest_sleep.relative_to(root)) if latest_sleep else "",
             "latest_dream_run": str(latest_dream.relative_to(root)) if latest_dream else "",
-            "latest_architect_run": str(latest_arch.relative_to(root)) if latest_arch else "",
             "maintenance_rollup": "kb/history/architecture/maintenance_rollup.json",
         },
         "summary_counts": {

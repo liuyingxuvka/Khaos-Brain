@@ -14,6 +14,7 @@ from local_kb.settings import (
 )
 from local_kb.store import write_yaml_file
 from local_kb.ui_data import build_search_payload
+from tests.org_helpers import activate_current_kb_runtime
 
 
 class OrganizationConnectionE2ETests(unittest.TestCase):
@@ -25,8 +26,7 @@ class OrganizationConnectionE2ETests(unittest.TestCase):
                 "schema_version": 1,
                 "organization_id": "sandbox",
                 "kb": {
-                    "trusted_path": "kb/trusted",
-                    "candidates_path": "kb/candidates",
+                    "main_path": "kb/main",
                     "imports_path": "kb/imports",
                 },
                 "skills": {
@@ -36,7 +36,7 @@ class OrganizationConnectionE2ETests(unittest.TestCase):
             },
         )
         write_yaml_file(
-            root / "kb" / "trusted" / "org-card.yaml",
+            root / "kb" / "main" / "trusted" / "org-card.yaml",
             {
                 "id": "org-card",
                 "title": "Organization shared card",
@@ -53,8 +53,6 @@ class OrganizationConnectionE2ETests(unittest.TestCase):
                 "use": {"guidance": "Only appears after validated organization settings are active."},
             },
         )
-        (root / "kb" / "candidates").mkdir(parents=True, exist_ok=True)
-        (root / "kb" / "candidates" / ".gitkeep").write_text("", encoding="utf-8")
         (root / "kb" / "imports").mkdir(parents=True, exist_ok=True)
         (root / "kb" / "imports" / ".gitkeep").write_text("", encoding="utf-8")
         write_yaml_file(root / "skills" / "registry.yaml", {"skills": []})
@@ -86,6 +84,7 @@ class OrganizationConnectionE2ETests(unittest.TestCase):
                     "organization": connection["settings"],
                 },
             )
+            activate_current_kb_runtime(repo)
             organization_settings = load_desktop_settings(repo)
             organization_sources = organization_sources_from_settings(organization_settings)
             organization_payload = build_search_payload(
