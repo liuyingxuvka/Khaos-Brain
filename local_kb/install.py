@@ -1688,11 +1688,14 @@ def _freeze_skillguard_validation_toolchain(
     inherited_digest = os.environ.get(SKILLGUARD_VALIDATION_DIGEST_ENV, "").strip()
     if inherited_root and inherited_digest:
         root = Path(inherited_root).resolve()
+        router_root = root.parent / "skillguard-global-router"
         manifest = tree_manifest(root) if root.is_dir() else {}
+        router_manifest = tree_manifest(router_root) if router_root.is_dir() else {}
         if (
             str(manifest.get("digest") or "") == inherited_digest
             and (root / "scripts" / "skillguard_compile.py").is_file()
             and (root / "scripts" / "skillguard.py").is_file()
+            and (router_root / "SKILL.md").is_file()
         ):
             receipt = {
                 "schema_version": "khaos-brain.skillguard-validation-toolchain.v1",
@@ -1701,6 +1704,9 @@ def _freeze_skillguard_validation_toolchain(
                 "source_root": str(root),
                 "snapshot_root": str(root),
                 "manifest": manifest,
+                "router_source_root": str(router_root),
+                "router_snapshot_root": str(router_root),
+                "router_manifest": router_manifest,
                 "compiler_sha256": _file_sha256(
                     root / "scripts" / "skillguard_compile.py"
                 ),
@@ -1711,6 +1717,10 @@ def _freeze_skillguard_validation_toolchain(
 
     destination = destination.resolve()
     staging = destination.with_name(f".{destination.name}.staging")
+    router_destination = destination.parent / "skillguard-global-router"
+    router_staging = router_destination.with_name(
+        f".{router_destination.name}.staging"
+    )
     last_error = "skillguard_runtime_missing"
     for attempt in range(1, max_attempts + 1):
         source = next(
@@ -1726,10 +1736,18 @@ def _freeze_skillguard_validation_toolchain(
             last_error = "skillguard_runtime_missing"
             time.sleep(0.5)
             continue
+        source_router = source.parent / "skillguard-global-router"
+        if not (source_router / "SKILL.md").is_file():
+            last_error = "skillguard_global_router_runtime_missing"
+            time.sleep(0.5)
+            continue
         try:
             before = tree_manifest(source)
+            router_before = tree_manifest(source_router)
             if staging.exists():
                 shutil.rmtree(staging)
+            if router_staging.exists():
+                shutil.rmtree(router_staging)
             staging.parent.mkdir(parents=True, exist_ok=True)
             shutil.copytree(
                 source,
@@ -1744,20 +1762,41 @@ def _freeze_skillguard_validation_toolchain(
                     "test-results",
                 ),
             )
+            shutil.copytree(
+                source_router,
+                router_staging,
+                ignore=shutil.ignore_patterns(
+                    "__pycache__",
+                    "*.pyc",
+                    "*.pyo",
+                    "runs",
+                    "locks",
+                    "bootstrap",
+                    "test-results",
+                ),
+            )
             after = tree_manifest(source)
+            router_after = tree_manifest(source_router)
             snapshot = tree_manifest(staging)
+            router_snapshot = tree_manifest(router_staging)
             if not (
                 before == after == snapshot
+                and router_before == router_after == router_snapshot
                 and (staging / "scripts" / "skillguard_compile.py").is_file()
                 and (staging / "scripts" / "skillguard.py").is_file()
+                and (router_staging / "SKILL.md").is_file()
             ):
                 last_error = "skillguard_source_changed_during_snapshot"
                 shutil.rmtree(staging, ignore_errors=True)
+                shutil.rmtree(router_staging, ignore_errors=True)
                 time.sleep(0.5)
                 continue
             if destination.exists():
                 shutil.rmtree(destination)
+            if router_destination.exists():
+                shutil.rmtree(router_destination)
             os.replace(staging, destination)
+            os.replace(router_staging, router_destination)
             receipt = {
                 "schema_version": "khaos-brain.skillguard-validation-toolchain.v1",
                 "ok": True,
@@ -1766,6 +1805,9 @@ def _freeze_skillguard_validation_toolchain(
                 "source_root": str(source),
                 "snapshot_root": str(destination),
                 "manifest": snapshot,
+                "router_source_root": str(source_router),
+                "router_snapshot_root": str(router_destination),
+                "router_manifest": router_snapshot,
                 "compiler_sha256": _file_sha256(
                     destination / "scripts" / "skillguard_compile.py"
                 ),
@@ -1785,6 +1827,7 @@ def _freeze_skillguard_validation_toolchain(
         except OSError as exc:
             last_error = f"{type(exc).__name__}:{exc}"
             shutil.rmtree(staging, ignore_errors=True)
+            shutil.rmtree(router_staging, ignore_errors=True)
             time.sleep(0.5)
     raise RuntimeError(
         "Unable to freeze one current SkillGuard validation toolchain: " + last_error
@@ -1798,6 +1841,19 @@ def _require_live_skillguard_matches_snapshot(receipt: Mapping[str, Any]) -> Non
     if not expected or str(actual.get("digest") or "") != expected:
         raise RuntimeError(
             "Live SkillGuard identity changed after validation snapshot; "
+            "restart the idempotent upgrade against one current toolchain identity."
+        )
+    router_source = Path(str(receipt.get("router_source_root") or ""))
+    expected_router = str(
+        (receipt.get("router_manifest") or {}).get("digest") or ""
+    )
+    actual_router = tree_manifest(router_source) if router_source.is_dir() else {}
+    if (
+        not expected_router
+        or str(actual_router.get("digest") or "") != expected_router
+    ):
+        raise RuntimeError(
+            "Live SkillGuard global-router identity changed after validation snapshot; "
             "restart the idempotent upgrade against one current toolchain identity."
         )
 

@@ -104,6 +104,19 @@ def _active_skillguard_root(codex_home: Path) -> Path:
     )
 
 
+def _active_skillguard_router_root(
+    codex_home: Path, skillguard_root: Path
+) -> Path:
+    configured = os.environ.get(
+        "KHAOS_BRAIN_SKILLGUARD_VALIDATION_ROOT", ""
+    ).strip()
+    return (
+        (skillguard_root.parent / "skillguard-global-router").resolve()
+        if configured
+        else (codex_home / "skills" / "skillguard-global-router").resolve()
+    )
+
+
 def _prevent_runtime_projection_bytecode_mutation() -> None:
     """Keep the content-addressed SkillGuard projection byte-for-byte immutable."""
 
@@ -363,10 +376,13 @@ class _FrozenInstalledSupervisionRuntime:
         self.stage = "materialize-current-skillguard-runtime"
         _prevent_runtime_projection_bytecode_mutation()
         self.validation_runtime_root = _active_skillguard_root(self.codex_home)
+        self.validation_router_root = _active_skillguard_router_root(
+            self.codex_home, self.validation_runtime_root
+        )
         self.runtime_root, self.runtime_projection_receipt = (
             _materialize_skillguard_runtime_projection(
                 self.validation_runtime_root,
-                self.codex_home / "skills" / "skillguard-global-router",
+                self.validation_router_root,
                 self.target_root,
                 self.repository_root,
             )

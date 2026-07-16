@@ -642,6 +642,9 @@ class CodexInstallTests(unittest.TestCase):
             (scripts / "skillguard.py").write_text(
                 "print('cli')\n", encoding="utf-8"
             )
+            router = codex_home / "skills" / "skillguard-global-router"
+            router.mkdir(parents=True)
+            (router / "SKILL.md").write_text("router\n", encoding="utf-8")
             destination = root / "receipts" / "skillguard"
             with patch.dict(
                 os.environ,
@@ -657,7 +660,14 @@ class CodexInstallTests(unittest.TestCase):
             self.assertEqual(
                 receipt["manifest"]["digest"], tree_manifest(destination)["digest"]
             )
+            self.assertEqual(
+                receipt["router_manifest"]["digest"],
+                tree_manifest(destination.parent / "skillguard-global-router")[
+                    "digest"
+                ],
+            )
             shutil.rmtree(live)
+            shutil.rmtree(router)
             self.assertTrue(
                 _skillguard_compiler_path(codex_home, destination).is_file()
             )

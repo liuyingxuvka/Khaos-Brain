@@ -53,6 +53,7 @@ from scripts import check_chaos_brain_readiness as readiness
 from scripts import run_installed_skillguard_supervision as supervision_worker
 from scripts.run_kb_guarded_automation import run_guarded_automation
 from scripts.run_installed_skillguard_supervision import (
+    _active_skillguard_router_root,
     _materialize_installed_control_projection,
     _materialize_skillguard_runtime_projection,
     _prevent_runtime_projection_bytecode_mutation,
@@ -118,6 +119,22 @@ def test_project_adoption_audit_uses_one_canonical_portable_projection() -> None
     assert projection["canonical_project_id"] == "Khaos-Brain"
     assert projection["source_stable"]
     assert projection["source_surface_digest"] == projection["projected_surface_digest"]
+
+
+def test_frozen_skillguard_root_selects_its_same_bundle_router(
+    tmp_path: Path,
+) -> None:
+    codex_home = tmp_path / ".codex"
+    frozen_skillguard = tmp_path / "frozen" / "skillguard"
+    with patch.dict(
+        os.environ,
+        {"KHAOS_BRAIN_SKILLGUARD_VALIDATION_ROOT": str(frozen_skillguard)},
+    ):
+        selected = _active_skillguard_router_root(
+            codex_home, frozen_skillguard
+        )
+
+    assert selected == frozen_skillguard.parent / "skillguard-global-router"
 
 
 def test_installed_control_projection_uses_exact_installed_bytes_under_repository(
