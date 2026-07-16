@@ -44,10 +44,10 @@
       "skill_path": ".agents/skills/khaos-brain-update"
     }
   ],
-  "manifest_hash": "A67CD3494F2D929EAF97EF8632EC739EEBD5F4C6A2AF35DD326F1CFF52FB75BD",
-  "project_id": "Knowledge_20260419",
+  "manifest_hash": "C42402F401BC2DB43964316C7D6AFA4C496DC300CCB7B84EC381625A4E937C8C",
+  "project_id": "Khaos-Brain",
   "project_prompt_path": "AGENTS.md",
   "schema_version": "skillguard.project_adoption.v1",
   "skillguard_repository": "https://github.com/liuyingxuvka/SkillGuard",
-  "skillguard_version": "unknown"
+  "skillguard_version": "0.3.1"
 }

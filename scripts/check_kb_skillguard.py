@@ -12,8 +12,10 @@ import json
 import os
 from pathlib import Path
 import queue
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 from collections import Counter
 from typing import Any, Mapping
@@ -87,6 +89,112 @@ V2_FILES = (
     ".skillguard/compiled-contract.json",
     ".skillguard/check-manifest.json",
 )
+
+CANONICAL_PROJECT_ID = "Khaos-Brain"
+
+
+def _project_adoption_surface_manifest(root: Path) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    relative_paths = [
+        Path("AGENTS.md"),
+        Path(".skillguard/project.json"),
+        *(
+            Path(".agents/skills") / skill_id / "SKILL.md"
+            for skill_id in MAINTENANCE_SKILL_NAMES
+        ),
+        *(
+            Path(".agents/skills") / skill_id / relative
+            for skill_id in MAINTENANCE_SKILL_NAMES
+            for relative in V2_FILES
+        ),
+    ]
+    for relative in relative_paths:
+        path = root / relative
+        if not path.is_file():
+            rows.append({"path": relative.as_posix(), "missing": True})
+            continue
+        data = path.read_bytes()
+        rows.append(
+            {
+                "path": relative.as_posix(),
+                "size": len(data),
+                "sha256": hashlib.sha256(data).hexdigest(),
+            }
+        )
+    encoded = json.dumps(rows, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return {
+        "digest": hashlib.sha256(encoded).hexdigest(),
+        "files": rows,
+    }
+
+
+def _project_adoption_audit(cli: Path) -> dict[str, Any]:
+    manifest_path = REPO_ROOT / ".skillguard" / "project.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {
+            "ok": False,
+            "status": "blocked",
+            "error": f"project adoption manifest unreadable: {type(exc).__name__}",
+            "exit_code": 1,
+        }
+    project_id = str(manifest.get("project_id") or "")
+    if project_id != CANONICAL_PROJECT_ID:
+        return {
+            "ok": False,
+            "status": "blocked",
+            "error": "project adoption manifest does not use the one canonical repository id",
+            "expected_project_id": CANONICAL_PROJECT_ID,
+            "observed_project_id": project_id,
+            "exit_code": 1,
+        }
+    source_before = _project_adoption_surface_manifest(REPO_ROOT)
+    with tempfile.TemporaryDirectory(prefix="khaos-skillguard-project-audit-") as temp_dir:
+        projection_root = Path(temp_dir) / CANONICAL_PROJECT_ID
+        for row in source_before["files"]:
+            if row.get("missing"):
+                continue
+            relative = Path(str(row["path"]))
+            target = projection_root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(REPO_ROOT / relative, target)
+        projected = _project_adoption_surface_manifest(projection_root)
+        if projected != source_before:
+            return {
+                "ok": False,
+                "status": "blocked",
+                "error": "project adoption validation projection differs from source bytes",
+                "exit_code": 1,
+            }
+        report = _run_json(
+            [
+                sys.executable,
+                str(cli),
+                "project-audit",
+                "--root",
+                str(projection_root),
+            ]
+        )
+    source_after = _project_adoption_surface_manifest(REPO_ROOT)
+    if source_after != source_before:
+        return {
+            "ok": False,
+            "status": "blocked",
+            "error": "project adoption source changed during official audit",
+            "exit_code": 1,
+        }
+    report["validation_projection"] = {
+        "canonical_project_id": CANONICAL_PROJECT_ID,
+        "source_surface_digest": source_before["digest"],
+        "projected_surface_digest": projected["digest"],
+        "source_stable": True,
+        "claim_boundary": (
+            "Exact project-adoption files were projected under the one canonical repository id "
+            "only for the official SkillGuard audit; this projection is not a runtime authority."
+        ),
+    }
+    return report
 
 _SUPERVISION_SURFACE_CODES = {
     "source": "src",
@@ -2281,15 +2389,7 @@ def build_report(
             )
 
     project_adoption = (
-        _run_json(
-            [
-                sys.executable,
-                str(cli),
-                "project-audit",
-                "--root",
-                str(REPO_ROOT),
-            ]
-        )
+        _project_adoption_audit(cli)
         if cli.is_file() and (REPO_ROOT / ".skillguard" / "project.json").is_file()
         else {"ok": False, "error": "SkillGuard project adoption manifest or CLI missing", "exit_code": 1}
     )

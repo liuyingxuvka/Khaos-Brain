@@ -43,6 +43,7 @@ from scripts.check_kb_skillguard import (
     _execute_skill_assurance,
     _installed_projection_parity,
     _native_output_witness,
+    _project_adoption_audit,
     _report_claim_boundary,
     _run_capability_regression,
     _supervision_packet,
@@ -89,6 +90,34 @@ def _scheduled_identity(run_id: str = "scheduled-run") -> dict:
         },
         "installed_runtime_fingerprint": "B" * 64,
     }
+
+
+def test_project_adoption_audit_uses_one_canonical_portable_projection() -> None:
+    cli = Path(__file__)
+
+    def audit_projection(command: list[str], **_kwargs) -> dict:
+        projection_root = Path(command[-1])
+        assert projection_root.name == "Khaos-Brain"
+        assert (projection_root / "AGENTS.md").read_bytes() == (
+            REPO_ROOT / "AGENTS.md"
+        ).read_bytes()
+        assert (
+            projection_root
+            / ".agents/skills/khaos-brain-update/SKILL.md"
+        ).is_file()
+        return {"ok": True, "status": "pass", "exit_code": 0}
+
+    with patch(
+        "scripts.check_kb_skillguard._run_json",
+        side_effect=audit_projection,
+    ):
+        report = _project_adoption_audit(cli)
+
+    assert report["ok"]
+    projection = report["validation_projection"]
+    assert projection["canonical_project_id"] == "Khaos-Brain"
+    assert projection["source_stable"]
+    assert projection["source_surface_digest"] == projection["projected_surface_digest"]
 
 
 def test_installed_control_projection_uses_exact_installed_bytes_under_repository(

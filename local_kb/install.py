@@ -2496,6 +2496,7 @@ def _run_pre_restore_upgrade_assurance(
             if failed_report_check_ids:
                 detail["failed_report_check_ids"] = failed_report_check_ids
             capability_summary: dict[str, Any] = {}
+            scheduled_production_failures: dict[str, Any] = {}
             capability_count = 0
             capability_ok_count = 0
             for skill_id, skill_row in skill_rows.items():
@@ -2506,6 +2507,27 @@ def _run_pre_restore_upgrade_assurance(
                     if isinstance(skill_row.get("executed_supervision"), Mapping)
                     else {}
                 )
+                scheduled_production = (
+                    execution.get("scheduled_production")
+                    if isinstance(execution.get("scheduled_production"), Mapping)
+                    else {}
+                )
+                if scheduled_production and scheduled_production.get("ok") is not True:
+                    scheduled_production_failures[str(skill_id)] = {
+                        "exit_code": scheduled_production.get("exit_code"),
+                        "status": str(scheduled_production.get("status") or ""),
+                        "checkpoint": str(
+                            scheduled_production.get("checkpoint") or ""
+                        ),
+                        "error": str(scheduled_production.get("error") or "")[:400],
+                        "blockers": list(
+                            scheduled_production.get("blockers") or []
+                        )[:4],
+                        "issues": list(scheduled_production.get("issues") or [])[:4],
+                        "top_level_keys": sorted(
+                            str(key) for key in scheduled_production
+                        ),
+                    }
                 capability = (
                     execution.get("capability_regression")
                     if isinstance(execution.get("capability_regression"), Mapping)
@@ -2536,7 +2558,16 @@ def _run_pre_restore_upgrade_assurance(
                 detail["capability_ok_count"] = capability_ok_count
             if capability_summary:
                 detail["capability_summary"] = capability_summary
-            if not junit and not capability_summary and not failed_report_check_ids:
+            if scheduled_production_failures:
+                detail["scheduled_production_failures"] = (
+                    scheduled_production_failures
+                )
+            if (
+                not junit
+                and not capability_summary
+                and not failed_report_check_ids
+                and not scheduled_production_failures
+            ):
                 detail["stdout_tail"] = str(entry.get("stdout_tail") or "")[-600:]
                 detail["stderr_tail"] = str(entry.get("stderr_tail") or "")[-600:]
             failure_details[str(name)] = detail
