@@ -60,6 +60,7 @@ The authority boundary is strict:
 - the active index binds every hit to an exact generation, model, root ArgumentBlock, and mesh revision;
 - retrieval may expand only grounded ModelMesh edges, never legacy `related_cards` or mere co-use;
 - missing exact authority fails visibly—there is no YAML or floating-head fallback.
+- distinct cards in the same exact generation and authority scope reuse one immutable ModelMesh view; publishing a new generation clears the old read session, and release readiness checks both real local scale and the generalized distinct-card case.
 
 ## What A Card Contains
 
@@ -136,7 +137,7 @@ For many teams, a private repository is already the simplest reliable backend fo
 
 The Python dependency set pins the public [LogicGuard v0.18.0](https://github.com/liuyingxuvka/LogicGuard/releases/tag/v0.18.0) source commit that owns the required ModelStore and ModelMesh APIs. LogicGuard is installed from its official GitHub repository because it is not published on PyPI.
 
-Repository contributors and GitHub Actions use `requirements-dev.txt`, which additionally pins the public [FlowGuard v0.56.0](https://github.com/liuyingxuvka/FlowGuard/releases/tag/v0.56.0) source commit used by model-assurance tests. CI also freezes the public [SkillGuard v0.3.1](https://github.com/liuyingxuvka/SkillGuard/releases/tag/v0.3.1) validation-toolchain commit and OpenSpec 1.6.0 before installing Khaos Brain; ordinary Khaos Brain runtime does not require FlowGuard or a SkillGuard reinstall.
+Repository contributors and GitHub Actions use `requirements-dev.txt`, which additionally pins the public [FlowGuard v0.56.0](https://github.com/liuyingxuvka/FlowGuard/releases/tag/v0.56.0) source commit used by model-assurance tests. CI also freezes the public [SkillGuard v0.3.1](https://github.com/liuyingxuvka/SkillGuard/releases/tag/v0.3.1) validation-toolchain commit and OpenSpec 1.6.0 before installing Khaos Brain. During an upgrade, that exact SkillGuard source pair is transactionally installed only inside the rollbackable Khaos attempt, receives its official current installation receipt, and supervises the five Khaos skills from there. It does not reinstall or rewrite the user's global SkillGuard, and ordinary Khaos Brain runtime does not require FlowGuard.
 
 - **Visible:** cards can be opened directly; source, author, confidence, status, and skill dependencies are visible.
 - **Maintainable:** incremental Sleep, convergent Dream, system update, and organization maintenance treat memory as a living system.
@@ -201,7 +202,7 @@ CHANGELOG.md           Release history
 
 MIT. See [`LICENSE`](./LICENSE).
 
-After the check passes, the machine has the global preflight skill, postflight rules, `KB Sleep`, `KB Dream`, `Khaos Brain System Update`, and the organization contribution / maintenance entry points. Each scheduled entry point is independently SkillGuard-covered through its complete native phase inventory, current provider/runtime readiness, positive/shallow calibration, real native receipt, and deep terminal closure. Upgrades also remove the retired Architect surfaces and settle old history, candidate, cache, sandbox, and maintenance debt under the current Chaos Brain standard, including late reintroduced files, Windows extended-length paths, and observations admitted by concurrent AI work. Old managed formats are upgrade input only: the AI-run transaction converts them directly into exact LogicGuard models, scoped ModelMeshes, deterministic projections, and an exact active index, publishes the generation pointer last, deletes retired authority, and requires a residual-zero receipt. Normal operation has no compatibility layer or projection fallback; missing current facts fail visibly. Every failed attempt remains durably retryable, and all five tasks remain paused until the updater's final composed SkillGuard gate authorizes an exact hash-bound restoration plan and the plan is applied and read back successfully.
+After the check passes, the machine has the global preflight skill, postflight rules, `KB Sleep`, `KB Dream`, `Khaos Brain System Update`, and the organization contribution / maintenance entry points. Each scheduled entry point is independently SkillGuard-covered through its complete native phase inventory, current provider/runtime readiness, positive/shallow calibration, real native receipt, and deep terminal closure. Upgrades also remove the retired Architect surfaces and settle old history, candidate, cache, sandbox, and maintenance debt under the current Chaos Brain standard, including late reintroduced files, Windows extended-length paths, and observations admitted by concurrent AI work. Old managed formats are upgrade input only: the AI-run transaction converts them directly into exact LogicGuard models, scoped ModelMeshes, deterministic projections, and an exact active index, publishes the generation pointer last, deletes retired authority, and requires a residual-zero receipt. If an old machine pulls a valid public projection with a new stable generation id, software first changes nothing and emits one exact upgrade-AI work item. After reviewing its digest and binding, the AI may record only the evidence-bound direct-current projection-to-model decision; the retry rebuilds that public card and reuses every other exact local model in one new generation. Normal operation has no compatibility layer or projection fallback; missing or stale current facts fail visibly. Every failed attempt remains durably retryable, and all five tasks remain paused until the updater's final composed SkillGuard gate authorizes an exact hash-bound restoration plan and the plan is applied and read back successfully.
 
 The exact migration phases, rollback behavior, pause-state preservation, and success gates are documented in [Chaos Brain upgrade contract](docs/chaos_brain_upgrade.md).
 
@@ -294,7 +295,7 @@ Organization mode 是可选的。Settings 验证 organization KB GitHub reposito
 - 这个经验来自谁、哪个来源、是否已经被信任
 - 如果一个 Skill 很关键，它到底在哪类任务里有用
 
-`Khaos Brain` 把这些内容做成 LogicGuard 模型，并生成人能阅读的卡片投影。它不是黑盒向量，不是散乱笔记，也不是只能靠人手维护的规则列表。每个检索结果都绑定精确 generation、model revision、根 ArgumentBlock 和 mesh revision；缺少精确权威就明确失败，不回退读取 YAML 或浮动最新版本。
+`Khaos Brain` 把这些内容做成 LogicGuard 模型，并生成人能阅读的卡片投影。它不是黑盒向量，不是散乱笔记，也不是只能靠人手维护的规则列表。每个检索结果都绑定精确 generation、model revision、根 ArgumentBlock 和 mesh revision；缺少精确权威就明确失败，不回退读取 YAML 或浮动最新版本。同一精确 generation、同一权限范围内的不同卡片共用一个不可变 ModelMesh 读取视图；发布新 generation 会清除旧读取会话，发布验收同时检查真实本地规模和“不同卡片共用当前 mesh”的同类案例。
 
 ### 为什么它像一个“脑”
 
@@ -355,7 +356,7 @@ Candidate Skills 不会自动安装。只有带 pinned version 和 content-hash 
 
 Python 依赖会固定到公开的 [LogicGuard v0.18.0](https://github.com/liuyingxuvka/LogicGuard/releases/tag/v0.18.0) 源码提交；ModelStore 和 ModelMesh 的当前公共 API 由这个版本提供。LogicGuard 尚未发布到 PyPI，因此从它的官方 GitHub 仓库安装。
 
-仓库开发与 GitHub Actions 使用 `requirements-dev.txt`，其中额外固定了公开的 [FlowGuard v0.56.0](https://github.com/liuyingxuvka/FlowGuard/releases/tag/v0.56.0) 源码提交，用于模型保障测试。CI 还会在安装 Khaos Brain 前冻结公开的 [SkillGuard v0.3.1](https://github.com/liuyingxuvka/SkillGuard/releases/tag/v0.3.1) 校验工具提交和 OpenSpec 1.6.0；普通 Khaos Brain 运行不需要 FlowGuard，也不需要重装 SkillGuard。
+仓库开发与 GitHub Actions 使用 `requirements-dev.txt`，其中额外固定了公开的 [FlowGuard v0.56.0](https://github.com/liuyingxuvka/FlowGuard/releases/tag/v0.56.0) 源码提交，用于模型保障测试。CI 还会在安装 Khaos Brain 前冻结公开的 [SkillGuard v0.3.1](https://github.com/liuyingxuvka/SkillGuard/releases/tag/v0.3.1) 校验工具提交和 OpenSpec 1.6.0。升级时，这一对精确的 SkillGuard 源码只会在可回滚的 Khaos 升级事务内部安装到隔离 `.codex`，生成官方当前安装回执，再从那里监督五个 Khaos 子技能；它不会重装或改写用户的全局 SkillGuard，普通 Khaos Brain 运行也不需要 FlowGuard。
 
 对很多团队来说，private repository 已经是最简单可靠的 memory backend。
 
@@ -397,7 +398,7 @@ python scripts/install_codex_kb.py --json
 python scripts/install_codex_kb.py --check --json
 ```
 
-检查通过后，这台机器就有 global preflight skill、postflight rules、`KB Sleep`、`KB Dream`、`Khaos Brain System Update`，以及 organization contribution / maintenance 入口。每个计划任务都由独立 SkillGuard 路由通过完整原生阶段清单、当前 provider/runtime 就绪检查、正例/故意浅跑校准、真实原生回执和深度终态闭环覆盖。旧电脑升级时还会自动删除已退役的 Architect Skill 与计划任务，并按当前 Chaos Brain 标准清理、归档和收紧历史经验债务与维护债务。旧受管格式只允许作为升级输入：AI 事务会把它直接转换成精确 LogicGuard models、分域 ModelMeshes、确定性卡片投影和精确 active index，最后才发布 generation pointer，删除旧权威并要求残留数为零。日常运行没有兼容层、YAML 语义 fallback 或浮动 head；缺少当前事实就明确失败。失败升级会保留可重试检查点；五个任务会一直保持暂停，直到更新任务的最终合成 SkillGuard 门批准精确的哈希绑定恢复方案，并且该方案被逐项应用和回读成功。
+检查通过后，这台机器就有 global preflight skill、postflight rules、`KB Sleep`、`KB Dream`、`Khaos Brain System Update`，以及 organization contribution / maintenance 入口。每个计划任务都由独立 SkillGuard 路由通过完整原生阶段清单、当前 provider/runtime 就绪检查、正例/故意浅跑校准、真实原生回执和深度终态闭环覆盖。旧电脑升级时还会自动删除已退役的 Architect Skill 与计划任务，并按当前 Chaos Brain 标准清理、归档和收紧历史经验债务与维护债务。旧受管格式只允许作为升级输入：AI 事务会把它直接转换成精确 LogicGuard models、分域 ModelMeshes、确定性卡片投影和精确 active index，最后才发布 generation pointer，删除旧权威并要求残留数为零。如果旧机器拉到采用新稳定 generation id 的有效公开投影，软件会先保持所有权威不变并生成一个精确 upgrade-AI 工作项；AI 审查摘要、绑定和新旧 generation 后，只能记录“把当前投影直接重建为模型”这一种证据绑定处置。重试会重建这张公开卡，同时原样复用其他全部本地模型，再统一发布一个新 generation。日常运行没有兼容层、YAML 语义 fallback 或浮动 head；缺少或过期的当前事实就明确失败。失败升级会保留可重试检查点；五个任务会一直保持暂停，直到更新任务的最终合成 SkillGuard 门批准精确的哈希绑定恢复方案，并且该方案被逐项应用和回读成功。
 
 完整迁移阶段、失败回滚、暂停状态保留和成功门槛见 [Chaos Brain 升级契约](docs/chaos_brain_upgrade.md)。
 

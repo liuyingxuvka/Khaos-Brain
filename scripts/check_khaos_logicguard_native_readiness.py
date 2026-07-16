@@ -40,6 +40,7 @@ REQUIRED_CHECKS = (
     "logicguard_code_structure",
     "logicguard_model_test_contract",
     "logicguard_test_mesh",
+    "logicguard_runtime_model_miss",
     "logicguard_runtime",
     "logicguard_openspec",
     "skillguard_source_install_parity",

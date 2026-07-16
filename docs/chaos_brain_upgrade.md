@@ -33,6 +33,18 @@ residual count is zero. It may pause only while a safe decision genuinely lacks
 evidence; that paused state is explicitly incomplete and cannot activate any
 automation.
 
+For a valid pulled public projection whose stable generation differs from an
+otherwise complete old-machine authority, the migration emits an exact
+`upgrade-ai-*` work item and changes no authority. After checking its card path,
+projection digest, scope, old/new generation ids, and binding, the AI may run
+`python scripts/resolve_kb_upgrade_ai_work_item.py --work-item-id <id> --actor <AI> --rationale <reason> --json`.
+The resolver records only the evidence-bound
+`direct-current-projection-to-logicguard-model` decision. It cannot write cards,
+models, meshes, indexes, or pointers. The installer retry rebuilds that one
+projection, reuses every other exact local model, and publishes one new current
+generation. A changed digest or malformed decision creates no alternate route
+and remains blocked.
+
 For organization knowledge this rule covers every consumer, not only the
 connection screen: ordinary reads, contribution deduplication, card adoption,
 scheduled maintenance, and the installed GitHub checker all accept only the
@@ -222,13 +234,16 @@ An upgrade is healthy only when all applicable checks are current and passing:
 Failed, stale, skipped, running, progress-only, or missing evidence cannot satisfy
 the gate.
 
-Before the long gate starts, the installer freezes both the complete executable
-SkillGuard tree and the complete imported FlowGuard package into the upgrade
-attempt and records both manifest digests. Compiler, router, depth, model, and
-child-test consumers use those exact snapshots. A temporary replacement of the
-global SkillGuard directory or a concurrent change to editable FlowGuard cannot
-mix versions inside one run; a different final live digest invalidates
-currentness and keeps the five automations paused for an idempotent retry.
+Before the long gate starts, the installer freezes the complete SkillGuard /
+global-router source pair, installs it through the official SkillGuard
+transaction owner inside a short attempt-owned temporary `.codex`, captures the
+official current installation receipt, and freezes the imported FlowGuard
+package. Compiler, router, depth, model, and child-test consumers use those exact
+installed/snapshotted identities. The isolated SkillGuard root is removed after
+the gate and receives a separate cleanup receipt; the user's global SkillGuard
+is neither reinstalled nor rewritten. A concurrent source or FlowGuard change
+invalidates currentness and keeps the five automations paused for an idempotent
+retry.
 
 Installed execution uses two short repository-local content-addressed
 projections: exact bytes for the installed Skill's five current control files,

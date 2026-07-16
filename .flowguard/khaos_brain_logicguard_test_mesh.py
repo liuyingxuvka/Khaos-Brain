@@ -23,7 +23,7 @@ from khaos_brain_logicguard_model_test_alignment import BINDINGS
 
 
 PARENT_SUITE_ID = "suite:khaos-logicguard-native:parent"
-INVENTORY_REVISION = "khaos-logicguard-native-inventory-v1"
+INVENTORY_REVISION = "khaos-logicguard-native-inventory-v2-runtime-scale"
 RECEIPT_ROOT = ".local/verification/khaos-logicguard-native"
 FINAL_COMMAND = "python scripts/check_khaos_logicguard_native_readiness.py --json"
 

@@ -18,6 +18,7 @@ class KhaosLogicGuardAssuranceTests(unittest.TestCase):
             ".flowguard/khaos_brain_logicguard_code_structure.py",
             ".flowguard/khaos_brain_logicguard_model_test_alignment.py",
             ".flowguard/khaos_brain_logicguard_test_mesh.py",
+            ".flowguard/khaos_brain_logicguard_runtime_model_miss.py",
         )
         for relative in paths:
             with self.subTest(path=relative):

@@ -17,19 +17,29 @@
           "code_contract_ids": [
             "contract:kb-retrieval-current-index"
           ],
-          "coverage_case_ids": [],
-          "coverage_receipt_ids": [],
+          "coverage_case_ids": [
+            "case:retrieval:shared-current-mesh-across-distinct-cards"
+          ],
+          "coverage_receipt_ids": [
+            "evidence:logicguard-runtime:3427-card-budget-pass"
+          ],
           "coverage_shard_ids": [],
           "current": false,
           "evidence_state": "missing",
-          "metadata": {},
+          "metadata": {
+            "model_miss_id": "miss:khaos-logicguard-runtime:large-local-generation",
+            "previous_green_boundary": "three-card-fixture",
+            "real_scale_entry_count": 3427
+          },
           "model_obligation_ids": [
             "obligation:kb-retrieval-current-index"
           ],
           "proof_artifact_ids": [],
           "risk_gate_ids": [],
           "test_evidence_ids": [
-            "test:kb-retrieval-current-index"
+            "test:kb-retrieval-current-index",
+            "test:tests/test_khaos_model_native_retrieval.py::KhaosModelNativeRetrievalTests::test_current_mesh_view_is_reused_across_distinct_cards_in_one_generation",
+            "test:tests/test_khaos_model_runtime_readiness.py::KhaosModelRuntimeReadinessTests::test_catalog_latency_is_measured_without_memory_instrumentation"
           ],
           "test_mesh_state": "shard_current"
         },
@@ -44,8 +54,13 @@
         "in_scope": true,
         "label": "Serve predictive retrieval only from the validated current index",
         "lookup_binding": {
-          "error_signatures": [],
-          "metadata": {},
+          "error_signatures": [
+            "catalog-performance:30.620497>30.000000",
+            "exact-context-p95:3.145622>2.000000"
+          ],
+          "metadata": {
+            "model_miss_route": "model_miss_review"
+          },
           "path_patterns": [
             "local_kb/search.py",
             "local_kb/active_index.py",
@@ -62,8 +77,11 @@
             "predictive_kb_retrieval"
           ]
         },
-        "metadata": {},
-        "miss_origin_state": "no_miss",
+        "metadata": {
+          "generalized_case_id": "case:retrieval:shared-current-mesh-across-distinct-cards",
+          "model_miss_closure": ".flowguard/khaos_brain_logicguard_runtime_model_miss.py"
+        },
+        "miss_origin_state": "same_class_seed",
         "model_sync_state": "owner_model_current",
         "owner": "",
         "path_authority": {
@@ -93,7 +111,7 @@
           "current maintenance standard is committed"
         ],
         "primary_owner_model_id": "kb_convergence_upgrade_model.LifecycleConvergenceBlock",
-        "rationale": "The active index is the sole retrieval authority; an alternate reader would recreate stale eligibility risk.",
+        "rationale": "The active index is the sole retrieval authority; an alternate reader would recreate stale eligibility risk. Distinct cards in one exact generation and authority scope reuse the same immutable mesh view so large local brains remain within the declared runtime budget.",
         "relations": [],
         "replacement_state": "active",
         "scoped_out_reason": "",
@@ -107,10 +125,12 @@
           "surface:retrieval-spec"
         ],
         "state_writes": [],
-        "supporting_model_ids": [],
+        "supporting_model_ids": [
+          "khaos_brain_logicguard_runtime_model_miss"
+        ],
         "surface_delegation_only": false,
         "trigger": "requests predictive knowledge",
-        "validation_boundary": "FlowGuard lifecycle model, focused retrieval tests, and aggregate readiness",
+        "validation_boundary": "FlowGuard lifecycle model, same-class distinct-card mesh-reuse test, independent benchmark-instrumentation test, real current-generation runtime benchmark, and aggregate readiness",
         "variant_of_business_intent_id": ""
       },
       {
@@ -849,7 +869,7 @@
         "variant_of_business_intent_id": ""
       }
     ],
-    "current_revision": "sleep-handoff-post-publication-20260715",
+    "current_revision": "logicguard-runtime-scale-model-miss-20260716",
     "expected_business_intent_ids": [
       "intent:serve-predictive-retrieval",
       "intent:serialize-lifecycle-mutation",

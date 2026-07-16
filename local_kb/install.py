@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import tomllib
 from pathlib import Path
@@ -1682,31 +1683,52 @@ def _freeze_skillguard_validation_toolchain(
     *,
     max_attempts: int = 20,
 ) -> dict[str, Any]:
-    """Acquire one immutable SkillGuard identity without locking its live owner."""
+    """Install one exact SkillGuard identity into an isolated validation home.
+
+    The source tree is never activated in the user's real Codex home.  It is
+    copied into the rollbackable Khaos upgrade attempt, installed with the
+    official SkillGuard transaction owner, and bound to an official current
+    installation receipt before scheduled-production validation may consume it.
+    """
 
     inherited_root = os.environ.get(SKILLGUARD_VALIDATION_ROOT_ENV, "").strip()
     inherited_digest = os.environ.get(SKILLGUARD_VALIDATION_DIGEST_ENV, "").strip()
     if inherited_root and inherited_digest:
         root = Path(inherited_root).resolve()
         router_root = root.parent / "skillguard-global-router"
+        validation_codex_home = root.parent.parent
         manifest = tree_manifest(root) if root.is_dir() else {}
         router_manifest = tree_manifest(router_root) if router_root.is_dir() else {}
         if (
             str(manifest.get("digest") or "") == inherited_digest
+            and validation_codex_home.name == ".codex"
             and (root / "scripts" / "skillguard_compile.py").is_file()
             and (root / "scripts" / "skillguard.py").is_file()
             and (router_root / "SKILL.md").is_file()
+            and (
+                root / ".sg-runtime" / "installation" / "HEAD.json"
+            ).is_file()
         ):
             receipt = {
-                "schema_version": "khaos-brain.skillguard-validation-toolchain.v1",
+                "schema_version": "khaos-brain.skillguard-validation-toolchain.v2",
                 "ok": True,
-                "status": "inherited_frozen",
+                "status": "inherited_isolated_installation",
                 "source_root": str(root),
+                "source_manifest": manifest,
+                "canonical_snapshot_root": str(root),
+                "canonical_manifest": manifest,
                 "snapshot_root": str(root),
                 "manifest": manifest,
                 "router_source_root": str(router_root),
+                "router_source_manifest": router_manifest,
+                "router_canonical_snapshot_root": str(router_root),
+                "router_canonical_manifest": router_manifest,
                 "router_snapshot_root": str(router_root),
                 "router_manifest": router_manifest,
+                "validation_codex_home": str(validation_codex_home),
+                "installation_receipt_root": str(
+                    root / ".sg-runtime" / "installation"
+                ),
                 "compiler_sha256": _file_sha256(
                     root / "scripts" / "skillguard_compile.py"
                 ),
@@ -1716,11 +1738,23 @@ def _freeze_skillguard_validation_toolchain(
             return receipt
 
     destination = destination.resolve()
+    if not (
+        destination.name == "skillguard"
+        and destination.parent.name == "skills"
+        and destination.parent.parent.name == ".agents"
+    ):
+        raise ValueError(
+            "SkillGuard canonical snapshot must end with .agents/skills/skillguard"
+        )
+    canonical_repository_root = destination.parents[2]
+    snapshot_parent = destination.parents[3]
     staging = destination.with_name(f".{destination.name}.staging")
     router_destination = destination.parent / "skillguard-global-router"
     router_staging = router_destination.with_name(
         f".{router_destination.name}.staging"
     )
+    stage_root = snapshot_parent / "stage" / ".codex" / "skills" / "skillguard"
+    validation_codex_home = snapshot_parent / "installed" / ".codex"
     last_error = "skillguard_runtime_missing"
     for attempt in range(1, max_attempts + 1):
         source = next(
@@ -1760,6 +1794,7 @@ def _freeze_skillguard_validation_toolchain(
                     "locks",
                     "bootstrap",
                     "test-results",
+                    ".sg-runtime",
                 ),
             )
             shutil.copytree(
@@ -1773,17 +1808,25 @@ def _freeze_skillguard_validation_toolchain(
                     "locks",
                     "bootstrap",
                     "test-results",
+                    ".sg-runtime",
                 ),
             )
             after = tree_manifest(source)
             router_after = tree_manifest(source_router)
             snapshot = tree_manifest(staging)
             router_snapshot = tree_manifest(router_staging)
+            portable_source_rows = [
+                row
+                for row in list(before.get("files") or [])
+                if not str(row.get("path") or "").startswith(".sg-runtime/")
+            ]
             if not (
-                before == after == snapshot
+                before == after
+                and portable_source_rows == list(snapshot.get("files") or [])
                 and router_before == router_after == router_snapshot
                 and (staging / "scripts" / "skillguard_compile.py").is_file()
                 and (staging / "scripts" / "skillguard.py").is_file()
+                and (staging / "scripts" / "skillguard_install.py").is_file()
                 and (router_staging / "SKILL.md").is_file()
             ):
                 last_error = "skillguard_source_changed_during_snapshot"
@@ -1797,22 +1840,183 @@ def _freeze_skillguard_validation_toolchain(
                 shutil.rmtree(router_destination)
             os.replace(staging, destination)
             os.replace(router_staging, router_destination)
+
+            for controlled_root in (stage_root.parents[2], validation_codex_home.parent):
+                try:
+                    controlled_root.relative_to(snapshot_parent)
+                except ValueError as exc:
+                    raise RuntimeError(
+                        "isolated SkillGuard validation root escaped its upgrade attempt"
+                    ) from exc
+                if controlled_root.exists():
+                    shutil.rmtree(controlled_root)
+
+            installer = destination / "scripts" / "skillguard_install.py"
+            install_process = subprocess.run(
+                [
+                    sys.executable,
+                    str(installer),
+                    "--canonical-skill-root",
+                    str(destination),
+                    "--stage-root",
+                    str(stage_root),
+                    "--codex-home",
+                    str(validation_codex_home),
+                    "--prepare",
+                    "--activate",
+                ],
+                cwd=str(canonical_repository_root),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=300,
+                check=False,
+            )
+            try:
+                install_report = json.loads(install_process.stdout)
+            except json.JSONDecodeError:
+                install_report = {}
+            if (
+                install_process.returncode != 0
+                or str(install_report.get("status") or "") != "passed"
+            ):
+                detail = install_report or install_process.stderr or install_process.stdout
+                raise RuntimeError(
+                    "Isolated SkillGuard transaction installation failed: " + str(detail)
+                )
+
+            installed_root = validation_codex_home / "skills" / "skillguard"
+            installed_router_root = (
+                validation_codex_home / "skills" / "skillguard-global-router"
+            )
+            installed_cli = installed_root / "scripts" / "skillguard.py"
+            command_prefix = [
+                sys.executable,
+                str(installed_cli),
+            ]
+            common_receipt_arguments = [
+                "--repository-root",
+                str(canonical_repository_root),
+                "--canonical-skill-root",
+                ".agents/skills/skillguard",
+                "--codex-home",
+                str(validation_codex_home),
+                "--output",
+                "-",
+            ]
+            capture_process = subprocess.run(
+                [
+                    *command_prefix,
+                    "capture-installation-receipt",
+                    *common_receipt_arguments,
+                ],
+                cwd=str(canonical_repository_root),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=120,
+                check=False,
+            )
+            try:
+                capture_report = json.loads(capture_process.stdout)
+            except json.JSONDecodeError:
+                capture_report = {}
+            if (
+                capture_process.returncode != 0
+                or str(capture_report.get("status") or "") != "passed"
+            ):
+                detail = capture_report or capture_process.stderr or capture_process.stdout
+                raise RuntimeError(
+                    "Isolated SkillGuard installation receipt capture failed: "
+                    + str(detail)
+                )
+            verify_process = subprocess.run(
+                [
+                    *command_prefix,
+                    "verify-installation-receipt",
+                    *common_receipt_arguments,
+                    "--require-current-installed-parity",
+                ],
+                cwd=str(canonical_repository_root),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=120,
+                check=False,
+            )
+            try:
+                verify_report = json.loads(verify_process.stdout)
+            except json.JSONDecodeError:
+                verify_report = {}
+            if (
+                verify_process.returncode != 0
+                or str(verify_report.get("status") or "") != "passed"
+            ):
+                detail = verify_report or verify_process.stderr or verify_process.stdout
+                raise RuntimeError(
+                    "Isolated SkillGuard installation receipt verification failed: "
+                    + str(detail)
+                )
+
+            installation_receipt_root = (
+                installed_root / ".sg-runtime" / "installation"
+            )
+            if not (installation_receipt_root / "HEAD.json").is_file():
+                raise RuntimeError(
+                    "Isolated SkillGuard current installation receipt is unavailable"
+                )
+            installed_manifest = tree_manifest(installed_root)
+            installed_router_manifest = tree_manifest(installed_router_root)
+            canonical_manifest = tree_manifest(destination)
+            canonical_router_manifest = tree_manifest(router_destination)
+            if not (
+                before == tree_manifest(source)
+                and router_before == tree_manifest(source_router)
+                and canonical_manifest == snapshot
+                and canonical_router_manifest == router_snapshot
+            ):
+                raise RuntimeError(
+                    "SkillGuard source or canonical validation snapshot changed during isolated installation"
+                )
             receipt = {
-                "schema_version": "khaos-brain.skillguard-validation-toolchain.v1",
+                "schema_version": "khaos-brain.skillguard-validation-toolchain.v2",
                 "ok": True,
-                "status": "frozen",
+                "status": "isolated_installed_current",
                 "attempt_count": attempt,
                 "source_root": str(source),
-                "snapshot_root": str(destination),
-                "manifest": snapshot,
+                "source_manifest": before,
+                "canonical_snapshot_root": str(destination),
+                "canonical_manifest": canonical_manifest,
+                "snapshot_root": str(installed_root),
+                "manifest": installed_manifest,
                 "router_source_root": str(source_router),
-                "router_snapshot_root": str(router_destination),
-                "router_manifest": router_snapshot,
+                "router_source_manifest": router_before,
+                "router_canonical_snapshot_root": str(router_destination),
+                "router_canonical_manifest": canonical_router_manifest,
+                "router_snapshot_root": str(installed_router_root),
+                "router_manifest": installed_router_manifest,
+                "validation_codex_home": str(validation_codex_home),
+                "installation_receipt_root": str(installation_receipt_root),
+                "installation_transaction_id": str(
+                    ((install_report.get("reports") or [{}])[-1]).get(
+                        "transaction_id"
+                    )
+                    or ""
+                ),
+                "installation_receipt_id": str(
+                    capture_report.get("receipt_id") or ""
+                ),
+                "installation_receipt_hash": str(
+                    capture_report.get("receipt_hash") or ""
+                ),
                 "compiler_sha256": _file_sha256(
-                    destination / "scripts" / "skillguard_compile.py"
+                    installed_root / "scripts" / "skillguard_compile.py"
                 ),
                 "cli_sha256": _file_sha256(
-                    destination / "scripts" / "skillguard.py"
+                    installed_root / "scripts" / "skillguard.py"
                 ),
             }
             receipt["receipt_hash"] = _canonical_payload_hash(receipt)
@@ -1836,7 +2040,7 @@ def _freeze_skillguard_validation_toolchain(
 
 def _require_live_skillguard_matches_snapshot(receipt: Mapping[str, Any]) -> None:
     source = Path(str(receipt.get("source_root") or ""))
-    expected = str((receipt.get("manifest") or {}).get("digest") or "")
+    expected = str((receipt.get("source_manifest") or {}).get("digest") or "")
     actual = tree_manifest(source) if source.is_dir() else {}
     if not expected or str(actual.get("digest") or "") != expected:
         raise RuntimeError(
@@ -1845,7 +2049,7 @@ def _require_live_skillguard_matches_snapshot(receipt: Mapping[str, Any]) -> Non
         )
     router_source = Path(str(receipt.get("router_source_root") or ""))
     expected_router = str(
-        (receipt.get("router_manifest") or {}).get("digest") or ""
+        (receipt.get("router_source_manifest") or {}).get("digest") or ""
     )
     actual_router = tree_manifest(router_source) if router_source.is_dir() else {}
     if (
@@ -1856,6 +2060,48 @@ def _require_live_skillguard_matches_snapshot(receipt: Mapping[str, Any]) -> Non
             "Live SkillGuard global-router identity changed after validation snapshot; "
             "restart the idempotent upgrade against one current toolchain identity."
         )
+    snapshot_root = Path(str(receipt.get("snapshot_root") or ""))
+    expected_snapshot = str((receipt.get("manifest") or {}).get("digest") or "")
+    actual_snapshot = tree_manifest(snapshot_root) if snapshot_root.is_dir() else {}
+    router_snapshot_root = Path(str(receipt.get("router_snapshot_root") or ""))
+    expected_router_snapshot = str(
+        (receipt.get("router_manifest") or {}).get("digest") or ""
+    )
+    actual_router_snapshot = (
+        tree_manifest(router_snapshot_root) if router_snapshot_root.is_dir() else {}
+    )
+    if (
+        not expected_snapshot
+        or str(actual_snapshot.get("digest") or "") != expected_snapshot
+        or not expected_router_snapshot
+        or str(actual_router_snapshot.get("digest") or "")
+        != expected_router_snapshot
+    ):
+        raise RuntimeError(
+            "Isolated installed SkillGuard validation identity changed after receipt capture; "
+            "restart the idempotent upgrade."
+        )
+
+
+def _cleanup_ephemeral_skillguard_validation_toolchain(
+    declared_root: Path | None,
+) -> dict[str, Any]:
+    if declared_root is None:
+        return {"ok": True, "status": "not_required", "removed": False}
+    root = Path(declared_root).resolve()
+    temp_root = Path(tempfile.gettempdir()).resolve()
+    if root.parent != temp_root or not root.name.startswith("khaos-sg-"):
+        raise RuntimeError(
+            "Refusing to clean a SkillGuard validation root outside the exact Khaos temp namespace"
+        )
+    if root.exists():
+        shutil.rmtree(root)
+    return {
+        "ok": not root.exists(),
+        "status": "removed" if not root.exists() else "failed",
+        "removed": not root.exists(),
+        "root": str(root),
+    }
 
 
 def _freeze_flowguard_validation_toolchain(
@@ -3196,16 +3442,30 @@ def install_codex_integration(
         else b""
     )
     obsolete_update_state_settled = False
+    validation_toolchain: dict[str, Any] = {}
+    skillguard_ephemeral_root: Path | None = None
     try:
         snapshot_parent = (
             _upgrade_attempt_dir(home, attempt_id) / "validation-toolchain"
             if attempt_id
             else home / ".khaos-brain-install" / "fixture-validation-toolchain"
         )
-        validation_toolchain = _freeze_skillguard_validation_toolchain(
-            home,
-            snapshot_parent / "skillguard",
-        )
+        short_skillguard_parent = Path(
+            tempfile.mkdtemp(prefix="khaos-sg-")
+        ).resolve()
+        skillguard_ephemeral_root = short_skillguard_parent
+        try:
+            validation_toolchain = _freeze_skillguard_validation_toolchain(
+                home,
+                short_skillguard_parent
+                / "canonical-repository"
+                / ".agents"
+                / "skills"
+                / "skillguard",
+            )
+        except Exception:
+            shutil.rmtree(short_skillguard_parent, ignore_errors=True)
+            raise
         flowguard_toolchain = _freeze_flowguard_validation_toolchain(
             snapshot_parent / "python" / "flowguard"
         )
@@ -3414,10 +3674,18 @@ def install_codex_integration(
                 },
             )
             payload["upgrade_attempt"] = upgrade_attempt
+        payload["skillguard_validation_toolchain_cleanup"] = (
+            _cleanup_ephemeral_skillguard_validation_toolchain(
+                skillguard_ephemeral_root
+            )
+        )
         manifest_path = save_install_state(payload, home)
         payload["install_state_path"] = str(manifest_path)
         return payload
     except Exception as exc:
+        cleanup = _cleanup_ephemeral_skillguard_validation_toolchain(
+            skillguard_ephemeral_root
+        )
         if run_history_migration:
             _restore_exact_file_snapshot(
                 obsolete_update_state_file,
@@ -3438,6 +3706,7 @@ def install_codex_integration(
                         "recovery_action": (
                             "Rerun the idempotent installer after the reported hard gate is repaired."
                         ),
+                        "skillguard_validation_toolchain_cleanup": cleanup,
                     },
                 )
         raise

@@ -338,6 +338,10 @@ def publish_authority_generation(
     else:
         _atomic_write_json(generation_path, validated)
     _atomic_write_json(authority_generation_pointer_path(repo_root), validated)
+    # Publication changes the sole normal-runtime authority. Drop every
+    # process-local immutable read session immediately so old generations do
+    # not retain large mesh views or answer a later read.
+    _clear_bound_read_caches()
     return validated
 
 
@@ -504,6 +508,41 @@ def _cached_bound_read_session(
         model_store=model_store,
     )
     return model_store, mesh_store
+
+
+@lru_cache(maxsize=len(AUTHORITY_SCOPES))
+def _cached_current_mesh_view(
+    repo_root: str,
+    authority_pointer_digest: str,
+    authority_scope: str,
+    mesh_id: str,
+    mesh_revision_id: str,
+) -> Any:
+    """Open one immutable mesh view per exact current generation and scope.
+
+    A card context previously reparsed the same scope mesh three times: for
+    binding validation, neighborhood validation, and materialization. Large
+    local brains make that repeated work the dominant latency. This cache is
+    generation-, scope-, mesh-, and revision-bound; publication changes the
+    pointer digest and clears it. There is no alternate reader or head lookup.
+    """
+
+    if not authority_pointer_digest:
+        raise ExactBindingError("Current authority generation lacks its pointer digest")
+    _model_store, mesh_store = _cached_bound_read_session(
+        repo_root,
+        authority_pointer_digest,
+        authority_scope,
+    )
+    return mesh_store.open_view(mesh_id, mesh_revision_id)
+
+
+def _clear_bound_read_caches() -> None:
+    """Release all process-local reads when the sole authority changes."""
+
+    _cached_bound_argument_context_json.cache_clear()
+    _cached_current_mesh_view.cache_clear()
+    _cached_bound_read_session.cache_clear()
 
 
 def _canonical_json(value: Any) -> str:
@@ -1238,6 +1277,17 @@ def read_exact_mesh(
         raise ExactBindingError(
             f"Exact LogicGuard mesh is unavailable for {binding.mesh_id}@{binding.mesh_revision_id}: {exc}"
         ) from exc
+    return _validate_exact_mesh_snapshot(binding, snapshot)
+
+
+def _validate_exact_mesh_snapshot(binding: LogicGuardBinding, snapshot: Any) -> Any:
+    if (
+        str(snapshot.mesh_id) != binding.mesh_id
+        or str(snapshot.revision) != binding.mesh_revision_id
+    ):
+        raise ExactBindingError(
+            "Exact LogicGuard mesh snapshot does not match the bound revision"
+        )
     pinned = {
         (str(item.model_ref.model_id), str(item.model_ref.revision))
         for item in snapshot.registry
@@ -1261,19 +1311,39 @@ def materialize_bound_neighborhood(
     evaluate: bool = True,
     model_store: Any | None = None,
     mesh_store: Any | None = None,
+    model_snapshot: Any | None = None,
+    mesh_view: Any | None = None,
 ) -> ModelNeighborhood:
     logicguard = _logicguard_module()
     current_model_store = model_store or open_model_store(
         repo_root, binding.authority_scope
     )
-    read_exact_model(repo_root, binding, model_store=current_model_store)
-    store = mesh_store or open_mesh_store(
-        repo_root,
-        binding.authority_scope,
-        model_store=current_model_store,
-    )
-    read_exact_mesh(repo_root, binding, mesh_store=store)
-    view = store.open_view(binding.mesh_id, binding.mesh_revision_id)
+    if model_snapshot is None:
+        read_exact_model(repo_root, binding, model_store=current_model_store)
+    else:
+        model = model_snapshot.to_model()
+        if (
+            str(model_snapshot.model_id) != binding.model_id
+            or str(model_snapshot.revision) != binding.revision_id
+            or str(model.metadata.get("authority_scope") or "")
+            != normalize_authority_scope(binding.authority_scope)
+            or binding.node_id not in model.nodes
+            or binding.block_id not in model.blocks
+        ):
+            raise ExactBindingError(
+                "Exact LogicGuard model snapshot does not match the bound context"
+            )
+    if mesh_view is None:
+        store = mesh_store or open_mesh_store(
+            repo_root,
+            binding.authority_scope,
+            model_store=current_model_store,
+        )
+        read_exact_mesh(repo_root, binding, mesh_store=store)
+        view = store.open_view(binding.mesh_id, binding.mesh_revision_id)
+    else:
+        view = mesh_view
+        _validate_exact_mesh_snapshot(binding, view.snapshot)
     root = _qualified_node_ref(logicguard, binding)
     request = logicguard.MeshMaterializationRequest(
         roots=(root,),
@@ -1317,13 +1387,21 @@ def _build_bound_argument_context(
 ) -> dict[str, Any]:
     """Build one exact context after the current-generation gate has passed."""
 
-    model_store, mesh_store = _cached_bound_read_session(
-        str(Path(repo_root).resolve()),
+    resolved_root = str(Path(repo_root).resolve())
+    model_store, _mesh_store = _cached_bound_read_session(
+        resolved_root,
         authority_pointer_digest,
         binding.authority_scope,
     )
+    mesh_view = _cached_current_mesh_view(
+        resolved_root,
+        authority_pointer_digest,
+        binding.authority_scope,
+        binding.mesh_id,
+        binding.mesh_revision_id,
+    )
     snapshot = read_exact_model(repo_root, binding, model_store=model_store)
-    mesh = read_exact_mesh(repo_root, binding, mesh_store=mesh_store)
+    mesh = _validate_exact_mesh_snapshot(binding, mesh_view.snapshot)
     model = snapshot.to_model()
     block = model.blocks[binding.block_id]
     member_ids = {str(item) for item in block.member_nodes}
@@ -1348,7 +1426,8 @@ def _build_bound_argument_context(
         byte_limit=byte_limit,
         evaluate=True,
         model_store=model_store,
-        mesh_store=mesh_store,
+        model_snapshot=snapshot,
+        mesh_view=mesh_view,
     )
     materialized = dict(neighborhood.materialized)
     return {

@@ -532,7 +532,7 @@
         "classification_rule_ids": [
           "skillguard.content_role_classifier.current:documentation_model"
         ],
-        "component_hash": "sha256:f7eb30d0d8d6a1c22adb8fec35926a862bd9368c250e8ddea9c465b0d90f178f",
+        "component_hash": "sha256:5bf22435915931ac2641fd97228838af6bf945999be51c061753a827eef2a95f",
         "component_id": "component:documentation_model:60cdf0eb999481a6",
         "consumer_ids": [
           "projection:installation"
@@ -603,7 +603,7 @@
         "classification_rule_ids": [
           "skillguard.content_role_classifier.current:runtime_source"
         ],
-        "component_hash": "sha256:409202d46270d2d2f5dc2f9bc64f41c49637d84928d50575e856ac30f6766e66",
+        "component_hash": "sha256:f3661e1c6c4f865c818e15a914d2aa07400b5a2b9d847e97f1b9f964898d3ad1",
         "component_id": "component:runtime_source:ecdc0516f5b1c13c",
         "consumer_ids": [
           "projection:khaos-brain-update:target-runtime-sources"
@@ -632,7 +632,7 @@
         "classification_rule_ids": [
           "skillguard.content_role_classifier.current:test_dev"
         ],
-        "component_hash": "sha256:f1eec59982e73a364bc39603319ede2f565e9ae3c51243071e01b9c8c200dc99",
+        "component_hash": "sha256:4a88d486354cab1838883d6273b5ed4b7e6fedb191a10456767d5cd6bd03b9fd",
         "component_id": "component:test_dev:78110bef3521637d",
         "consumer_ids": [
           "projection:khaos-brain-update:target-tests"
@@ -666,7 +666,7 @@
       "owner_cycles": [],
       "unmapped_paths": []
     },
-    "impact_graph_hash": "sha256:8302b8d527bb5808a4afdfb77bb48e488ccff59f0eabac9994f1f2d6dd13822f",
+    "impact_graph_hash": "sha256:8f8d8058bac42c9a3bc4bf4e7c1999d7544b65afdc58d5151987adec1f11f39d",
     "inventory": [
       {
         "classification_rule_id": "skillguard.content_role_classifier.current:contract_schema",
@@ -677,7 +677,7 @@
       },
       {
         "classification_rule_id": "skillguard.content_role_classifier.current:documentation_model",
-        "content_hash": "sha256:5607beb181fb219e721a62556d7a81dc41cd66d2df8f38814b70705ace94870b",
+        "content_hash": "sha256:b96e08f8f4b05ca5f5c0ff4d6e56c1c6575139adf5707f7f0b4977ea026ccf6e",
         "install_disposition": "copy",
         "path": ".agents/skills/khaos-brain-update/SKILL.md",
         "role": "documentation_model"
@@ -726,21 +726,21 @@
       },
       {
         "classification_rule_id": "skillguard.content_role_classifier.current:runtime_source",
-        "content_hash": "sha256:0bd4cc054d815fe901c06349c0bcb7214e09bdcf8ac5efa348e7ff7cd6e76827",
+        "content_hash": "sha256:b355ccfa1970614fa37d5608edc7edaa1762816ab5fe16f230ba056b6c4256be",
         "install_disposition": "source_only",
         "path": "local_kb/install.py",
         "role": "runtime_source"
       },
       {
         "classification_rule_id": "skillguard.content_role_classifier.current:runtime_source",
-        "content_hash": "sha256:3ff2a12bfe385106c3cb6063d614eee2c673cd37e867ff4151cf8d009e6998c2",
+        "content_hash": "sha256:1fadb46ef9ff0a54f57f4d9f8a795471ce726108d9767903d7f13c33bf3af974",
         "install_disposition": "source_only",
         "path": "local_kb/logicguard_models.py",
         "role": "runtime_source"
       },
       {
         "classification_rule_id": "skillguard.content_role_classifier.current:runtime_source",
-        "content_hash": "sha256:6d1fab072503a6a11e865e90ae7a283bd73616d5aa133eeab22ed27daced7d22",
+        "content_hash": "sha256:17cd22b4c8f01375d56fd4bf5b406967d4e451ef9750404eae681ba0609e4992",
         "install_disposition": "source_only",
         "path": "local_kb/maintenance_migration.py",
         "role": "runtime_source"
@@ -831,7 +831,7 @@
       },
       {
         "classification_rule_id": "skillguard.content_role_classifier.current:test_dev",
-        "content_hash": "sha256:ecb2969aa9072417cb5ae8b7ce2153e3ff7a23f77055a231a708a1599209c306",
+        "content_hash": "sha256:d842032b944b4018f9d2b5782927f221c402a62ff5266bd358d7f7797d836fa1",
         "install_disposition": "source_only",
         "path": "tests/test_codex_install.py",
         "role": "test_dev"
@@ -866,7 +866,7 @@
       },
       {
         "classification_rule_id": "skillguard.content_role_classifier.current:test_dev",
-        "content_hash": "sha256:02845e00d5d54ae572d0f536a859d2e270d6719e69306d9aac6837421804e742",
+        "content_hash": "sha256:e6a893cb36fe299f6d35b27606bf2e22f0301fb1eb5facab6b00805d3b44ed93",
         "install_disposition": "source_only",
         "path": "tests/test_khaos_logicguard_migration.py",
         "role": "test_dev"
@@ -886,7 +886,7 @@
         "role": "test_dev"
       }
     ],
-    "inventory_hash": "sha256:46d73d4eedb84307fdae2d1d238cf14deb184eb0b1f6e51d62463280b64c1e0b",
+    "inventory_hash": "sha256:d073bd1174efe29ebfb89d17519c9290b5637b185fe2cc1cc2ca971d0cd36010",
     "member_root_path": ".agents/skills/khaos-brain-update",
     "owner_receipt_root_ref": {
       "path_token": "owner_evidence_root",
@@ -1055,7 +1055,7 @@
       },
       {
         "consumer_id": "projection:installation",
-        "consumer_projection_hash": "sha256:aa60e8f04bd6c24a86707ba14a4081d1c655715ee3f14342aeee7ca6ea71e2ae",
+        "consumer_projection_hash": "sha256:c1de0db5525a177414845fafe1b5b5df8b754534909a81884e6a6ba31fe51e44",
         "impact_plan_schema_version": "skillguard.content_impact_plan.current",
         "impact_policy_id": "skillguard.content_impact_policy.current",
         "input_component_ids": [
@@ -1063,13 +1063,13 @@
           "component:documentation_model:60cdf0eb999481a6",
           "component:runtime_source:43fe0610c69d00c3"
         ],
-        "input_projection_hash": "sha256:190724aaffd676c24a95bf4856722c8390c11ed40097f54a0715cd800aec9794",
+        "input_projection_hash": "sha256:ba5c8fdb5669ad948ea296ed2ebbfa5cdbeed4e1e441d14c33ba5083bc0f521e",
         "kind": "installation",
         "projection_declaration_hash": "sha256:b206aff69c2a860e599155909ea7f6268b706e07152879da4f49262c6a2d35ef"
       },
       {
         "consumer_id": "projection:khaos-brain-update:target-runtime-sources",
-        "consumer_projection_hash": "sha256:18ce23575828b753f06aec18bff785dee9b9303864c0b15d13bff30abc3802a4",
+        "consumer_projection_hash": "sha256:46ea24c5f7e739a2f903bbc56a605fc9f496aeb2eaea62330d1a2f9af31025cf",
         "impact_plan_schema_version": "skillguard.content_impact_plan.current",
         "impact_policy_id": "skillguard.content_impact_policy.current",
         "input_component_ids": [
@@ -1077,19 +1077,19 @@
           "component:runtime_source:9c0b2ee28981e300",
           "component:runtime_source:ecdc0516f5b1c13c"
         ],
-        "input_projection_hash": "sha256:b15c771067fe1f7527b1e744f888974b2d84a8d5680d0510d151031f6da238db",
+        "input_projection_hash": "sha256:e1dd99f676e2cc5ba9fa46cefe2ef12c62d6f69c57f054fb27314d2abf3d7428",
         "kind": "target_runtime_source",
         "projection_declaration_hash": "sha256:ff8482db6fc602d220b15f8f5ed498dbd9b3f24e7e5b0ebb407fafa61fa9246d"
       },
       {
         "consumer_id": "projection:khaos-brain-update:target-tests",
-        "consumer_projection_hash": "sha256:12274e8dce511d8ac5a0d89c23bb63d395b301ef5262826f94e7b6f34762b3ab",
+        "consumer_projection_hash": "sha256:87903f24f320a99cfd1518d619b593fda0a1415f33489b16d1b0a007d4490397",
         "impact_plan_schema_version": "skillguard.content_impact_plan.current",
         "impact_policy_id": "skillguard.content_impact_policy.current",
         "input_component_ids": [
           "component:test_dev:78110bef3521637d"
         ],
-        "input_projection_hash": "sha256:a3be8789cf4c65658ccf5e4c09415c37f87c61900b4ff8dd76929ff73ce43f68",
+        "input_projection_hash": "sha256:4fff8d10fbaf951260a257f6a1059137d602084e8f0553b8149d65e93f8a350a",
         "kind": "target_test_source",
         "projection_declaration_hash": "sha256:038c2d8c664ff437e4ce005ba83ef676ab03e685cde1d3b736b3850c70c4e167"
       },
@@ -1117,7 +1117,7 @@
     "schema_version": "skillguard.content_impact_plan.current",
     "unknown_mapping_disposition": "block"
   },
-  "contract_hash": "AD3F25060A88FBE65ADF8E25484EBF1E4A85CC7CDED0C62376674152682D9E1C",
+  "contract_hash": "2A731FD3C9FC4D1F931A6D5A7ABDB6173F7971D1146164035D7A00D72780FB45",
   "depth_profile": {
     "claim_boundary": "Only exact current receipts for the target skill's declared checks are supervised. The target skill retains all domain judgment, including positive/shallow behavior and conditional update finalization.",
     "enforcement_level": "enforced",
@@ -1454,16 +1454,16 @@
   "skill_id": "khaos-brain-update",
   "source_fingerprints": {
     "binding": "BEC2D41B4A9801C523480A8562910C6B82C46C8600FC12155830892BA34A2B8E",
-    "entrypoint": "5607BEB181FB219E721A62556D7A81DC41CD66D2DF8F38814B70705ACE94870B",
-    "implementation:.agents/skills/khaos-brain-update": "01A603D17AA84FC0F50473088C315145F5959C791C702163EB5E891E16185071",
+    "entrypoint": "B96E08F8F4B05CA5F5C0FF4D6E56C1C6575139ADF5707F7F0B4977EA026CCF6E",
+    "implementation:.agents/skills/khaos-brain-update": "CA1E32D1E0F5BA1B54490D43B22E0BE8BEBDF8AC92646DCED0F7B7C8ADFE12F2",
     "implementation:.flowguard/khaos_brain_update_skill_contract_model.py": "09F69365B3AF73C28CAB561202D97B102F459537045F8277DC611F88AC1B3CC4",
     "implementation:local_kb/active_index.py": "3844CE08EA58E397F2BC45B90D336346AA69213B72DD52D7CCFB7D63C0BEC9EF",
     "implementation:local_kb/automation_contracts.py": "3FC8DB02AE7A8B42641BF87001E9BACCA8426B9C2796C1E238D13C4A0F512F38",
     "implementation:local_kb/automation_runtime.py": "BEFD8D5346EC5839609A86FD0A149DC263FBE0816649EE99C16078846745841A",
     "implementation:local_kb/card_schema_migration.py": "75555CCE380428527FCEF482B98365330831B0E1AE798FEB9251F068476E12BA",
-    "implementation:local_kb/install.py": "0BD4CC054D815FE901C06349C0BCB7214E09BDCF8AC5EFA348E7FF7CD6E76827",
-    "implementation:local_kb/logicguard_models.py": "3FF2A12BFE385106C3CB6063D614EEE2C673CD37E867FF4151CF8D009E6998C2",
-    "implementation:local_kb/maintenance_migration.py": "6D1FAB072503A6A11E865E90AE7A283BD73616D5AA133EEAB22ED27DACED7D22",
+    "implementation:local_kb/install.py": "B355CCFA1970614FA37D5608EDC7EDAA1762816AB5FE16F230BA056B6C4256BE",
+    "implementation:local_kb/logicguard_models.py": "1FADB46EF9FF0A54F57F4D9F8A795471CE726108D9767903D7F13C33BF3AF974",
+    "implementation:local_kb/maintenance_migration.py": "17CD22B4C8F01375D56FD4BF5B406967D4E451EF9750404EAE681BA0609E4992",
     "implementation:local_kb/model_maintenance.py": "358CCCC7488CF752F65244C11D48628A8ABB2488C96518AB163AD77C6A474553",
     "implementation:local_kb/model_projection.py": "98A586E4A316322DC52351834B22BE327BCEA169CC462B523D788398DF5476FB",
     "implementation:local_kb/org_migration.py": "1ED1460B2AD38031A61DAE0B4A11E55E91895141E9897DC854F74F8C92E99CDD",
@@ -1476,12 +1476,12 @@
     "implementation:scripts/check_kb_skillguard.py": "E130126638062FBCB287CF22D99B1CDF35BEB10C6FB4CFB9DD27B9EB918C091D",
     "implementation:scripts/run_kb_guarded_automation.py": "C0748106B7F4EA1343AD5840B3C748C349B31599E34BDA4DE996062F830DB4A6",
     "implementation:scripts/run_khaos_brain_system_update.py": "AA5E86257B0AD939034D4C7185E5843F11E17FD3427A7B567671C1DE3DC16F21",
-    "implementation:tests/test_codex_install.py": "ECB2969AA9072417CB5AE8B7CE2153E3FF7A23F77055A231A708A1599209C306",
+    "implementation:tests/test_codex_install.py": "D842032B944B4018F9D2B5782927F221C402A62FF5266BD358D7F7797D836FA1",
     "implementation:tests/test_kb_automation_activation.py": "A51BE246D7E41A484C21D94CF45FB9359BDD838F1F99DB42600ED57776BDA1A3",
     "implementation:tests/test_kb_automation_native_receipts.py": "96DF6C75478E0632F62F07EAF29FAA3D2B81B7BD5538D8D0558E8970D033D2CD",
     "implementation:tests/test_kb_automation_skillguard.py": "34D3A1F6EAB20CB59241FD988BAB78172488675A513EB7B29F9805DBC088F4F9",
     "implementation:tests/test_kb_upgrade_migration.py": "4EBFAD5F0779AEBE272CADE6C4F01EAB20B423D3A221358BF2B873AA77B1C31D",
-    "implementation:tests/test_khaos_logicguard_migration.py": "02845E00D5D54AE572D0F536A859D2E270D6719E69306D9AAC6837421804E742",
+    "implementation:tests/test_khaos_logicguard_migration.py": "E6A893CB36FE299F6D35B27606BF2E22F0301FB1EB5FACAB6B00805D3B44ED93",
     "implementation:tests/test_process_control.py": "DB012277C7692B1B522DB30C048F10F63A4EB4FF946655F367116477E182694D",
     "implementation:tests/test_software_update.py": "94CB07BF69866D769C08324D5042B869D32A279731E8F89194268FD1DF838C69",
     "model": "09F69365B3AF73C28CAB561202D97B102F459537045F8277DC611F88AC1B3CC4",

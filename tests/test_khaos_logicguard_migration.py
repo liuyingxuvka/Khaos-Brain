@@ -16,6 +16,7 @@ from local_kb.logicguard_models import (
 from local_kb.maintenance_migration import (
     migrate_legacy_card_generation,
     plan_logicguard_native_migration,
+    record_upgrade_ai_disposition,
     validate_logicguard_native_authority,
 )
 from local_kb.model_projection import binding_from_projection, validate_card_projection
@@ -177,6 +178,9 @@ class KhaosLogicGuardMigrationTests(unittest.TestCase):
             )
             self.assertTrue(migrate_legacy_card_generation(old_root)["ok"])
             old_generation = load_authority_generation(old_root)
+            old_public_b = load_yaml_file(
+                old_root / "kb" / "public" / "public-b.yaml"
+            )
 
             package_root = Path(directory) / "new-package"
             write_yaml_file(
@@ -235,6 +239,72 @@ class KhaosLogicGuardMigrationTests(unittest.TestCase):
                 old_generation["generation_id"],
                 load_authority_generation(old_root)["generation_id"],
             )
+
+            resolution = record_upgrade_ai_disposition(
+                old_root,
+                work_item_id=work_item["work_item_id"],
+                actor="Codex test upgrade AI",
+                rationale=(
+                    "The pulled public projection has a valid exact digest and a stable "
+                    "public card id; rebuild only that card directly into the new current "
+                    "model while reusing the old machine's other exact models."
+                ),
+            )
+            self.assertTrue(resolution["ok"], resolution)
+            self.assertEqual("recorded", resolution["status"])
+            self.assertEqual([], resolution["remaining_work_item_ids"])
+            self.assertEqual(
+                before_blocked_attempt,
+                tree_digest(
+                    old_root,
+                    ("kb/public", ".local/khaos-brain/logicguard-authority"),
+                ),
+            )
+
+            resolved_plan = plan_logicguard_native_migration(old_root)
+            self.assertTrue(resolved_plan["ok"], resolved_plan["issues"])
+            self.assertEqual(0, resolved_plan["upgrade_ai_work_item_count"])
+            self.assertEqual(1, resolved_plan["applied_upgrade_ai_disposition_count"])
+            rebuilt_rows = [
+                row
+                for row in resolved_plan["rows"]
+                if row["card_id"] == "public-a"
+            ]
+            self.assertEqual(
+                ["direct-current-projection-to-logicguard-model"],
+                [row["disposition"] for row in rebuilt_rows],
+            )
+
+            migrated = migrate_legacy_card_generation(old_root)
+            self.assertTrue(migrated["ok"], migrated)
+            self.assertEqual("committed", migrated["status"])
+            current_generation = load_authority_generation(old_root)
+            self.assertNotEqual(
+                old_generation["generation_id"], current_generation["generation_id"]
+            )
+            public_a = load_yaml_file(
+                old_root / "kb" / "public" / "public-a.yaml"
+            )
+            public_b = load_yaml_file(
+                old_root / "kb" / "public" / "public-b.yaml"
+            )
+            self.assertEqual(
+                package_projection["logicguard_model_id"],
+                public_a["logicguard_model_id"],
+            )
+            self.assertEqual(
+                old_public_b["logicguard_model_id"],
+                public_b["logicguard_model_id"],
+            )
+            self.assertEqual(
+                current_generation["generation_id"],
+                public_a["authority_generation_id"],
+            )
+            self.assertEqual(
+                current_generation["generation_id"],
+                public_b["authority_generation_id"],
+            )
+            self.assertTrue(validate_logicguard_native_authority(old_root)["ok"])
 
     def test_direct_migration_publishes_scoped_exact_authority_and_zero_legacy_semantics(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

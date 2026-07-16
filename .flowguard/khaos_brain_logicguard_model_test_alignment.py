@@ -65,6 +65,7 @@ KNOWN_BAD_TARGET_IDS = (
     "bad.projection-digest-mismatch",
     "bad.private-cross-scope-edge",
     "bad.retrieval-without-neighborhood",
+    "bad.performance-small-fixture-overclaim",
 )
 
 EXPECTED_PLANNING_GAP_CODES = {
@@ -86,7 +87,11 @@ def build_plan() -> ModelTestAlignmentPlan:
             obligation_type="external_contract",
             description=_description(obligation_id),
             required=True,
-            required_test_kinds=("happy_path",),
+            required_test_kinds=(
+                ("happy_path", "same_class")
+                if obligation_id == "req.retrieval.performance"
+                else ("happy_path",)
+            ),
             risk_level="high",
             allow_shared_evidence=False,
             allow_shared_implementation=False,
@@ -122,6 +127,27 @@ def build_plan() -> ModelTestAlignmentPlan:
         )
         for obligation_id, contract_id, _path, _symbol, test_path in BINDINGS
     )
+    performance_contract_id = next(
+        contract_id
+        for obligation_id, contract_id, _path, _symbol, _test_path in BINDINGS
+        if obligation_id == "req.retrieval.performance"
+    )
+    evidence = (*evidence, TestEvidence(
+        evidence_id="evidence.planned.req.retrieval.performance.same-class-scale",
+        test_name="planned::req.retrieval.performance::same-class-scale",
+        path="tests/test_khaos_model_native_retrieval.py",
+        command=(
+            "python -m pytest -q tests/test_khaos_model_native_retrieval.py "
+            "tests/test_khaos_model_runtime_readiness.py"
+        ),
+        result_status="not_run",
+        evidence_current=True,
+        test_kind="same_class",
+        covered_obligations=("req.retrieval.performance",),
+        covered_code_contracts=(performance_contract_id,),
+        assertion_scope="external_contract",
+        evidence_role="primary",
+    ))
     return ModelTestAlignmentPlan(
         model_id=MODEL_ID,
         obligations=obligations,
@@ -177,7 +203,8 @@ def main() -> int:
         "claim_boundary": (
             "This artifact freezes one planned code owner and one not-run evidence slot for every required OpenSpec "
             "obligation and rejects a duplicate Sleep code owner. Its blocked alignment status is intentional: no "
-            "implementation or test is treated as passing until current external-contract evidence is produced."
+            "implementation or test is treated as passing until current external-contract evidence is produced. "
+            "The performance obligation also requires the generalized large-generation same-class slot."
         ),
     }
     print(json.dumps(payload, indent=2, sort_keys=True))

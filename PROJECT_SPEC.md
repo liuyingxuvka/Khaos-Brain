@@ -1213,13 +1213,17 @@ Failed aggregate validation leaves all five migration-paused survivors paused.
 
 The target-owned contract generator, complete current SkillGuard executable
 tree, complete current FlowGuard package tree, and each managed Skill source
-tree must retain one content identity from
-immediately before through immediately after the validation that issues its
-receipt. The upgrader copies both complete Guard trees into immutable,
-receipt-bound snapshots before long assurance; every child check consumes those
-snapshots instead of rediscovering a mutable global SkillGuard installation or
-editable FlowGuard package. A temporary live-tree replacement therefore cannot
-split one run across tool versions, but a genuinely different live identity at
+tree must retain one content identity from immediately before through
+immediately after the validation that issues its receipt. The upgrader copies
+the complete Guard sources into immutable snapshots before long assurance. The
+SkillGuard/global-router pair then passes through the official SkillGuard
+transaction installer inside an attempt-local directory whose Codex home is an
+isolated `.codex`; the upgrader captures and replays the official current
+installation receipt there. Every child check consumes that installed isolated
+identity, while FlowGuard checks consume their frozen package snapshot. No child
+rediscovers, installs, or rewrites the user's mutable global SkillGuard. A
+temporary live-tree replacement therefore cannot split one run across tool
+versions, but a genuinely different source or isolated installed identity at
 final currentness fails the upgrade while all surviving automations remain
 paused. A later automatic attempt may start only from newly frozen identities.
 
@@ -1265,6 +1269,15 @@ checks are competing for the same machine. Inside one Sleep cycle, the final
 active-index generation has one publication/validation owner: unchanged
 intermediate work defers to that owner, and an already current receipt is reused
 unless a later lifecycle decision actually changes index eligibility.
+
+Within one exact authority generation and scope, model-bound reads open one
+immutable ModelMesh view and reuse it across distinct cards. The generation
+pointer digest, scope, mesh id, and mesh revision are all cache keys; publishing
+a new generation clears every process-local read session. Runtime latency and
+catalog memory are measured in separate probes so memory instrumentation cannot
+inflate the latency claim. The release gate includes a real current local
+generation plus a same-class distinct-card test; a tiny fixture alone cannot
+license the broad retrieval-performance claim.
 
 The caller decides source versus installed supervision only from the exact
 managed target root. The canonical repository Skill root selects source; the
@@ -1480,6 +1493,19 @@ sequence. A later change must preserve this ownership order.
 2. Run affected model, migration, retrieval, UI, privacy, and automation checks.
 3. Run the aggregate readiness owner exactly once on the stable snapshot.
 4. Reuse its immutable receipts rather than relaunching equivalent checks.
+
+When a pulled current public projection carries a different stable generation
+than an otherwise complete old-machine local authority, deterministic software
+must emit an immutable upgrade-AI work item and change no authority. The AI may
+inspect the exact projection digest, card identity, old/new generation ids, and
+binding, then record only the current `direct-current-projection-to-logicguard-model`
+disposition with an evidence hash, actor, rationale, timestamp, and decision
+hash. The resolver itself writes no card, model, mesh, index, or pointer. The
+idempotent migration retry consumes the exact decision, rebuilds only that
+projection's semantic model, reuses all other exact local models, publishes one
+new generation pointer last, and proves zero open work items and retired
+authority. Any stale or malformed decision remains blocked; there is no
+automatic rebind, compatibility reader, alias, or fallback route.
 
 ## 12. Definition of Done for LogicGuard-Native v0.1
 

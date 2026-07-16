@@ -340,7 +340,9 @@ class _FrozenInstalledSupervisionRuntime:
     reconstructed from caller-authored JSON.  Keeping this small worker alive
     across the native Sleep/Dream/update command preserves that official seal
     and the exact imported behavior bytes without requiring the global
-    SkillGuard installation to remain unchanged until the native command ends.
+    SkillGuard source installation to remain unchanged until the native command
+    ends.  Khaos upgrades supply an officially installed isolated validation
+    home; ordinary already-installed use may supply the real current Codex home.
     """
 
     def __init__(
@@ -379,6 +381,12 @@ class _FrozenInstalledSupervisionRuntime:
         self.validation_router_root = _active_skillguard_router_root(
             self.codex_home, self.validation_runtime_root
         )
+        self.validation_codex_home = self.validation_runtime_root.parent.parent
+        if self.validation_codex_home.name != ".codex":
+            raise ValueError(
+                "SkillGuard validation runtime must belong to an exact .codex home"
+            )
+        self.validation_codex_home = self.validation_codex_home.resolve(strict=True)
         self.runtime_root, self.runtime_projection_receipt = (
             _materialize_skillguard_runtime_projection(
                 self.validation_runtime_root,
@@ -481,15 +489,13 @@ class _FrozenInstalledSupervisionRuntime:
         receipt_relative = str(
             self.installation_module.DEFAULT_INSTALLATION_RECEIPT_RELATIVE_PATH
         )
-        self.active_skillguard_root = (
-            self.codex_home / "skills" / "skillguard"
-        ).resolve(strict=True)
+        self.active_skillguard_root = self.validation_runtime_root.resolve(strict=True)
         with _installation_identity_environment():
             self.verified_context = (
                 self.installation_module.load_verified_installation_context(
                     self.active_skillguard_root / receipt_relative,
                     canonical_skill_root=None,
-                    codex_home=self.codex_home,
+                    codex_home=self.validation_codex_home,
                 )
             )
 

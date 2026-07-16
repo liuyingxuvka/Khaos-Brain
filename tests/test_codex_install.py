@@ -234,7 +234,14 @@ class CodexInstallTests(unittest.TestCase):
             self.assertTrue(payload["global_router_live_freshness"]["ok"])
             self.assertIn(
                 payload["skillguard_validation_toolchain"]["status"],
-                {"frozen", "inherited_frozen"},
+                {
+                    "isolated_installed_current",
+                    "inherited_isolated_installation",
+                },
+            )
+            self.assertEqual(
+                payload["skillguard_validation_toolchain_cleanup"]["status"],
+                "removed",
             )
             self.assertIn(
                 payload["flowguard_validation_toolchain"]["status"],
@@ -640,12 +647,61 @@ class CodexInstallTests(unittest.TestCase):
                 "print('compiler')\n", encoding="utf-8"
             )
             (scripts / "skillguard.py").write_text(
-                "print('cli')\n", encoding="utf-8"
+                """\
+import json
+from pathlib import Path
+import sys
+
+command = sys.argv[1]
+codex_home = Path(sys.argv[sys.argv.index('--codex-home') + 1])
+if command == 'capture-installation-receipt':
+    receipt_root = codex_home / 'skills' / 'skillguard' / '.sg-runtime' / 'installation'
+    (receipt_root / 'receipts').mkdir(parents=True, exist_ok=True)
+    (receipt_root / 'HEAD.json').write_text('{}\\n', encoding='utf-8')
+    (receipt_root / 'receipts' / 'fixture.json').write_text('{}\\n', encoding='utf-8')
+    print(json.dumps({'status': 'passed', 'receipt_id': 'fixture', 'receipt_hash': 'fixture-hash'}))
+elif command == 'verify-installation-receipt':
+    print(json.dumps({'status': 'passed'}))
+else:
+    raise SystemExit(2)
+""",
+                encoding="utf-8",
+            )
+            (scripts / "skillguard_install.py").write_text(
+                """\
+import argparse
+import json
+from pathlib import Path
+import shutil
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--canonical-skill-root', required=True)
+parser.add_argument('--stage-root', required=True)
+parser.add_argument('--codex-home', required=True)
+parser.add_argument('--prepare', action='store_true')
+parser.add_argument('--activate', action='store_true')
+args = parser.parse_args()
+canonical = Path(args.canonical_skill_root)
+home = Path(args.codex_home)
+active = home / 'skills' / 'skillguard'
+active.parent.mkdir(parents=True, exist_ok=True)
+shutil.copytree(canonical, active)
+shutil.copytree(canonical.parent / 'skillguard-global-router', active.parent / 'skillguard-global-router')
+print(json.dumps({'status': 'passed', 'reports': [{'status': 'passed'}, {'status': 'passed', 'transaction_id': 'fixture-transaction'}]}))
+""",
+                encoding="utf-8",
             )
             router = codex_home / "skills" / "skillguard-global-router"
             router.mkdir(parents=True)
             (router / "SKILL.md").write_text("router\n", encoding="utf-8")
-            destination = root / "receipts" / "skillguard"
+            destination = (
+                root
+                / "receipts"
+                / "canonical-repository"
+                / ".agents"
+                / "skills"
+                / "skillguard"
+            )
             with patch.dict(
                 os.environ,
                 {
@@ -656,20 +712,40 @@ class CodexInstallTests(unittest.TestCase):
                 receipt = _freeze_skillguard_validation_toolchain(
                     codex_home, destination
                 )
-            self.assertEqual(receipt["status"], "frozen")
+            self.assertEqual(receipt["status"], "isolated_installed_current")
             self.assertEqual(
-                receipt["manifest"]["digest"], tree_manifest(destination)["digest"]
+                receipt["canonical_manifest"]["digest"],
+                tree_manifest(destination)["digest"],
             )
             self.assertEqual(
-                receipt["router_manifest"]["digest"],
+                receipt["router_canonical_manifest"]["digest"],
                 tree_manifest(destination.parent / "skillguard-global-router")[
                     "digest"
                 ],
             )
+            installed = Path(receipt["snapshot_root"])
+            installed_router = Path(receipt["router_snapshot_root"])
+            self.assertEqual(
+                receipt["manifest"]["digest"], tree_manifest(installed)["digest"]
+            )
+            self.assertEqual(
+                receipt["router_manifest"]["digest"],
+                tree_manifest(installed_router)["digest"],
+            )
+            self.assertEqual(Path(receipt["validation_codex_home"]).name, ".codex")
+            self.assertTrue(
+                (installed / ".sg-runtime" / "installation" / "HEAD.json").is_file()
+            )
+            stored_receipt = json.loads(
+                Path(receipt["receipt_path"]).read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                stored_receipt["receipt_hash"], receipt["receipt_hash"]
+            )
             shutil.rmtree(live)
             shutil.rmtree(router)
             self.assertTrue(
-                _skillguard_compiler_path(codex_home, destination).is_file()
+                _skillguard_compiler_path(codex_home, installed).is_file()
             )
             with self.assertRaisesRegex(RuntimeError, "identity changed"):
                 _require_live_skillguard_matches_snapshot(receipt)
@@ -913,6 +989,12 @@ class CodexInstallTests(unittest.TestCase):
                 run_history_migration=False,
             )
 
+            validation_cleanup = payload[
+                "skillguard_validation_toolchain_cleanup"
+            ]
+            self.assertTrue(validation_cleanup["ok"])
+            self.assertEqual(validation_cleanup["status"], "removed")
+            self.assertFalse(Path(validation_cleanup["root"]).exists())
             self.assertEqual(set(payload["maintenance_skill_names"]), SURVIVING_SKILLS)
             self.assertEqual(set(payload["automation_ids"]), SURVIVING_AUTOMATIONS)
             self.assertEqual(set(MAINTENANCE_SKILL_NAMES), SURVIVING_SKILLS)

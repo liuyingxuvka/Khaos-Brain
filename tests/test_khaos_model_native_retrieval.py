@@ -169,12 +169,36 @@ class KhaosModelNativeRetrievalTests(unittest.TestCase):
         self.assertEqual(model_open.call_count, 2)
         self.assertEqual(mesh_open.call_count, 2)
 
+    def test_current_mesh_view_is_reused_across_distinct_cards_in_one_generation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            activate_model_native_fixture(root)
+            logicguard_models._clear_bound_read_caches()
+            entries, _index = load_active_entries(root)
+
+            for entry in entries:
+                logicguard_models.read_bound_argument_context(
+                    root,
+                    logicguard_models.LogicGuardBinding(
+                        authority_scope=str(entry.data["authority_scope"]),
+                        model_id=str(entry.data["logicguard_model_id"]),
+                        node_id=str(entry.data["logicguard_node_id"]),
+                        block_id=str(entry.data["logicguard_block_id"]),
+                        revision_id=str(entry.data["logicguard_revision_id"]),
+                        mesh_id=str(entry.data["logicguard_mesh_id"]),
+                        mesh_revision_id=str(entry.data["logicguard_mesh_revision_id"]),
+                    ),
+                )
+
+            cache = logicguard_models._cached_current_mesh_view.cache_info()
+            self.assertEqual(cache.misses, 1)
+            self.assertGreaterEqual(cache.hits, 2)
+
     def test_repeated_exact_context_reads_reuse_only_immutable_json(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             activate_model_native_fixture(root)
-            logicguard_models._cached_bound_argument_context_json.cache_clear()
-            logicguard_models._cached_bound_read_session.cache_clear()
+            logicguard_models._clear_bound_read_caches()
             with patch(
                 "local_kb.logicguard_models._build_bound_argument_context",
                 wraps=logicguard_models._build_bound_argument_context,

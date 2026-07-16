@@ -1658,3 +1658,88 @@ un_khaos_brain_conformance.py` - conformance replay passed lane lock, organizati
 - python -m flowguard project-audit --root . --json
 - python scripts/verify_skill_suite_markers.py --root . --json
 - Rerun affected FlowGuard model checks and focused tests before broad confidence.
+
+
+## khaos-brain-v062-logicguard-runtime-scale-miss - Close the large existing-brain LogicGuard runtime performance model miss without weakening budgets or adding fallback.
+
+- Project: Khaos-Brain
+- Trigger reason: Post-green runtime evidence exceeded catalog and exact-context budgets on the real 3427-card local generation.
+- Status: in_progress
+- Skill decision: used_existing_model_preflight_model_miss_review_model_test_alignment_and_development_process_flow
+- Started: 2026-07-16T12:05:49+00:00
+- Ended: 2026-07-16T12:05:49+00:00
+- Duration seconds: 0.000
+- Commands OK: False
+
+### Model Files
+- .flowguard/khaos_brain_logicguard_runtime_model_miss.py
+- .flowguard/khaos_brain_logicguard_model_test_alignment.py
+- .flowguard/khaos_brain_logicguard_test_mesh.py
+
+### Commands
+- OK (0.000s): `Focused retrieval/runtime tests: 8 passed.`
+- OK (0.000s): `Real 3427-card runtime: catalog 13.069128s, exact-context P95 0.052862s, search P95 0.551762s, peak memory 38.284 MiB.`
+- OK (0.000s): `Affected readiness and assurance: 26 tests plus 9 subtests passed.`
+- FAIL (0.000s): `Aggregate runtime: catalog 30.620497s and exact-context P95 3.145622s exceeded fixed budgets.`
+
+### Findings
+- The three-card fixture overclaimed real-machine scale; repeated exact mesh parsing and instrumented timing were the root causes.
+
+### Counterexamples
+- Do not weaken performance budgets or add an alternate reader, floating head, compatibility path, or fallback.
+
+### Friction Points
+- The first aggregate owner lost outer stdout when the desktop host channel closed, but immutable child receipts preserved the exact failure.
+
+### Skipped Steps
+- Final aggregate install and GitHub CI remain pending.
+- No SkillGuard repository/global installation change and no subagent use.
+
+### Risk Evidence Summary
+- The existing retrieval commitment owns the miss; same-class closure and real local scale pass without a second authority.
+
+### Next Actions
+- Freeze source and run one rollbackable aggregate installer owner.
+- Require clean Khaos branch/main/tag CI before v0.6.2 release.
+
+
+## khaos-brain-v062-logicguard-runtime-scale-miss - Close the large existing-brain LogicGuard runtime performance model miss without weakening budgets or adding fallback.
+
+- Project: Khaos-Brain
+- Trigger reason: Post-green runtime evidence exceeded catalog and exact-context budgets on the real 3427-card local generation.
+- Status: completed
+- Skill decision: used_existing_model_preflight_model_miss_review_model_test_alignment_and_development_process_flow
+- Started: 2026-07-16T13:33:27+00:00
+- Ended: 2026-07-16T13:33:27+00:00
+- Duration seconds: 0.000
+- Commands OK: True
+
+### Model Files
+- .flowguard/khaos_brain_logicguard_runtime_model_miss.py
+- .flowguard/khaos_brain_logicguard_model_test_alignment.py
+- .flowguard/khaos_brain_logicguard_test_mesh.py
+
+### Commands
+- OK (0.000s): `Frozen full installer owner exited 0; all five Khaos SkillGuard automation bindings matched.`
+- OK (0.000s): `Read-only installed health check exited 0 with ok=true, zero issues, and zero warnings.`
+- OK (0.000s): `Final-source core checks: 16 tests plus 11 subtests passed; three affected installer transaction tests passed.`
+- OK (0.000s): `All five SkillGuard compiled-contract parity checks and affected FlowGuard model checks passed.`
+
+### Findings
+- One immutable current mesh view is reused across distinct cards in the same exact generation and scope.
+- Real 3427-card runtime passed fixed catalog, exact-context, search, and memory budgets without fallback.
+
+### Counterexamples
+- Do not validate before source freeze, weaken budgets, or add a compatibility reader when exact authority changes.
+
+### Friction Points
+- The aggregate report duplicated too much evidence and reached about 792 MB; report compaction remains a future process optimization, not a release blocker.
+
+### Skipped Steps
+- Exact stable-public projection aggregate installation is delegated to clean GitHub branch/main/tag CI because the local machine intentionally authorizes its own current Sleep generation.
+
+### Risk Evidence Summary
+- Local frozen-source aggregate install and installed health check passed; clean GitHub CI remains the sole exact public-commit release owner.
+
+### Next Actions
+- Push the frozen Khaos branch and require terminal green clean branch, main, and tag CI before publishing v0.6.2.

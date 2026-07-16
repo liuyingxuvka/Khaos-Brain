@@ -68,17 +68,28 @@ def build_report(repo_root: Path = REPO_ROOT) -> dict[str, Any]:
     catalog_seconds = 0.0
     peak_mib = 0.0
     if authority.get("ok"):
-        tracemalloc.start()
         try:
             (entries, generation), catalog_seconds = _timed(
                 lambda: load_current_model_entries(root)
             )
+            # Memory instrumentation makes large PyYAML catalogs several
+            # times slower. Measure user-facing latency without instrumentation,
+            # then run a separate exact-authority load for the memory ceiling.
+            # Neither gate is removed or relaxed.
+            tracemalloc.start()
+            memory_entries, memory_generation = load_current_model_entries(root)
             _current, peak = tracemalloc.get_traced_memory()
             peak_mib = peak / (1024 * 1024)
+            if len(memory_entries) != len(entries) or str(
+                memory_generation.get("pointer_digest") or ""
+            ) != str(generation.get("pointer_digest") or ""):
+                issues.append("catalog-memory-probe-authority-mismatch")
+            del memory_entries, memory_generation
         except Exception as exc:
             issues.append(f"catalog:{type(exc).__name__}: {exc}")
         finally:
-            tracemalloc.stop()
+            if tracemalloc.is_tracing():
+                tracemalloc.stop()
 
     if catalog_seconds > CATALOG_MAX_SECONDS:
         issues.append(

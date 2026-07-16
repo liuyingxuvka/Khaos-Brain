@@ -96,6 +96,10 @@ CURRENT_PROJECTION_BOOTSTRAP_DISPOSITION = "direct-current-projection-bootstrap"
 INCOMPATIBLE_CURRENT_PROJECTION_DISPOSITION = (
     "blocked-upgrade-ai-current-projection-authority"
 )
+UPGRADE_AI_DISPOSITION_SCHEMA = "khaos-brain.upgrade-ai-dispositions.v1"
+UPGRADE_AI_DIRECT_CURRENT_ACTION = (
+    "direct-current-projection-to-logicguard-model"
+)
 
 MANAGED_DIRECTORY_ROOTS = (
     Path("kb") / "history" / "consolidation",
@@ -2135,6 +2139,158 @@ def model_authority_receipt_path(repo_root: Path) -> Path:
     return migration_root(repo_root) / MODEL_AUTHORITY_RECEIPT_NAME
 
 
+def upgrade_ai_disposition_path(repo_root: Path) -> Path:
+    return (
+        Path(repo_root).resolve()
+        / ".local"
+        / "khaos-brain"
+        / "upgrade-ai-dispositions.json"
+    )
+
+
+def _load_upgrade_ai_dispositions(
+    repo_root: Path,
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    path = upgrade_ai_disposition_path(repo_root)
+    if not path.is_file():
+        return {}, []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {}, [f"upgrade AI disposition registry is unreadable: {type(exc).__name__}"]
+    if not isinstance(payload, dict) or payload.get("schema_version") != UPGRADE_AI_DISPOSITION_SCHEMA:
+        return {}, ["upgrade AI disposition registry schema is not current"]
+    rows = payload.get("dispositions")
+    if not isinstance(rows, list):
+        return {}, ["upgrade AI disposition registry must contain a dispositions list"]
+    dispositions: dict[str, dict[str, Any]] = {}
+    issues: list[str] = []
+    for index, value in enumerate(rows):
+        if not isinstance(value, Mapping):
+            issues.append(f"upgrade AI disposition row {index} is not an object")
+            continue
+        row = dict(value)
+        work_item_id = str(row.get("work_item_id") or "")
+        if not work_item_id:
+            issues.append(f"upgrade AI disposition row {index} has no work_item_id")
+            continue
+        if work_item_id in dispositions:
+            issues.append(f"duplicate upgrade AI disposition: {work_item_id}")
+            continue
+        claimed_hash = str(row.get("decision_hash") or "")
+        expected_hash = "sha256:" + canonical_digest(
+            {key: item for key, item in row.items() if key != "decision_hash"}
+        )
+        if claimed_hash != expected_hash:
+            issues.append(f"upgrade AI disposition hash mismatch: {work_item_id}")
+            continue
+        dispositions[work_item_id] = row
+    return dispositions, issues
+
+
+def _upgrade_ai_disposition_issues(
+    disposition: Mapping[str, Any],
+    work_item: Mapping[str, Any],
+) -> list[str]:
+    evidence = dict(work_item.get("evidence") or {})
+    expected_evidence_digest = "sha256:" + canonical_digest(evidence)
+    issues: list[str] = []
+    if disposition.get("status") != "approved":
+        issues.append("status is not approved")
+    if disposition.get("action") != UPGRADE_AI_DIRECT_CURRENT_ACTION:
+        issues.append("action is not the sole direct-current projection rebuild")
+    if disposition.get("evidence_digest") != expected_evidence_digest:
+        issues.append("evidence digest does not match the open work item")
+    if disposition.get("projection_source_digest") != evidence.get(
+        "projection_source_digest"
+    ):
+        issues.append("projection source digest changed")
+    if not str(disposition.get("actor") or "").strip():
+        issues.append("AI actor is missing")
+    if not str(disposition.get("rationale") or "").strip():
+        issues.append("AI rationale is missing")
+    return issues
+
+
+def record_upgrade_ai_disposition(
+    repo_root: Path,
+    *,
+    work_item_id: str,
+    actor: str,
+    rationale: str,
+) -> dict[str, Any]:
+    """Record one exact AI judgment without changing cards or model authority."""
+
+    root = Path(repo_root).resolve()
+    plan = plan_logicguard_native_migration(root)
+    open_items = {
+        str(item.get("work_item_id") or ""): dict(item)
+        for item in plan.get("upgrade_ai_work_items", [])
+        if isinstance(item, Mapping)
+    }
+    existing, registry_issues = _load_upgrade_ai_dispositions(root)
+    if registry_issues:
+        raise RuntimeError("; ".join(registry_issues))
+    if work_item_id in existing and work_item_id not in open_items:
+        return {
+            "ok": True,
+            "status": "already_recorded",
+            "disposition": existing[work_item_id],
+            "remaining_work_item_ids": sorted(open_items),
+        }
+    work_item = open_items.get(work_item_id)
+    if work_item is None:
+        raise ValueError(f"Current upgrade AI work item is unavailable: {work_item_id}")
+    if not actor.strip() or not rationale.strip():
+        raise ValueError("Upgrade AI disposition requires actor and rationale")
+    evidence = dict(work_item.get("evidence") or {})
+    disposition: dict[str, Any] = {
+        "work_item_id": work_item_id,
+        "status": "approved",
+        "action": UPGRADE_AI_DIRECT_CURRENT_ACTION,
+        "evidence_digest": "sha256:" + canonical_digest(evidence),
+        "projection_source_digest": str(
+            evidence.get("projection_source_digest") or ""
+        ),
+        "actor": actor.strip(),
+        "rationale": rationale.strip(),
+        "approved_at": utc_now_iso(),
+    }
+    disposition["decision_hash"] = "sha256:" + canonical_digest(disposition)
+    existing[work_item_id] = disposition
+    registry = {
+        "schema_version": UPGRADE_AI_DISPOSITION_SCHEMA,
+        "dispositions": [existing[key] for key in sorted(existing)],
+        "updated_at": utc_now_iso(),
+        "claim_boundary": (
+            "This registry contains explicit evidence-bound upgrade-AI judgments only. "
+            "It is not a compatibility reader, projection rebind, or normal-runtime authority."
+        ),
+    }
+    path = upgrade_ai_disposition_path(root)
+    _atomic_write_json(path, registry)
+    resolved_plan = plan_logicguard_native_migration(root)
+    remaining = [
+        str(item.get("work_item_id") or "")
+        for item in resolved_plan.get("upgrade_ai_work_items", [])
+        if isinstance(item, Mapping)
+    ]
+    if work_item_id in remaining:
+        raise RuntimeError(
+            f"Recorded upgrade AI disposition did not resolve its exact work item: {work_item_id}"
+        )
+    receipt = {
+        "ok": True,
+        "status": "recorded",
+        "path": str(path),
+        "disposition": disposition,
+        "resolved_plan_ok": bool(resolved_plan.get("ok")),
+        "remaining_work_item_ids": remaining,
+    }
+    receipt["receipt_hash"] = "sha256:" + canonical_digest(receipt)
+    return receipt
+
+
 def _binding_from_row(value: Mapping[str, Any]) -> LogicGuardBinding:
     return LogicGuardBinding(
         authority_scope=str(value.get("authority_scope") or ""),
@@ -2262,6 +2418,11 @@ def plan_logicguard_native_migration(repo_root: Path) -> dict[str, Any]:
     toolchain = logicguard_dependency_preflight()
     rows: list[dict[str, Any]] = []
     issues: list[str] = []
+    upgrade_ai_dispositions, disposition_registry_issues = (
+        _load_upgrade_ai_dispositions(root)
+    )
+    issues.extend(disposition_registry_issues)
+    applied_upgrade_ai_dispositions: list[dict[str, Any]] = []
     current_generation_ids: set[str] = set()
     seen_scope_ids: set[tuple[str, str]] = set()
     current_projection_items: list[tuple[int, str, dict[str, Any]]] = []
@@ -2334,25 +2495,52 @@ def plan_logicguard_native_migration(repo_root: Path) -> dict[str, Any]:
                 and prior_generation_id != active_generation_id
                 and not pointer_authorizes_exact_mesh
             ):
-                disposition = INCOMPATIBLE_CURRENT_PROJECTION_DISPOSITION
-                binding_payload = binding.to_dict()
                 blocker = (
                     "projection authority generation does not equal the active local authority "
                     f"({prior_generation_id or 'missing'} != {active_generation_id})"
                 )
-                issues.append(f"{relative}: {blocker}")
-                upgrade_ai_work_items.append(
-                    _projection_upgrade_ai_work_item(
-                        scope=scope,
-                        relative_path=relative,
-                        card_id=card_id,
-                        projection_source_digest=projection_source_digest,
-                        projection_generation_id=prior_generation_id,
-                        active_generation_id=active_generation_id,
-                        binding=binding,
-                        blocker=blocker,
-                    )
+                work_item = _projection_upgrade_ai_work_item(
+                    scope=scope,
+                    relative_path=relative,
+                    card_id=card_id,
+                    projection_source_digest=projection_source_digest,
+                    projection_generation_id=prior_generation_id,
+                    active_generation_id=active_generation_id,
+                    binding=binding,
+                    blocker=blocker,
                 )
+                approved = upgrade_ai_dispositions.get(
+                    str(work_item.get("work_item_id") or "")
+                )
+                approval_issues = (
+                    _upgrade_ai_disposition_issues(approved, work_item)
+                    if approved is not None
+                    else ["no explicit AI disposition is recorded"]
+                )
+                if approval_issues:
+                    disposition = INCOMPATIBLE_CURRENT_PROJECTION_DISPOSITION
+                    binding_payload = binding.to_dict()
+                    issues.append(f"{relative}: {blocker}")
+                    if approved is not None:
+                        issues.append(
+                            f"{relative}: invalid upgrade AI disposition: "
+                            + "; ".join(approval_issues)
+                        )
+                    upgrade_ai_work_items.append(work_item)
+                else:
+                    semantic_payload = _current_projection_bootstrap_semantics(data)
+                    if not _logicguard_migratable(semantic_payload):
+                        issues.append(
+                            f"{relative}: approved current projection lacks the action/prediction required for a LogicGuard root argument"
+                        )
+                        disposition = INCOMPATIBLE_CURRENT_PROJECTION_DISPOSITION
+                        binding_payload = binding.to_dict()
+                        upgrade_ai_work_items.append(work_item)
+                    else:
+                        disposition = UPGRADE_AI_DIRECT_CURRENT_ACTION
+                        binding_payload = {}
+                        source_digest = "sha256:" + canonical_digest(semantic_payload)
+                        applied_upgrade_ai_dispositions.append(dict(approved))
             elif not projection_bootstrap_allowed:
                 disposition = "reuse-current-exact-model"
                 binding_payload = binding.to_dict()
@@ -2460,6 +2648,10 @@ def plan_logicguard_native_migration(repo_root: Path) -> dict[str, Any]:
         ),
         "upgrade_ai_work_item_count": len(upgrade_ai_work_items),
         "upgrade_ai_work_items": upgrade_ai_work_items,
+        "applied_upgrade_ai_disposition_count": len(
+            applied_upgrade_ai_dispositions
+        ),
+        "applied_upgrade_ai_dispositions": applied_upgrade_ai_dispositions,
         "current_card_count": sum(
             row["disposition"] == "reuse-current-exact-model" for row in rows
         ),
@@ -2517,7 +2709,11 @@ def migrate_cards_to_models(
         else:
             model_input = (
                 _current_projection_bootstrap_semantics(data)
-                if row.get("disposition") == CURRENT_PROJECTION_BOOTSTRAP_DISPOSITION
+                if row.get("disposition")
+                in {
+                    CURRENT_PROJECTION_BOOTSTRAP_DISPOSITION,
+                    UPGRADE_AI_DIRECT_CURRENT_ACTION,
+                }
                 else data
             )
             model_id = model_id_for_card(str(data.get("id") or ""))
@@ -3420,12 +3616,25 @@ def run_maintenance_migration(
                     rollback_snapshot=snapshot,
                 )
                 if not model_authority.get("ok"):
+                    work_item_ids = [
+                        str(item.get("work_item_id") or "")
+                        for item in model_authority.get(
+                            "upgrade_ai_work_items", []
+                        )
+                        if isinstance(item, Mapping)
+                    ]
                     raise RuntimeError(
                         "LogicGuard authority migration failed: "
                         + str(
                             model_authority.get("error")
                             or model_authority.get("issues")
                             or model_authority.get("status")
+                        )
+                        + (
+                            "; upgrade_ai_work_item_ids="
+                            + ",".join(item for item in work_item_ids if item)
+                            if work_item_ids
+                            else ""
                         )
                     )
                 journal = _checkpoint(

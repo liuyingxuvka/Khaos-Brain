@@ -410,6 +410,10 @@ def _commands(
             sys.executable,
             ".flowguard/khaos_brain_logicguard_test_mesh.py",
         ],
+        "logicguard_runtime_model_miss": [
+            sys.executable,
+            ".flowguard/khaos_brain_logicguard_runtime_model_miss.py",
+        ],
         "logicguard_runtime": [
             sys.executable,
             "scripts/check_khaos_logicguard_runtime.py",
