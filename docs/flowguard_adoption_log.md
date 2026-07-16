@@ -1854,3 +1854,40 @@ un_khaos_brain_conformance.py` - conformance replay passed lane lock, organizati
 
 ### Next Actions
 - Push and use the next clean CI result to repair the exact named alignment gap.
+
+
+## khaos-brain-v062-cross-platform-archive-prune-evidence - Bind archive-prune model-miss closure to cross-platform same-class evidence.
+
+- Project: Khaos-Brain
+- Trigger reason: Clean Linux CI run 29505203621 identified req.history.archive-prune-index as missing same-class evidence because its sole generalized test was Windows-only and skipped.
+- Status: completed
+- Skill decision: used_existing_model_preflight_model_miss_review_model_test_alignment_and_development_process_flow
+- Started: 2026-07-16T14:16:53+00:00
+- Ended: 2026-07-16T14:16:53+00:00
+- Duration seconds: 0.000
+- Commands OK: True
+
+### Model Files
+- scripts/check_kb_model_test_alignment.py
+
+### Commands
+- OK (0.000s): `Both archive-prune observed/generalized history migration tests and all validation-evidence reuse tests passed: 7 passed.`
+- OK (0.000s): `Model-code-test alignment returned green with zero findings and zero receipt findings.`
+
+### Findings
+- Cold-archive prune idempotency is the platform-neutral same-class behavior; Windows extended-path inventory remains an additional platform-specific regression.
+
+### Counterexamples
+- Do not count a skipped Windows-only test as Linux evidence, remove the Windows regression, or waive the same-class requirement.
+
+### Friction Points
+- none recorded
+
+### Skipped Steps
+- none recorded
+
+### Risk Evidence Summary
+- The exact previously missing obligation now has current cross-platform failure-path and happy-path evidence without weakening its closure roles.
+
+### Next Actions
+- Push and require one terminal green clean Linux branch CI run.

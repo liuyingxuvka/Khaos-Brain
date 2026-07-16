@@ -120,3 +120,17 @@ def test_unknown_alignment_run_is_a_failed_gate_not_an_exception(monkeypatch) ->
     report = alignment._alignment_report({})
 
     assert report.ok is False
+
+
+def test_archive_prune_same_class_evidence_is_cross_platform() -> None:
+    obligation = next(
+        item
+        for item in alignment.OBLIGATIONS
+        if item["id"] == "req.history.archive-prune-index"
+    )
+
+    assert obligation["same_class_test"] == (
+        "tests/test_kb_history_migration.py::KbHistoryMigrationTests::"
+        "test_migration_resumes_cold_archives_prunes_and_is_idempotent"
+    )
+    assert "windows_long_managed_paths" not in obligation["same_class_test"]

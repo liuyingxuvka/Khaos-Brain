@@ -226,7 +226,7 @@ OBLIGATIONS: tuple[dict[str, Any], ...] = (
         "path": "local_kb/maintenance_migration.py",
         "symbol": "validate_migration",
         "test": "tests/test_kb_history_migration.py::KbHistoryMigrationTests::test_prune_resume_merges_partial_manifest_and_preserves_accounting",
-        "same_class_test": "tests/test_kb_history_migration.py::KbHistoryMigrationTests::test_windows_long_managed_paths_are_inventoried_and_pruned",
+        "same_class_test": "tests/test_kb_history_migration.py::KbHistoryMigrationTests::test_migration_resumes_cold_archives_prunes_and_is_idempotent",
         "model_miss": True,
     },
     {
