@@ -2,7 +2,7 @@
 
 ## v0.6.2 - 2026-07-16
 
-- Made clean Linux CI self-contained by freezing the public SkillGuard v0.3.0 validation-toolchain commit and OpenSpec 1.6.0 instead of depending on user-level global installations.
+- Made clean Linux CI self-contained by freezing the public SkillGuard v0.3.1 validation-toolchain commit and OpenSpec 1.6.0 instead of depending on user-level global installations.
 - Declared an isolated CI-only automation model and reasoning effort so clean installation can validate rendered schedules without weakening the real-machine requirement for explicit current model authority.
 - Reordered CI so the canonical rollbackable Khaos Brain installation publishes the current local LogicGuard authority before tests that intentionally require installed state.
 - Repaired the fresh-clone authority path so an intact current public card projection is admitted only by the versioned migration owner, stripped of prior local bindings and derived relations, and rebuilt into a stable exact local model/mesh generation; tampered projections and partial authority still fail closed.
