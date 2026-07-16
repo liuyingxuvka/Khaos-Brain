@@ -505,6 +505,32 @@ def _test_modules(repo_root: Path) -> dict[str, str]:
     return modules
 
 
+def _unique_test_module_aliases(modules: Mapping[str, str]) -> dict[str, str]:
+    """Return only unambiguous pytest JUnit module aliases.
+
+    Pytest may emit ``tests.test_sample`` on one platform and ``test_sample``
+    on another for the same collected file.  Both are valid JUnit projections
+    of the canonical repository node.  Short aliases are admitted only when
+    they identify exactly one repository test module, so a receipt can never
+    gain coverage by guessing between duplicate basenames.
+    """
+
+    candidates: dict[str, set[str]] = {}
+    for module in modules:
+        parts = module.split(".")
+        aliases = {module}
+        if parts and parts[0] == "tests":
+            aliases.update(".".join(parts[index:]) for index in range(1, len(parts)))
+        for alias in aliases:
+            if alias:
+                candidates.setdefault(alias, set()).add(module)
+    return {
+        alias: next(iter(owners))
+        for alias, owners in candidates.items()
+        if len(owners) == 1
+    }
+
+
 def _junit_summary(path: Path, repo_root: Path) -> dict[str, Any]:
     summary: dict[str, Any] = {
         "path": str(path.resolve()),
@@ -522,7 +548,8 @@ def _junit_summary(path: Path, repo_root: Path) -> dict[str, Any]:
         return summary
     summary["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
     modules = _test_modules(repo_root)
-    ordered_modules = sorted(modules, key=len, reverse=True)
+    module_aliases = _unique_test_module_aliases(modules)
+    ordered_aliases = sorted(module_aliases, key=len, reverse=True)
     try:
         root = ET.parse(path).getroot()
     except (OSError, ET.ParseError) as exc:
@@ -532,20 +559,21 @@ def _junit_summary(path: Path, repo_root: Path) -> dict[str, Any]:
         summary["testcase_count"] += 1
         classname = str(case.get("classname") or "")
         name = str(case.get("name") or "")
-        module = next(
+        alias = next(
             (
                 candidate
-                for candidate in ordered_modules
+                for candidate in ordered_aliases
                 if classname == candidate or classname.startswith(candidate + ".")
             ),
             "",
         )
-        if not module or not name:
+        if not alias or not name:
             summary["unparsed_cases"].append(
                 {"classname": classname, "name": name}
             )
             continue
-        class_suffix = classname[len(module) :].lstrip(".")
+        module = module_aliases[alias]
+        class_suffix = classname[len(alias) :].lstrip(".")
         parts = [modules[module]]
         if class_suffix:
             parts.extend(part for part in class_suffix.split(".") if part)

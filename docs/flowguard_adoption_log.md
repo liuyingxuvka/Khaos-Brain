@@ -1455,6 +1455,46 @@ un_khaos_brain_conformance.py` - conformance replay passed lane lock, organizati
 - Rerun affected FlowGuard model checks and focused tests before broad confidence.
 
 
+## khaos-brain-v062-junit-platform-projection - Canonical cross-platform test receipts
+
+- Project: Khaos-Brain
+- Trigger reason: clean GitHub Actions run 29479613775 executed the full regression owner, then exact SkillGuard capability consumers could not resolve Linux JUnit classnames to canonical `tests/...` node IDs.
+- Status: in progress; focused checks pass, terminal clean branch CI is still required.
+- Skill decision: model-miss review, DevelopmentProcessFlow, and Model-Test Alignment.
+
+### Model Files
+- `.flowguard/khaos_brain_logicguard_test_mesh.py`
+
+### Commands
+- FAILED: GitHub Actions run 29479613775; no failed or skipped descendant was counted as passing.
+- PASS: 83 focused readiness and SkillGuard tests.
+- PASS: strict OpenSpec validation and FlowGuard project audit.
+- PASS: FlowGuard alignment/TestMesh planning checks, with the final aggregate still visibly `frozen_not_run`.
+
+### Findings
+- Pytest may emit `tests.test_sample` on one platform and `test_sample` on another for the same collected repository node.
+- A shortened JUnit module alias is safe only when it maps to exactly one repository test file.
+- Ambiguous duplicate basenames must remain unparsed and cannot grant coverage.
+
+### Counterexamples
+- Removing declared checks to make the consumer pass.
+- Guessing between two test files with the same basename.
+- Treating the failed clean run or a Windows path-limited local run as release evidence.
+
+### Friction Points
+- The install terminal intentionally bounded child logs, so the missing-node tail required targeted decoding.
+- The local full regression exposed unrelated Windows extended-path limits while copying the external SkillGuard fixture tree; that local result is scoped out of Linux release confidence.
+
+### Skipped Steps
+- No global SkillGuard reinstall or SkillGuard repository operation was performed.
+- The final aggregate remains owned by the next clean CI execution.
+
+### Next Actions
+- Commit and push the platform-neutral receipt parser.
+- Require a terminal green branch run before updating `main`.
+- Require fresh `main` and tag runs before publishing v0.6.2.
+
+
 ## khaos-brain-logicguard-native-20260714 - Rebuild Khaos Brain as exact LogicGuard card models, Sleep-owned ModelMesh generations, immutable Dream perturbation suites, and exact model-native retrieval.
 
 - Project: Khaos-Brain

@@ -483,6 +483,33 @@ class ChaosBrainReadinessTests(unittest.TestCase):
             ["tests/test_sample.py::test_skip"],
         )
 
+    def test_junit_summary_accepts_only_unique_platform_short_module_aliases(self) -> None:
+        xml = (
+            '<?xml version="1.0"?><testsuites><testsuite>'
+            '<testcase classname="test_unique.TestUnique" name="test_ok" />'
+            '<testcase classname="test_shared.TestShared" name="test_ambiguous" />'
+            "</testsuite></testsuites>"
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "tests" / "one").mkdir(parents=True)
+            (root / "tests" / "two").mkdir(parents=True)
+            (root / "tests" / "test_unique.py").write_text("", encoding="utf-8")
+            (root / "tests" / "one" / "test_shared.py").write_text("", encoding="utf-8")
+            (root / "tests" / "two" / "test_shared.py").write_text("", encoding="utf-8")
+            junit = root / "result.xml"
+            junit.write_text(xml, encoding="utf-8")
+            summary = readiness._junit_summary(junit, root)
+
+        self.assertEqual(
+            summary["passed_node_ids"],
+            ["tests/test_unique.py::TestUnique::test_ok"],
+        )
+        self.assertEqual(
+            summary["unparsed_cases"],
+            [{"classname": "test_shared.TestShared", "name": "test_ambiguous"}],
+        )
+
     def test_readiness_composes_alignment_without_launching_alignment_command(self) -> None:
         captured_commands: dict[str, list[str]] = {}
 
