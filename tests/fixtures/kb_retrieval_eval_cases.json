@@ -36,42 +36,6 @@
   "useful_cases": [
     {
       "expected_entry_ids": [
-        "model-001"
-      ],
-      "id": "version-lexical",
-      "kind": "lexical",
-      "path_hint": "engineering/debugging/version-change",
-      "query": "breaking regression after dependency upgrade"
-    },
-    {
-      "expected_entry_ids": [
-        "model-001"
-      ],
-      "id": "version-route",
-      "kind": "route_expansion",
-      "path_hint": "engineering/debugging/version-change",
-      "query": "unexpected behavior after a change"
-    },
-    {
-      "expected_entry_ids": [
-        "model-001"
-      ],
-      "id": "version-direct-id",
-      "kind": "direct_id",
-      "path_hint": "",
-      "query": "open id:model-001"
-    },
-    {
-      "expected_entry_ids": [
-        "model-004"
-      ],
-      "id": "version-related",
-      "kind": "related_traversal",
-      "path_hint": "engineering/debugging/version-change",
-      "query": "breaking regression after dependency upgrade"
-    },
-    {
-      "expected_entry_ids": [
         "model-004"
       ],
       "id": "kb-retrieval-lexical",
@@ -96,51 +60,6 @@
       "kind": "direct_id",
       "path_hint": "",
       "query": "model-004"
-    },
-    {
-      "expected_entry_ids": [
-        "model-002"
-      ],
-      "id": "email-lexical",
-      "kind": "lexical",
-      "path_hint": "work/communication/email",
-      "query": "draft a professional work email in English"
-    },
-    {
-      "expected_entry_ids": [
-        "model-002"
-      ],
-      "id": "email-route",
-      "kind": "route_expansion",
-      "path_hint": "writing/business/email",
-      "query": "reply draft language"
-    },
-    {
-      "expected_entry_ids": [
-        "model-002"
-      ],
-      "id": "email-direct-id",
-      "kind": "direct_id",
-      "path_hint": "",
-      "query": "open [model-002]"
-    },
-    {
-      "expected_entry_ids": [
-        "cand-20260429T071120Z-inst677836cf-771be5"
-      ],
-      "id": "installer-lexical",
-      "kind": "lexical",
-      "path_hint": "system/knowledge-library/installation",
-      "query": "repository managed skill installer refresh prompt checks"
-    },
-    {
-      "expected_entry_ids": [
-        "cand-20260429T071120Z-inst677836cf-771be5"
-      ],
-      "id": "installer-direct-id",
-      "kind": "direct_id",
-      "path_hint": "",
-      "query": "id:cand-20260429T071120Z-inst677836cf-771be5"
     }
   ]
 }

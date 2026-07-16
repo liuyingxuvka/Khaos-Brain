@@ -32,7 +32,8 @@ from local_kb.search import (  # noqa: E402
 
 DEFAULT_CASES = REPO_ROOT / "tests" / "fixtures" / "kb_retrieval_eval_cases.json"
 DEFAULT_RECEIPT = REPO_ROOT / ".local" / "assurance" / "kb_retrieval_evaluation.json"
-REQUIRED_KINDS = {"lexical", "direct_id", "route_expansion", "related_traversal", "no_card"}
+BASE_REQUIRED_KINDS = {"lexical", "direct_id", "route_expansion", "no_card"}
+TOPOLOGY_REQUIRED_KINDS = {"related_traversal"}
 TERMINAL_STATUSES = {"merged", "rejected", "superseded", "parked", "retired", "deprecated", "history_only"}
 
 
@@ -52,6 +53,30 @@ def _load_cases(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict) or int(payload.get("schema_version") or 0) != 1:
         raise ValueError("retrieval evaluation cases require schema_version 1")
     return payload
+
+
+def _active_entry_ids(index: dict[str, Any]) -> set[str]:
+    return {
+        str(record.get("entry_id") or "")
+        for record in index.get("records", [])
+        if isinstance(record, dict) and str(record.get("entry_id") or "")
+    }
+
+
+def _has_grounded_related_edge(index: dict[str, Any]) -> bool:
+    for record in index.get("records", []):
+        if not isinstance(record, dict):
+            continue
+        data = record.get("data") if isinstance(record.get("data"), dict) else {}
+        if any(str(item) for item in data.get("related_cards", []) if str(item)):
+            return True
+    return False
+
+
+def _required_case_kinds(index: dict[str, Any]) -> tuple[set[str], set[str]]:
+    if _has_grounded_related_edge(index):
+        return BASE_REQUIRED_KINDS | TOPOLOGY_REQUIRED_KINDS, set()
+    return set(BASE_REQUIRED_KINDS), set(TOPOLOGY_REQUIRED_KINDS)
 
 
 def _run_case(repo_root: Path, case: dict[str, Any]) -> dict[str, Any]:
@@ -161,7 +186,17 @@ def build_report(repo_root: Path, cases_path: Path, *, benchmark_queries: int = 
     useful_rate = useful_hits / len(useful_results) if useful_results else 0.0
     false_card_rate = no_card_false / len(no_card_results) if no_card_results else 1.0
     observed_kinds = {item["kind"] for item in results}
-    missing_kinds = sorted(REQUIRED_KINDS - observed_kinds)
+    required_kinds, not_applicable_kinds = _required_case_kinds(index)
+    missing_kinds = sorted(required_kinds - observed_kinds)
+    active_entry_ids = _active_entry_ids(index)
+    fixture_missing_entry_ids = sorted(
+        {
+            str(expected)
+            for item in useful
+            for expected in item.get("expected_entry_ids", [])
+            if str(expected) and str(expected) not in active_entry_ids
+        }
+    )
     threshold_results = {
         "useful_top3_at_least_90_percent": useful_rate >= 0.90,
         "no_card_false_returns_below_5_percent": false_card_rate < 0.05,
@@ -170,6 +205,7 @@ def build_report(repo_root: Path, cases_path: Path, *, benchmark_queries: int = 
         "p95_below_1000_ms": p95_ms < 1000.0,
         "active_index_current": bool(index_validation.get("ok")) and not bool(index.get("stale")),
         "all_required_case_kinds_present": not missing_kinds,
+        "all_expected_entries_in_current_corpus": not fixture_missing_entry_ids,
         "no_skipped_cases": not skipped,
     }
     return {
@@ -216,6 +252,18 @@ def build_report(repo_root: Path, cases_path: Path, *, benchmark_queries: int = 
         "terminal_entry_ids": terminal_returns,
         "candidate_label_violation_ids": candidate_label_violations,
         "missing_case_kinds": missing_kinds,
+        "not_applicable_case_kinds": sorted(not_applicable_kinds),
+        "fixture_missing_entry_ids": fixture_missing_entry_ids,
+        "topology": {
+            "active_entry_count": len(active_entry_ids),
+            "grounded_related_edge_present": _has_grounded_related_edge(index),
+            "required_case_kinds": sorted(required_kinds),
+            "not_applicable_reason": (
+                "The current exact active ModelMesh projection has no grounded related-card edge."
+                if not_applicable_kinds
+                else ""
+            ),
+        },
         "skipped_case_ids": skipped,
         "cases": results,
         "raw_warm_timings_ms": [round(item, 3) for item in benchmark_timings],

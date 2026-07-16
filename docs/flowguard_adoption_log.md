@@ -1549,6 +1549,37 @@ un_khaos_brain_conformance.py` - conformance replay passed lane lock, organizati
 - Perform mistake-first predictive-KB postflight.
 
 
+## khaos-brain-v062-current-corpus-retrieval-gate - Topology-bound public retrieval evidence
+
+- Project: Khaos-Brain
+- Trigger reason: clean CI proved exact SkillGuard node consumption was current, then the independent retrieval-quality owner failed because its fixture still expected cards absent from the public repository.
+- Status: in progress; fresh-worktree retrieval evidence passes, complete branch CI remains required.
+- Skill decision: TestMesh and DevelopmentProcessFlow.
+
+### Findings
+- The tracked public corpus contains one current card, `model-004`; the old fixture still expected `model-001`, `model-002`, and a retired candidate id.
+- Every expected evaluation id now has to exist in the exact active index.
+- Relation traversal is mandatory whenever the exact ModelMesh projection contains a grounded relation edge.
+- A one-node mesh records relation traversal as topology-not-applicable rather than fabricating a self-edge or silently skipping a runnable case.
+
+### Evidence
+- Fresh detached migration: one exact current public model/mesh generation, zero legacy residuals.
+- Before repair: 3/12 useful Top-3 hits (25%).
+- After repair: 3/3 useful Top-3 hits (100%), five no-card cases with zero false returns, no terminal cards, and current index validation.
+- Focused evaluation tests: 3 passed plus 6 subtests.
+
+### Counterexamples
+- Lowering the 90% threshold.
+- Adding private or retired cards to the release merely to satisfy a stale fixture.
+- Inventing a relation edge when the current ModelMesh has none.
+- Treating relation traversal as optional when a grounded edge exists.
+
+### Next Actions
+- Run affected SkillGuard and FlowGuard checks.
+- Push the scoped fixture/evaluator repair.
+- Require a new terminal clean branch CI run before main, tag, or release.
+
+
 ## flowguard-project-upgrade - FlowGuard project upgrade record update
 
 - Project: Knowledge_20260419
