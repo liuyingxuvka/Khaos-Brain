@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.6.0 - 2026-07-16
+
+- Made every admitted Khaos Brain card a deterministic projection of an exact LogicGuard model revision, root ArgumentBlock, generation, and grounded ModelMesh rather than an independent semantic authority.
+- Made Sleep the sole normal-runtime publisher for canonical models, meshes, projections, and the active index; Dream now performs immutable pressure tests and emits typed model-gap handoffs without rewriting knowledge.
+- Added evidence, warrant, assumption, rebuttal, counterexample, boundary, confidence, provenance, and explicit-gap modeling so retrieval can expose why a prediction is supported and what is still missing.
+- Added direct-to-current, rollbackable upgrade migration with zero normal-runtime compatibility or fallback, precise retirement of the former Architect surfaces, residual-zero checks, and repair for authority-only generation/index drift.
+- Added guarded current contracts for the five retained automations, FlowGuard 0.56 models and project records, model/retrieval/migration assurance, deterministic retrieval calibration, and stronger installer health checks.
+- Kept live KB data and generated validation receipts local, sanitized public maintenance evidence, and documented the LogicGuard authority, ModelMesh linking, Sleep consolidation, Dream verification, and failure boundaries in the README and upgrade contract.
+
 ## v0.5.2 - 2026-06-27
 
 - Added SkillGuard runtime-contract governance for the installed Khaos-Brain Codex skill materials.
