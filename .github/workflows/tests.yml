@@ -17,6 +17,16 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Materialize exact main identity for tag validation
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git fetch --no-tags --depth=1 origin main
+          test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
+          git checkout -B main "$GITHUB_SHA"
+          git branch --set-upstream-to=origin/main main
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

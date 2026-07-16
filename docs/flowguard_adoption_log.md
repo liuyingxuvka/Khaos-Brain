@@ -1891,3 +1891,40 @@ un_khaos_brain_conformance.py` - conformance replay passed lane lock, organizati
 
 ### Next Actions
 - Push and require one terminal green clean Linux branch CI run.
+
+
+## khaos-brain-v063-tag-main-identity - Make tag CI provide the exact main identity required by the fast-forward-only system updater.
+
+- Project: Khaos-Brain
+- Trigger reason: Immutable v0.6.2 tag CI run 29508199078 failed because a detached tag checkout cannot satisfy the updater branch contract although branch and main CI for the same SHA passed.
+- Status: completed
+- Skill decision: used_development_process_flow_model_miss_review_and_model_test_alignment
+- Started: 2026-07-16T14:56:22+00:00
+- Ended: 2026-07-16T14:56:22+00:00
+- Duration seconds: 0.000
+- Commands OK: True
+
+### Model Files
+- .github/workflows/tests.yml
+
+### Commands
+- OK (0.000s): `Tag-main identity workflow contract test passed.`
+- OK (0.000s): `Workflow YAML parsed and VERSION/README/CHANGELOG all agree on v0.6.3.`
+
+### Findings
+- Tag validation may materialize main only after proving tag SHA, HEAD, and origin/main are identical; otherwise it must fail before installation.
+
+### Counterexamples
+- Do not move v0.6.2, run the updater on detached HEAD, test different source bytes, or weaken fast-forward-only.
+
+### Friction Points
+- none recorded
+
+### Skipped Steps
+- none recorded
+
+### Risk Evidence Summary
+- v0.6.2 remains immutable and unreleased; v0.6.3 is a new source commit whose branch, main, and tag CI must all pass.
+
+### Next Actions
+- Commit v0.6.3, rerun branch/main/tag CI, then build and publish assets.
