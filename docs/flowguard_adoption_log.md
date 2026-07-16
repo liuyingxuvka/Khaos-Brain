@@ -1817,3 +1817,40 @@ un_khaos_brain_conformance.py` - conformance replay passed lane lock, organizati
 
 ### Next Actions
 - Push the follow-up Khaos commit and require terminal green CI before main or tag.
+
+
+## khaos-brain-v062-alignment-failure-projection - Expose bounded model-code-test alignment findings from the aggregate installer owner.
+
+- Project: Khaos-Brain
+- Trigger reason: Clean Linux CI run 29504266418 proved SkillGuard replay fixed but model_code_test_alignment failed with empty outer diagnostics.
+- Status: completed
+- Skill decision: used_model_miss_review_and_development_process_flow
+- Started: 2026-07-16T14:07:25+00:00
+- Ended: 2026-07-16T14:07:25+00:00
+- Duration seconds: 0.000
+- Commands OK: True
+
+### Model Files
+- local_kb/install.py
+
+### Commands
+- OK (0.000s): `Two alignment diagnostic projection tests and the real upgrade-wrapper transaction test passed.`
+- OK (0.000s): `All five affected Khaos SkillGuard contracts compiled and passed exact parity checks.`
+
+### Findings
+- The alignment entry already owns structured receipt findings, FlowGuard findings, and blocked binding gaps; the installer had discarded them.
+
+### Counterexamples
+- Do not rerun unknown owners, inspect private child workspaces, or substitute stdout tails for structured alignment evidence.
+
+### Friction Points
+- none recorded
+
+### Skipped Steps
+- none recorded
+
+### Risk Evidence Summary
+- This change affects failure visibility only; the product success path and exact alignment decision remain unchanged.
+
+### Next Actions
+- Push and use the next clean CI result to repair the exact named alignment gap.

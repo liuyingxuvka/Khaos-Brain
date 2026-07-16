@@ -2809,6 +2809,42 @@ def _run_pre_restore_upgrade_assurance(
             ]
             if failed_report_check_ids:
                 detail["failed_report_check_ids"] = failed_report_check_ids
+            alignment_report = (
+                entry.get("report")
+                if isinstance(entry.get("report"), Mapping)
+                else {}
+            )
+            if alignment_report:
+                alignment = (
+                    alignment_report.get("alignment")
+                    if isinstance(alignment_report.get("alignment"), Mapping)
+                    else {}
+                )
+                blocked_bindings = []
+                for row in list(alignment.get("binding_rows") or []):
+                    if not isinstance(row, Mapping) or row.get("status") == "aligned":
+                        continue
+                    blocked_bindings.append(
+                        {
+                            "model_obligation_id": str(
+                                row.get("model_obligation_id") or ""
+                            ),
+                            "status": str(row.get("status") or ""),
+                            "open_gap_codes": list(
+                                row.get("open_gap_codes") or row.get("gaps") or []
+                            )[:6],
+                        }
+                    )
+                detail["alignment_report"] = {
+                    "ok": alignment_report.get("ok") is True,
+                    "decision": str(alignment.get("decision") or ""),
+                    "summary": str(alignment.get("summary") or "")[:600],
+                    "receipt_findings": list(
+                        alignment_report.get("receipt_findings") or []
+                    )[:12],
+                    "findings": list(alignment.get("findings") or [])[:12],
+                    "blocked_bindings": blocked_bindings[:12],
+                }
             capability_summary: dict[str, Any] = {}
             scheduled_production_failures: dict[str, Any] = {}
             capability_count = 0
@@ -2881,6 +2917,7 @@ def _run_pre_restore_upgrade_assurance(
                 and not capability_summary
                 and not failed_report_check_ids
                 and not scheduled_production_failures
+                and not alignment_report
             ):
                 detail["stdout_tail"] = str(entry.get("stdout_tail") or "")[-600:]
                 detail["stderr_tail"] = str(entry.get("stderr_tail") or "")[-600:]

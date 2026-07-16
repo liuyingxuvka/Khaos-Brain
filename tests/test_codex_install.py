@@ -972,6 +972,75 @@ print(json.dumps({'status': 'passed', 'reports': [{'status': 'passed'}, {'status
             self.assertIn("fixture-production-block", message)
             self.assertNotIn("one regression failed", message)
 
+    def test_pre_restore_assurance_reports_model_alignment_gaps(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            flowguard_root = root / "validation" / "python" / "flowguard"
+            flowguard_root.mkdir(parents=True)
+            logicguard_root = root / "validation" / "python" / "logicguard"
+            logicguard_root.mkdir(parents=True)
+            payload = {
+                "ok": False,
+                "failed_checks": ["model_code_test_alignment"],
+                "checks": {
+                    "model_code_test_alignment": {
+                        "terminal_status": "failed",
+                        "exit_code": 1,
+                        "timed_out": False,
+                        "report": {
+                            "ok": False,
+                            "receipt_findings": ["source_changed_during_leaf_execution"],
+                            "alignment": {
+                                "decision": "model_test_alignment_blocked",
+                                "summary": "one obligation lacks current evidence",
+                                "findings": [{"code": "missing_test_evidence"}],
+                                "binding_rows": [
+                                    {
+                                        "model_obligation_id": "req.fixture",
+                                        "status": "blocked",
+                                        "open_gap_codes": ["missing_test_evidence"],
+                                    }
+                                ],
+                            },
+                        },
+                    }
+                },
+            }
+            completed = subprocess.CompletedProcess(
+                args=["python"],
+                returncode=1,
+                stdout=json.dumps(payload),
+                stderr="",
+            )
+
+            with patch(
+                "local_kb.install.run_with_timeout_cleanup",
+                return_value=completed,
+            ), self.assertRaisesRegex(
+                RuntimeError,
+                "source_changed_during_leaf_execution",
+            ) as raised:
+                _run_pre_restore_upgrade_assurance(
+                    root,
+                    root / ".codex",
+                    skillguard_validation_toolchain={
+                        "snapshot_root": str(root / "validation" / "skillguard"),
+                        "manifest": {"digest": "S" * 64},
+                    },
+                    flowguard_validation_toolchain={
+                        "snapshot_root": str(flowguard_root),
+                        "manifest": {"digest": "F" * 64},
+                    },
+                    logicguard_validation_toolchain={
+                        "snapshot_root": str(logicguard_root),
+                        "manifest": {"digest": "L" * 64},
+                    },
+                )
+
+            message = str(raised.exception)
+            self.assertIn("req.fixture", message)
+            self.assertIn("missing_test_evidence", message)
+
     def test_install_is_transactional_current_and_retires_exact_architect(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as tmp:

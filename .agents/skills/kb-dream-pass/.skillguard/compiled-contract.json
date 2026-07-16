@@ -412,7 +412,7 @@
         "classification_rule_ids": [
           "skillguard.content_role_classifier.current:runtime_source"
         ],
-        "component_hash": "sha256:c742644a71560a2e5a91af9a2cb2205b062321a7336bbdb55ebff64accacdfaa",
+        "component_hash": "sha256:39f1f05c1481ed6e53c162e70216777d7f9aad6ae4180beb4cd8ecf1bebd9a87",
         "component_id": "component:runtime_source:16f85c85faf53d1f",
         "consumer_ids": [
           "projection:kb-dream-pass:target-runtime-sources"
@@ -468,7 +468,7 @@
       "owner_cycles": [],
       "unmapped_paths": []
     },
-    "impact_graph_hash": "sha256:2585f852b38580d7165f760d51f5a6ba9c6d2b844e70583c37c64600a455cf14",
+    "impact_graph_hash": "sha256:88ed8e3976393d8b824d306adc239e83bc0872a83189d46cb1cd42063e3d3d2a",
     "inventory": [
       {
         "classification_rule_id": "skillguard.content_role_classifier.current:contract_schema",
@@ -528,7 +528,7 @@
       },
       {
         "classification_rule_id": "skillguard.content_role_classifier.current:runtime_source",
-        "content_hash": "sha256:21c0cfbc95586d7f18430b9e186daf3f5e25f27558a64e28cef5d0d26bbfaff4",
+        "content_hash": "sha256:c2df553077f3bb77460b10c3ae3aa9d2790d748685fcb33683e5285f8337fddf",
         "install_disposition": "source_only",
         "path": "local_kb/install.py",
         "role": "runtime_source"
@@ -632,7 +632,7 @@
         "role": "test_dev"
       }
     ],
-    "inventory_hash": "sha256:568df690e82c96e8dcebf36609c525c502fdb42e79f5ea4d3f6da875301f18bf",
+    "inventory_hash": "sha256:52e3851e8b7ab8bf7ff610c2daffa8f6c9c954bd947e7dbe36dce126baf74bcd",
     "member_root_path": ".agents/skills/kb-dream-pass",
     "owner_receipt_root_ref": {
       "path_token": "owner_evidence_root",
@@ -777,7 +777,7 @@
       },
       {
         "consumer_id": "projection:kb-dream-pass:target-runtime-sources",
-        "consumer_projection_hash": "sha256:b5350e38453cc6d0edd3bc3ba648756332f22774b7f83b472f78d14c36d0b2ac",
+        "consumer_projection_hash": "sha256:6b5bcde33607192e59be79ffe4e1a856dca38e9538ceb875fb79fe0796fe695e",
         "impact_plan_schema_version": "skillguard.content_impact_plan.current",
         "impact_policy_id": "skillguard.content_impact_policy.current",
         "input_component_ids": [
@@ -785,7 +785,7 @@
           "component:runtime_source:16f85c85faf53d1f",
           "component:runtime_source:3a6dad62afd9fb23"
         ],
-        "input_projection_hash": "sha256:4f206354222ebc157336610c8bc32b866f974113a1b14c5f7f1aea24479f16c8",
+        "input_projection_hash": "sha256:2f503a5cd770720058b86b5cb13ceac2643fa34bdaa1a291048a64989d91dee4",
         "kind": "target_runtime_source",
         "projection_declaration_hash": "sha256:da76070cc01870653c64468cea60c982d7701dcfc6283745d0eb41d3d4b6a5c9"
       },
@@ -825,7 +825,7 @@
     "schema_version": "skillguard.content_impact_plan.current",
     "unknown_mapping_disposition": "block"
   },
-  "contract_hash": "CCE69C50A52B60078B6BD75A23F85607847EEE346FB4653E68F2A68872A6437A",
+  "contract_hash": "16FC18C0BF69C3DFC56A037715A41FEC45E22CE25559EB44E6BCE787DD822552",
   "depth_profile": {
     "claim_boundary": "Only exact current receipts for the target skill's declared checks are supervised. The target skill retains all domain judgment, including positive/shallow behavior and conditional update finalization.",
     "enforcement_level": "enforced",
@@ -1096,7 +1096,7 @@
     "implementation:local_kb/automation_contracts.py": "3FC8DB02AE7A8B42641BF87001E9BACCA8426B9C2796C1E238D13C4A0F512F38",
     "implementation:local_kb/automation_runtime.py": "BEFD8D5346EC5839609A86FD0A149DC263FBE0816649EE99C16078846745841A",
     "implementation:local_kb/dream.py": "6D99AC6B4DC40E07A501A03D0D51540F8CD55BBBC0295448F3FF0CC9EF115E2E",
-    "implementation:local_kb/install.py": "21C0CFBC95586D7F18430B9E186DAF3F5E25F27558A64E28CEF5D0D26BBFAFF4",
+    "implementation:local_kb/install.py": "C2DF553077F3BB77460B10C3AE3AA9D2790D748685FCB33683E5285F8337FDDF",
     "implementation:local_kb/lifecycle.py": "B53083C80AE9E43BD245541D84DA69CA73DC599830C8BF66E4122B5B69245583",
     "implementation:local_kb/logicguard_models.py": "1FADB46EF9FF0A54F57F4D9F8A795471CE726108D9767903D7F13C33BF3AF974",
     "implementation:local_kb/maintenance_lanes.py": "411CBBAD055787F0FF38C6E682056A2ED5824150B01A744EC45C7FF4321058BC",
