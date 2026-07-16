@@ -2444,7 +2444,13 @@ def _run_pre_restore_upgrade_assurance(
         payload = {}
     if process.returncode != 0 or not bool(payload.get("ok")):
         failed_checks = list(payload.get("failed_checks") or [])
-        entries = payload.get("entries") if isinstance(payload.get("entries"), Mapping) else {}
+        entries = (
+            payload.get("checks")
+            if isinstance(payload.get("checks"), Mapping)
+            else payload.get("entries")
+            if isinstance(payload.get("entries"), Mapping)
+            else {}
+        )
         failure_details: dict[str, dict[str, Any]] = {}
         for name in failed_checks:
             entry = entries.get(name) if isinstance(entries, Mapping) else None

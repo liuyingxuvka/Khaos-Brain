@@ -790,7 +790,7 @@ class CodexInstallTests(unittest.TestCase):
             payload = {
                 "ok": False,
                 "failed_checks": ["full_regression"],
-                "entries": {
+                "checks": {
                     "full_regression": {
                         "terminal_status": "failed",
                         "exit_code": 1,
