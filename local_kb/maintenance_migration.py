@@ -46,6 +46,7 @@ from local_kb.logicguard_models import (
     canonical_digest,
     commit_card_model,
     commit_scope_mesh,
+    json_safe,
     load_authority_generation,
     logicguard_dependency_preflight,
     mesh_id_for_scope,
@@ -58,8 +59,10 @@ from local_kb.logicguard_models import (
 )
 from local_kb.model_projection import (
     CARD_PROJECTION_SCHEMA_VERSION,
+    PROJECTION_BINDING_FIELDS,
     ProjectionValidationError,
     binding_from_projection,
+    projection_digest,
     project_cards,
     validate_card_projections,
     write_card_projections_atomic,
@@ -89,6 +92,10 @@ MIGRATION_LOCK_HEARTBEAT_SECONDS = 1.0
 MIGRATION_LOCK_LEGACY_STALE_SECONDS = 30.0
 MODEL_AUTHORITY_MIGRATION_SCHEMA = "khaos-brain.logicguard-authority-migration.v1"
 MODEL_AUTHORITY_RECEIPT_NAME = "logicguard-authority-receipt.json"
+CURRENT_PROJECTION_BOOTSTRAP_DISPOSITION = "direct-current-projection-bootstrap"
+INCOMPATIBLE_CURRENT_PROJECTION_DISPOSITION = (
+    "blocked-upgrade-ai-current-projection-authority"
+)
 
 MANAGED_DIRECTORY_ROOTS = (
     Path("kb") / "history" / "consolidation",
@@ -2140,6 +2147,114 @@ def _binding_from_row(value: Mapping[str, Any]) -> LogicGuardBinding:
     )
 
 
+def _current_projection_bootstrap_semantics(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Return only the semantic payload admitted by the versioned bootstrap owner.
+
+    Exact bindings and derived graph display fields identify a prior local
+    generation.  They are verified as package evidence, then removed before
+    rebuilding the sole current local model authority.  Normal runtime never
+    calls this migration-only adapter.
+    """
+
+    excluded = {
+        "projection_schema_version",
+        "projection_digest",
+        "related_cards",
+        "logicguard_open_role_gaps",
+        *PROJECTION_BINDING_FIELDS,
+    }
+    return {
+        str(key): json_safe(item)
+        for key, item in value.items()
+        if str(key) not in excluded
+    }
+
+
+def _empty_authority_surface_allows_projection_bootstrap(repo_root: Path) -> bool:
+    """Accept an absent or read-created empty store, but no partial authority."""
+
+    root = authority_root(repo_root)
+    if authority_generation_pointer_path(repo_root).exists():
+        return False
+    if not root.exists():
+        return True
+    for path in sorted(item for item in root.rglob("*") if item.is_file()):
+        relative = path.relative_to(root).as_posix()
+        if relative.endswith("/models/manifest.json"):
+            payload = _load_json(path)
+            if (
+                int(payload.get("generation") or 0) == 0
+                and not payload.get("models")
+                and not payload.get("aliases")
+                and not payload.get("idempotency")
+                and not payload.get("tombstones")
+            ):
+                continue
+        if relative.endswith("/meshes/mesh-manifest.json"):
+            payload = _load_json(path)
+            if (
+                int(payload.get("generation") or 0) == 0
+                and not payload.get("meshes")
+                and not payload.get("idempotency")
+            ):
+                continue
+        return False
+    return True
+
+
+def _projection_upgrade_ai_work_item(
+    *,
+    scope: str,
+    relative_path: str,
+    card_id: str,
+    projection_source_digest: str,
+    projection_generation_id: str,
+    active_generation_id: str,
+    binding: LogicGuardBinding,
+    blocker: str,
+) -> dict[str, Any]:
+    """Describe one incompatible projection without resolving it in software.
+
+    This record is evidence for the AI that owns the interrupted upgrade.  It
+    deliberately contains no automatic rebind, compatibility reader, or
+    fallback action.  A later retry is valid only after that AI adds or selects
+    one bounded direct-to-current migration disposition from captured evidence.
+    """
+
+    evidence = {
+        "scope": scope,
+        "path": relative_path,
+        "card_id": card_id,
+        "projection_source_digest": projection_source_digest,
+        "projection_generation_id": projection_generation_id,
+        "active_generation_id": active_generation_id,
+        "binding": binding.to_dict(),
+        "blocker": blocker,
+    }
+    work_item_digest = canonical_digest(evidence)
+    return {
+        "work_item_id": f"upgrade-ai-{work_item_digest[:24]}",
+        "status": "open",
+        "kind": "incompatible-current-projection-authority",
+        "evidence": evidence,
+        "required_action": (
+            "The upgrade AI must derive or add one evidence-bound direct-to-current "
+            "migration disposition, then retry inside the rollbackable upgrade transaction."
+        ),
+        "prohibited_actions": [
+            "automatic projection rebind",
+            "normal-runtime compatibility reader",
+            "YAML or related_cards fallback",
+            "alternate model or authority",
+            "silent downgrade",
+        ],
+        "claim_boundary": (
+            "This work item proves only that the current projection and active local authority "
+            "cannot be accepted together. It does not authorize a migration decision."
+        ),
+    }
+
+
 def plan_logicguard_native_migration(repo_root: Path) -> dict[str, Any]:
     """Inventory every managed card through the sole versioned legacy reader."""
 
@@ -2150,6 +2265,18 @@ def plan_logicguard_native_migration(repo_root: Path) -> dict[str, Any]:
     current_generation_ids: set[str] = set()
     seen_scope_ids: set[tuple[str, str]] = set()
     current_projection_items: list[tuple[int, str, dict[str, Any]]] = []
+    upgrade_ai_work_items: list[dict[str, Any]] = []
+    projection_bootstrap_allowed = _empty_authority_surface_allows_projection_bootstrap(root)
+    active_authority_generation: dict[str, Any] = {}
+    active_generation_id = ""
+    if not projection_bootstrap_allowed and authority_generation_pointer_path(root).exists():
+        try:
+            active_authority_generation = load_authority_generation(root)
+            active_generation_id = str(
+                active_authority_generation.get("generation_id") or ""
+            )
+        except ExactBindingError as exc:
+            issues.append(f"current LogicGuard authority pointer is invalid: {exc}")
     for scope, path in _entry_paths(root):
         relative = str(path.relative_to(root)).replace("\\", "/")
         try:
@@ -2166,18 +2293,69 @@ def plan_logicguard_native_migration(repo_root: Path) -> dict[str, Any]:
             issues.append(f"{relative}: duplicate card id {card_id} in scope {scope}")
             continue
         seen_scope_ids.add(identity)
-        source_digest = "sha256:" + _sha256_file(path)
+        projection_source_digest = "sha256:" + _sha256_file(path)
+        source_digest = projection_source_digest
         validation: dict[str, Any] = {}
         if str(data.get("projection_schema_version") or "") == CARD_PROJECTION_SCHEMA_VERSION:
             try:
                 binding = binding_from_projection(data)
-                current_generation_ids.add(str(data.get("authority_generation_id") or ""))
+                if str(data.get("projection_digest") or "") != projection_digest(data):
+                    raise ProjectionValidationError("Card projection digest mismatch")
+                prior_generation_id = str(data.get("authority_generation_id") or "")
+                current_generation_ids.add(prior_generation_id)
             except (ProjectionValidationError, ExactBindingError, ValueError) as exc:
                 issues.append(f"{relative}: invalid current projection: {exc}")
                 continue
-            disposition = "reuse-current-exact-model"
-            binding_payload = binding.to_dict()
-            prior_generation_id = str(data.get("authority_generation_id") or "")
+            if projection_bootstrap_allowed:
+                semantic_payload = _current_projection_bootstrap_semantics(data)
+                if not _logicguard_migratable(semantic_payload):
+                    issues.append(
+                        f"{relative}: current bootstrap projection lacks the action/prediction required for a LogicGuard root argument"
+                    )
+                    continue
+                disposition = CURRENT_PROJECTION_BOOTSTRAP_DISPOSITION
+                binding_payload = {}
+                source_digest = "sha256:" + canonical_digest(semantic_payload)
+            else:
+                active_scope_mesh = (
+                    active_authority_generation.get("scope_meshes", {}).get(scope, {})
+                    if isinstance(active_authority_generation.get("scope_meshes"), Mapping)
+                    else {}
+                )
+                pointer_authorizes_exact_mesh = bool(
+                    isinstance(active_scope_mesh, Mapping)
+                    and str(active_scope_mesh.get("mesh_id") or "") == binding.mesh_id
+                    and str(active_scope_mesh.get("mesh_revision_id") or "")
+                    == binding.mesh_revision_id
+                )
+            if (
+                not projection_bootstrap_allowed
+                and active_generation_id
+                and prior_generation_id != active_generation_id
+                and not pointer_authorizes_exact_mesh
+            ):
+                disposition = INCOMPATIBLE_CURRENT_PROJECTION_DISPOSITION
+                binding_payload = binding.to_dict()
+                blocker = (
+                    "projection authority generation does not equal the active local authority "
+                    f"({prior_generation_id or 'missing'} != {active_generation_id})"
+                )
+                issues.append(f"{relative}: {blocker}")
+                upgrade_ai_work_items.append(
+                    _projection_upgrade_ai_work_item(
+                        scope=scope,
+                        relative_path=relative,
+                        card_id=card_id,
+                        projection_source_digest=projection_source_digest,
+                        projection_generation_id=prior_generation_id,
+                        active_generation_id=active_generation_id,
+                        binding=binding,
+                        blocker=blocker,
+                    )
+                )
+            elif not projection_bootstrap_allowed:
+                disposition = "reuse-current-exact-model"
+                binding_payload = binding.to_dict()
         else:
             if not _logicguard_migratable(data):
                 issues.append(
@@ -2194,11 +2372,16 @@ def plan_logicguard_native_migration(repo_root: Path) -> dict[str, Any]:
                 "path": relative,
                 "card_id": card_id,
                 "source_content_digest": source_digest,
+                "projection_source_content_digest": projection_source_digest,
                 "disposition": disposition,
                 "prior_generation_id": prior_generation_id,
                 "binding": binding_payload,
                 "projection_validation": validation,
-                "legacy_related_cards": normalize_string_list(data.get("related_cards", [])),
+                "legacy_related_cards": (
+                    normalize_string_list(data.get("related_cards", []))
+                    if disposition == "direct-legacy-to-logicguard-model"
+                    else []
+                ),
             }
         )
         if disposition == "reuse-current-exact-model":
@@ -2212,6 +2395,24 @@ def plan_logicguard_native_migration(repo_root: Path) -> dict[str, Any]:
             )
         except (ProjectionValidationError, ExactBindingError, ValueError) as exc:
             issues.append(f"current LogicGuard projections are invalid: {exc}")
+            for row_index, relative, data in current_projection_items:
+                binding = binding_from_projection(data)
+                upgrade_ai_work_items.append(
+                    _projection_upgrade_ai_work_item(
+                        scope=str(rows[row_index].get("scope") or ""),
+                        relative_path=relative,
+                        card_id=str(rows[row_index].get("card_id") or ""),
+                        projection_source_digest=str(
+                            rows[row_index].get("projection_source_content_digest") or ""
+                        ),
+                        projection_generation_id=str(
+                            rows[row_index].get("prior_generation_id") or ""
+                        ),
+                        active_generation_id=active_generation_id,
+                        binding=binding,
+                        blocker=str(exc),
+                    )
+                )
         else:
             for (row_index, _relative, _data), validation in zip(
                 current_projection_items,
@@ -2254,6 +2455,11 @@ def plan_logicguard_native_migration(repo_root: Path) -> dict[str, Any]:
         "legacy_card_count": sum(
             row["disposition"] == "direct-legacy-to-logicguard-model" for row in rows
         ),
+        "bootstrap_projection_count": sum(
+            row["disposition"] == CURRENT_PROJECTION_BOOTSTRAP_DISPOSITION for row in rows
+        ),
+        "upgrade_ai_work_item_count": len(upgrade_ai_work_items),
+        "upgrade_ai_work_items": upgrade_ai_work_items,
         "current_card_count": sum(
             row["disposition"] == "reuse-current-exact-model" for row in rows
         ),
@@ -2309,9 +2515,14 @@ def migrate_cards_to_models(
                 "revision": binding.revision_id,
             }
         else:
+            model_input = (
+                _current_projection_bootstrap_semantics(data)
+                if row.get("disposition") == CURRENT_PROJECTION_BOOTSTRAP_DISPOSITION
+                else data
+            )
             model_id = model_id_for_card(str(data.get("id") or ""))
             committed = reuse_card_model_if_exact(
-                data,
+                model_input,
                 authority_scope=scope,
                 actor=actor,
                 source_reference=str(row.get("path") or ""),
@@ -2325,7 +2536,7 @@ def migrate_cards_to_models(
                 head = model_store.head(model_id)
                 committed = commit_card_model(
                     root,
-                    data,
+                    model_input,
                     authority_scope=scope,
                     expected_revision=str(head) if head is not None else None,
                     idempotency_key=f"{generation_id}:model:{scope}:{data.get('id')}",
@@ -2396,16 +2607,13 @@ def commit_logicguard_native_generation(
         unresolved = tuple(
             {
                 "source_card_id": str(row.get("card_id") or ""),
-                "suggested_target_ids": normalize_string_list(
-                    load_yaml_file(root / str(row.get("path") or "")).get("related_cards", [])
-                ),
+                "suggested_target_ids": normalize_string_list(row.get("legacy_related_cards", [])),
                 "disposition": "unresolved-legacy-relation",
                 "reason": "Legacy related_cards has no qualifying non-AI relation provenance.",
             }
             for row in scope_rows
-            if normalize_string_list(
-                load_yaml_file(root / str(row.get("path") or "")).get("related_cards", [])
-            )
+            if row.get("disposition") == "direct-legacy-to-logicguard-model"
+            and normalize_string_list(row.get("legacy_related_cards", []))
         )
         mesh_store = open_mesh_store(root, scope)
         mesh_head = mesh_store.head(mesh_id_for_scope(scope))
@@ -2523,6 +2731,7 @@ def migrate_legacy_card_generation(
             "status": "blocked",
             "plan": plan,
             "issues": list(plan.get("issues", [])),
+            "upgrade_ai_work_items": list(plan.get("upgrade_ai_work_items", [])),
         }
     if plan.get("current_only") and len(plan.get("current_generation_ids", [])) == 1:
         try:

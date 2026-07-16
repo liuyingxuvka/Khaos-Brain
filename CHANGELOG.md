@@ -4,6 +4,8 @@
 
 - Made clean Linux CI self-contained by freezing the public SkillGuard v0.3.0 validation-toolchain commit and OpenSpec 1.6.0 instead of depending on user-level global installations.
 - Reordered CI so the canonical rollbackable Khaos Brain installation publishes the current local LogicGuard authority before tests that intentionally require installed state.
+- Repaired the fresh-clone authority path so an intact current public card projection is admitted only by the versioned migration owner, stripped of prior local bindings and derived relations, and rebuilt into a stable exact local model/mesh generation; tampered projections and partial authority still fail closed.
+- Kept old-machine upgrades fail-closed: a pulled projection that disagrees with an existing local authority now opens an evidence-bound upgrade-AI work item and performs no automatic rebind, compatibility read, YAML fallback, alternate-model selection, or silent downgrade.
 - Made launcher-resolution and LogicGuard-origin assertions platform-neutral while preserving the exact executable-identity and package-origin checks.
 - Kept product runtime behavior and dependencies unchanged; this patch repairs the public validation environment exposed by the v0.6.1 GitHub Actions run.
 

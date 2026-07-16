@@ -1,5 +1,22 @@
 # Flowguard Adoption Log
 
+## Khaos Brain v0.6.2 clean-install model miss — 2026-07-16
+
+- Trigger reason: clean-checkout CI exposed a missing fresh-clone authority path after the LogicGuard-native model had passed focused validation.
+- Behavior plane and owner: `development_process`; `local_kb.maintenance_migration` under `req.migration.install`.
+- Miss type: `boundary_missing`.
+- Previous claim: fresh installs and upgrades both entered one rollbackable direct-to-current migration owner.
+- Observed failure: a clean checkout carried an intact current public projection but no ignored local LogicGuard authority, so installation stopped on the missing exact mesh before it could create authority.
+- Root cause: the planner treated every current projection as reusable only; it had no explicit fresh-clone bootstrap disposition.
+- Fresh-clone repair: only an absent or read-created empty authority surface may admit an intact current projection inside the versioned migration owner; prior bindings and derived relations are stripped before a stable exact model/mesh generation is built.
+- Old-machine boundary: a pulled projection that disagrees with a complete active local authority remains blocked and emits an evidence-bound open upgrade-AI work item. It performs no automatic rebind, compatibility read, YAML fallback, alternate-authority selection, or silent downgrade.
+- Known bad: tampered projection digests, partial authority surfaces, and mismatched old-machine generations all remain non-mutating blockers.
+- Current evidence: migration/installer testing passed 27 tests plus 4 subtests; affected projection/history/rollback/retrieval/assurance testing passed 38 tests plus 6 subtests; the final contract-aligned installer rerun passed 20 tests. The real workspace produced exactly one open `incompatible-current-projection-authority` work item.
+- FlowGuard evidence: authority cutover, field lifecycle, ModelMesh reattachment, code structure, skill-suite markers, and project adoption audits passed their current structural boundaries. Model-Test Alignment and TestMesh correctly remain `frozen_not_run` until the sole final aggregate owner executes.
+- Interrupted evidence: one installer-test launcher ended without a terminal report; zero matching descendant processes were confirmed before the clean 20-test rerun, and the interrupted output was not reused.
+- Claim boundary: focused model-miss evidence only. Installer, aggregate, CI, and release readiness remain pending on the frozen source.
+- Next actions: refresh only the affected repository-local SkillGuard contract, run affected installer/FlowGuard checks, then use clean branch CI as the fresh-install release gate.
+
 ## Chaos Brain interrupted-Sleep and validation-owner recovery — 2026-07-14
 
 - Trigger reason: a live pre-restore run timed out while Sleep replayed thousands of already-terminal observations one by one; the outer owner and child shared the same deadline, leaving a guarded runner, native Sleep process, and fresh lane lock after the outer timeout.

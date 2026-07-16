@@ -77,6 +77,165 @@ def tree_digest(root: Path, relative_roots: tuple[str, ...]) -> str:
 
 
 class KhaosLogicGuardMigrationTests(unittest.TestCase):
+    def test_fresh_clone_bootstraps_current_projection_into_stable_exact_authority(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture_root = Path(directory) / "fixture"
+            write_yaml_file(
+                fixture_root / "kb" / "public" / "public-a.yaml",
+                legacy_card("public-a"),
+            )
+            fixture_result = migrate_legacy_card_generation(fixture_root)
+            self.assertTrue(fixture_result["ok"], fixture_result)
+            bootstrap_projection = load_yaml_file(
+                fixture_root / "kb" / "public" / "public-a.yaml"
+            )
+
+            first_root = Path(directory) / "first-clean-clone"
+            first_path = first_root / "kb" / "public" / "public-a.yaml"
+            write_yaml_file(first_path, bootstrap_projection)
+            plan = plan_logicguard_native_migration(first_root)
+            self.assertTrue(plan["ok"], plan["issues"])
+            self.assertEqual(1, plan["bootstrap_projection_count"])
+            self.assertEqual(
+                "direct-current-projection-bootstrap",
+                plan["rows"][0]["disposition"],
+            )
+            self.assertEqual([], plan["rows"][0]["legacy_related_cards"])
+
+            first = migrate_legacy_card_generation(first_root)
+            self.assertTrue(first["ok"], first)
+            self.assertEqual("committed", first["status"])
+            first_projection = load_yaml_file(first_path)
+            self.assertTrue(validate_card_projection(first_root, first_projection)["ok"])
+            self.assertEqual([], first_projection["related_cards"])
+
+            second = migrate_legacy_card_generation(first_root)
+            self.assertTrue(second["ok"], second)
+            self.assertEqual("no_delta", second["status"])
+            self.assertEqual(first_projection, load_yaml_file(first_path))
+
+            second_root = Path(directory) / "second-clean-clone"
+            second_path = second_root / "kb" / "public" / "public-a.yaml"
+            write_yaml_file(second_path, first_projection)
+            rebuilt = migrate_legacy_card_generation(second_root)
+            self.assertTrue(rebuilt["ok"], rebuilt)
+            self.assertEqual(first_projection, load_yaml_file(second_path))
+            self.assertEqual(
+                load_authority_generation(first_root)["generation_id"],
+                load_authority_generation(second_root)["generation_id"],
+            )
+
+    def test_fresh_clone_bootstrap_rejects_tampered_or_partial_authority(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture_root = Path(directory) / "fixture"
+            write_yaml_file(
+                fixture_root / "kb" / "public" / "public-a.yaml",
+                legacy_card("public-a"),
+            )
+            self.assertTrue(migrate_legacy_card_generation(fixture_root)["ok"])
+            projection = load_yaml_file(
+                fixture_root / "kb" / "public" / "public-a.yaml"
+            )
+
+            tampered_root = Path(directory) / "tampered"
+            tampered = dict(projection)
+            tampered["action"] = {"description": "Tampered without a new digest."}
+            write_yaml_file(
+                tampered_root / "kb" / "public" / "public-a.yaml",
+                tampered,
+            )
+            tampered_plan = plan_logicguard_native_migration(tampered_root)
+            self.assertFalse(tampered_plan["ok"])
+            self.assertIn("projection digest mismatch", " ".join(tampered_plan["issues"]).lower())
+            self.assertFalse(
+                (tampered_root / ".local" / "khaos-brain" / "logicguard-authority").exists()
+            )
+
+            partial_root = Path(directory) / "partial"
+            write_yaml_file(
+                partial_root / "kb" / "public" / "public-a.yaml",
+                projection,
+            )
+            partial = partial_root / ".local" / "khaos-brain" / "logicguard-authority" / "partial.json"
+            partial.parent.mkdir(parents=True)
+            partial.write_text("{}\n", encoding="utf-8")
+            partial_plan = plan_logicguard_native_migration(partial_root)
+            self.assertFalse(partial_plan["ok"])
+            self.assertEqual(0, partial_plan["bootstrap_projection_count"])
+            self.assertIn("current LogicGuard projections are invalid", " ".join(partial_plan["issues"]))
+
+    def test_old_machine_mismatch_opens_upgrade_ai_work_item_without_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            old_root = Path(directory) / "old-machine"
+            write_yaml_file(
+                old_root / "kb" / "public" / "public-a.yaml",
+                legacy_card("public-a"),
+            )
+            write_yaml_file(
+                old_root / "kb" / "public" / "public-b.yaml",
+                legacy_card("public-b"),
+            )
+            self.assertTrue(migrate_legacy_card_generation(old_root)["ok"])
+            old_generation = load_authority_generation(old_root)
+
+            package_root = Path(directory) / "new-package"
+            write_yaml_file(
+                package_root / "kb" / "public" / "public-a.yaml",
+                legacy_card("public-a"),
+            )
+            self.assertTrue(migrate_legacy_card_generation(package_root)["ok"])
+            package_projection = load_yaml_file(
+                package_root / "kb" / "public" / "public-a.yaml"
+            )
+            self.assertNotEqual(
+                package_projection["authority_generation_id"],
+                old_generation["generation_id"],
+            )
+
+            # Simulate pulling a new repository projection onto a machine that
+            # still owns a complete, different local authority generation.
+            write_yaml_file(
+                old_root / "kb" / "public" / "public-a.yaml",
+                package_projection,
+            )
+            before_blocked_attempt = tree_digest(
+                old_root,
+                ("kb/public", ".local/khaos-brain/logicguard-authority"),
+            )
+
+            plan = plan_logicguard_native_migration(old_root)
+            self.assertFalse(plan["ok"])
+            self.assertEqual(1, plan["upgrade_ai_work_item_count"])
+            work_item = plan["upgrade_ai_work_items"][0]
+            self.assertEqual("open", work_item["status"])
+            self.assertEqual(
+                "incompatible-current-projection-authority",
+                work_item["kind"],
+            )
+            self.assertIn("direct-to-current", work_item["required_action"])
+            self.assertIn("automatic projection rebind", work_item["prohibited_actions"])
+            self.assertIn("YAML or related_cards fallback", work_item["prohibited_actions"])
+            self.assertEqual(
+                old_generation["generation_id"],
+                work_item["evidence"]["active_generation_id"],
+            )
+
+            blocked = migrate_legacy_card_generation(old_root)
+            self.assertFalse(blocked["ok"])
+            self.assertEqual("blocked", blocked["status"])
+            self.assertEqual([work_item], blocked["upgrade_ai_work_items"])
+            self.assertEqual(
+                before_blocked_attempt,
+                tree_digest(
+                    old_root,
+                    ("kb/public", ".local/khaos-brain/logicguard-authority"),
+                ),
+            )
+            self.assertEqual(
+                old_generation["generation_id"],
+                load_authority_generation(old_root)["generation_id"],
+            )
+
     def test_direct_migration_publishes_scoped_exact_authority_and_zero_legacy_semantics(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
