@@ -10,8 +10,8 @@
 </p>
 <!-- README HERO END -->
 
-- Repository head (`main`) / 仓库主线（`main`）: `v0.6.1`
-- Latest released version / 最新已发布版本: `v0.6.1`
+- Repository head (`main`) / 仓库主线（`main`）: `v0.6.2`
+- Latest released version / 最新已发布版本: `v0.6.2`
 - Project name / 项目名称: `Khaos Brain`
 - English lead content comes first; the full Chinese section follows below. / 英文主内容在前，完整中文部分在后方。
 
@@ -136,7 +136,7 @@ For many teams, a private repository is already the simplest reliable backend fo
 
 The Python dependency set pins the public [LogicGuard v0.18.0](https://github.com/liuyingxuvka/LogicGuard/releases/tag/v0.18.0) source commit that owns the required ModelStore and ModelMesh APIs. LogicGuard is installed from its official GitHub repository because it is not published on PyPI.
 
-Repository contributors and GitHub Actions use `requirements-dev.txt`, which additionally pins the public [FlowGuard v0.56.0](https://github.com/liuyingxuvka/FlowGuard/releases/tag/v0.56.0) source commit used by model-assurance tests. Ordinary Khaos Brain installation does not require FlowGuard.
+Repository contributors and GitHub Actions use `requirements-dev.txt`, which additionally pins the public [FlowGuard v0.56.0](https://github.com/liuyingxuvka/FlowGuard/releases/tag/v0.56.0) source commit used by model-assurance tests. CI also freezes the public [SkillGuard v0.3.0](https://github.com/liuyingxuvka/SkillGuard/releases/tag/v0.3.0) validation-toolchain commit and OpenSpec 1.6.0 before installing Khaos Brain; ordinary Khaos Brain runtime does not require FlowGuard or a SkillGuard reinstall.
 
 - **Visible:** cards can be opened directly; source, author, confidence, status, and skill dependencies are visible.
 - **Maintainable:** incremental Sleep, convergent Dream, system update, and organization maintenance treat memory as a living system.
@@ -209,7 +209,7 @@ The exact migration phases, rollback behavior, pause-state preservation, and suc
 
 | 仓库主线 | 最新发布 | 项目 | 许可证 |
 | --- | --- | --- | --- |
-| `v0.6.1` | `v0.6.1` | `Khaos Brain` | MIT |
+| `v0.6.2` | `v0.6.2` | `Khaos Brain` | MIT |
 
 ## 它是什么
 
@@ -355,7 +355,7 @@ Candidate Skills 不会自动安装。只有带 pinned version 和 content-hash 
 
 Python 依赖会固定到公开的 [LogicGuard v0.18.0](https://github.com/liuyingxuvka/LogicGuard/releases/tag/v0.18.0) 源码提交；ModelStore 和 ModelMesh 的当前公共 API 由这个版本提供。LogicGuard 尚未发布到 PyPI，因此从它的官方 GitHub 仓库安装。
 
-仓库开发与 GitHub Actions 使用 `requirements-dev.txt`，其中额外固定了公开的 [FlowGuard v0.56.0](https://github.com/liuyingxuvka/FlowGuard/releases/tag/v0.56.0) 源码提交，用于模型保障测试；普通 Khaos Brain 安装不需要 FlowGuard。
+仓库开发与 GitHub Actions 使用 `requirements-dev.txt`，其中额外固定了公开的 [FlowGuard v0.56.0](https://github.com/liuyingxuvka/FlowGuard/releases/tag/v0.56.0) 源码提交，用于模型保障测试。CI 还会在安装 Khaos Brain 前冻结公开的 [SkillGuard v0.3.0](https://github.com/liuyingxuvka/SkillGuard/releases/tag/v0.3.0) 校验工具提交和 OpenSpec 1.6.0；普通 Khaos Brain 运行不需要 FlowGuard，也不需要重装 SkillGuard。
 
 对很多团队来说，private repository 已经是最简单可靠的 memory backend。
 

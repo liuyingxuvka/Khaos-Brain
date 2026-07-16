@@ -17,27 +17,35 @@ from scripts import check_chaos_brain_readiness as readiness
 
 class ChaosBrainReadinessTests(unittest.TestCase):
     def test_run_resolves_windows_launcher_and_preserves_canonical_command(self) -> None:
-        resolved = readiness.shutil.which("openspec")
-        self.assertTrue(resolved)
-        completed = subprocess.CompletedProcess(
-            [resolved, "--version"],
-            0,
-            stdout="1.6.0\n",
-            stderr="",
-        )
-        with tempfile.TemporaryDirectory() as temp_dir, mock.patch.object(
-            readiness,
-            "run_with_timeout_cleanup",
-            return_value=completed,
-        ) as runner:
+        with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir).resolve()
-            name, receipt = readiness._run(
-                ("openspec_probe", ["openspec", "--version"]),
-                root,
-                evidence_dir=root / "evidence",
-                source_snapshot={"digest": "source"},
-                verifier_fingerprint={"digest": "verifier"},
+            launcher = root / "openspec.cmd"
+            launcher.write_text("@echo off\r\n", encoding="utf-8")
+            resolved = str(launcher.resolve())
+            completed = subprocess.CompletedProcess(
+                [resolved, "--version"],
+                0,
+                stdout="1.6.0\n",
+                stderr="",
             )
+            readiness._resolved_executable_identity.cache_clear()
+            try:
+                with mock.patch.object(
+                    readiness.shutil, "which", return_value=resolved
+                ), mock.patch.object(
+                    readiness,
+                    "run_with_timeout_cleanup",
+                    return_value=completed,
+                ) as runner:
+                    name, receipt = readiness._run(
+                        ("openspec_probe", ["openspec", "--version"]),
+                        root,
+                        evidence_dir=root / "evidence",
+                        source_snapshot={"digest": "source"},
+                        verifier_fingerprint={"digest": "verifier"},
+                    )
+            finally:
+                readiness._resolved_executable_identity.cache_clear()
 
         self.assertEqual(name, "openspec_probe")
         self.assertEqual(receipt["command"], ["openspec", "--version"])

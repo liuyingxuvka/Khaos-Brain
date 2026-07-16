@@ -77,7 +77,7 @@ class KhaosLogicGuardModelsTests(unittest.TestCase):
             tuple(int(item) for item in result["version"].split(".")),
             tuple(int(item) for item in MIN_LOGICGUARD_VERSION.split(".")),
         )
-        self.assertTrue(result["origin"].endswith("logicguard\\__init__.py"))
+        self.assertEqual(Path(result["origin"]).parts[-2:], ("logicguard", "__init__.py"))
         self.assertEqual(result["model_store_schema"], "logicguard.model-store.v1")
         self.assertEqual(result["mesh_schema"], "logicguard.model-mesh.v1")
         self.assertTrue(result["mesh_store_tool_fingerprint"].startswith("sha256:"))

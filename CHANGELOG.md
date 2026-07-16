@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6.2 - 2026-07-16
+
+- Made clean Linux CI self-contained by freezing the public SkillGuard v0.3.0 validation-toolchain commit and OpenSpec 1.6.0 instead of depending on user-level global installations.
+- Reordered CI so the canonical rollbackable Khaos Brain installation publishes the current local LogicGuard authority before tests that intentionally require installed state.
+- Made launcher-resolution and LogicGuard-origin assertions platform-neutral while preserving the exact executable-identity and package-origin checks.
+- Kept product runtime behavior and dependencies unchanged; this patch repairs the public validation environment exposed by the v0.6.1 GitHub Actions run.
+
 ## v0.6.1 - 2026-07-16
 
 - Fixed clean-machine and GitHub Actions installation by pinning the public LogicGuard v0.18.0 source commit instead of requesting a package that is not published on PyPI.

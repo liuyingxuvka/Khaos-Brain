@@ -441,7 +441,7 @@
         "classification_rule_ids": [
           "skillguard.content_role_classifier.current:test_dev"
         ],
-        "component_hash": "sha256:85c35e5737c266a0370dd284111a70481a00be2b2c5f3abc8b79745f1a1345a3",
+        "component_hash": "sha256:8ef1e163ea16bf4ccb4db624d6c53e8ac1bcabd2d4aa662ada3be607c0a46fda",
         "component_id": "component:test_dev:af4853ca4ee5461d",
         "consumer_ids": [
           "projection:kb-sleep-maintenance:target-tests"
@@ -476,7 +476,7 @@
       "owner_cycles": [],
       "unmapped_paths": []
     },
-    "impact_graph_hash": "sha256:f5cfe1d79b5d3f2002905bd0a14fb3fe361c75051df9697134dbd9706c38c90f",
+    "impact_graph_hash": "sha256:3f7e9ec137c68ce338cbfe09ee457a15f6fabc6ab16ebe7e577be6e1e5fcc4c1",
     "inventory": [
       {
         "classification_rule_id": "skillguard.content_role_classifier.current:contract_schema",
@@ -662,7 +662,7 @@
       },
       {
         "classification_rule_id": "skillguard.content_role_classifier.current:test_dev",
-        "content_hash": "sha256:9e7d16dbf07fe0b692b1fbffe6e625602a4ede28e1ce688d5d45ca7860393199",
+        "content_hash": "sha256:a65d3de2d1fbe48874f25995addb9b105f6291a220f0d4d77f9e300d89ad512a",
         "install_disposition": "source_only",
         "path": "tests/test_khaos_logicguard_models.py",
         "role": "test_dev"
@@ -696,7 +696,7 @@
         "role": "test_dev"
       }
     ],
-    "inventory_hash": "sha256:f35fa3402adbb55db2861f87b0c1d982d69f2f1282bf321062a22d4ffcebde3a",
+    "inventory_hash": "sha256:3f6d1fd23c85a467640ba29c1d52050c368b299ecbe917b4ee0f3317a0080d20",
     "member_root_path": ".agents/skills/kb-sleep-maintenance",
     "owner_receipt_root_ref": {
       "path_token": "owner_evidence_root",
@@ -855,13 +855,13 @@
       },
       {
         "consumer_id": "projection:kb-sleep-maintenance:target-tests",
-        "consumer_projection_hash": "sha256:2445e99986e4eda5bf9ea340e553ecb72e16d27ca27abe2f3adcd8d31f0db627",
+        "consumer_projection_hash": "sha256:a867ad3a0a9f8fd85469c261fa8c03784aba15d91e552b7b17244c980baf89fd",
         "impact_plan_schema_version": "skillguard.content_impact_plan.current",
         "impact_policy_id": "skillguard.content_impact_policy.current",
         "input_component_ids": [
           "component:test_dev:af4853ca4ee5461d"
         ],
-        "input_projection_hash": "sha256:0e40906f45e06084be5f853a328ba19398bfc54b88b04583fa3cf05ca57b9d0a",
+        "input_projection_hash": "sha256:df9992b7b25f297e45dfca5848ef8b92471bf04a52559dc5bc3a0bf743d4cdbe",
         "kind": "target_test_source",
         "projection_declaration_hash": "sha256:31abb197554dff3cb6807d63d8ca01dc3ea07fb874181448db1d1a9904e1f96e"
       },
@@ -889,7 +889,7 @@
     "schema_version": "skillguard.content_impact_plan.current",
     "unknown_mapping_disposition": "block"
   },
-  "contract_hash": "A2C0D31CB4604478C316163D071C6032517F786870BAC21872287A5626B53B4A",
+  "contract_hash": "817B89246FDEE16480A1D90073E2DE4A468CC47C62CBDAE5A2FCD3FF51AC37C5",
   "depth_profile": {
     "claim_boundary": "Only exact current receipts for the target skill's declared checks are supervised. The target skill retains all domain judgment, including positive/shallow behavior and conditional update finalization.",
     "enforcement_level": "enforced",
@@ -1178,7 +1178,7 @@
     "implementation:tests/test_kb_lifecycle.py": "F8682FE822C8F8305C2E379975F1AE31653CA4A3F0016B34748C1904ACCAFB1F",
     "implementation:tests/test_kb_retrieval_calibration.py": "7AFACB56E167D92B3462995C00172B294250C3082D7A0518CD8EFCE98901C8EB",
     "implementation:tests/test_kb_sleep_convergence.py": "56F23E61E24C35482E22A8985DB9FF1F6BCF5F12F5B3827CC15ACB1E6A4F9FFB",
-    "implementation:tests/test_khaos_logicguard_models.py": "9E7D16DBF07FE0B692B1FBFFE6E625602A4EDE28E1CE688D5D45CA7860393199",
+    "implementation:tests/test_khaos_logicguard_models.py": "A65D3DE2D1FBE48874F25995ADDB9B105F6291A220F0D4D77F9E300D89AD512A",
     "implementation:tests/test_khaos_model_projection.py": "5F785140A549E6E919678C380B394E90C6CF217B78438BDB3FAFDD53EE73DDE0",
     "implementation:tests/test_khaos_sleep_model_maintenance.py": "EA98BDDD5B0553E1B02926E8590C369BEB6393883B798C189EB1E2B960EF3AA9",
     "implementation:tests/test_maintenance_lanes.py": "AC71CF5914ED094B8323843DF7FE85E9978E586242D7BF1D1C2843B6567A0FA4",
