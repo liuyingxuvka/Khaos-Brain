@@ -2456,14 +2456,68 @@ def _run_pre_restore_upgrade_assurance(
             entry = entries.get(name) if isinstance(entries, Mapping) else None
             if not isinstance(entry, Mapping):
                 continue
-            failure_details[str(name)] = {
+            detail: dict[str, Any] = {
                 "terminal_status": str(entry.get("terminal_status") or ""),
                 "exit_code": entry.get("exit_code"),
                 "timed_out": bool(entry.get("timed_out")),
                 "cleanup_confirmed": entry.get("cleanup_confirmed"),
-                "stdout_tail": str(entry.get("stdout_tail") or "")[-1600:],
-                "stderr_tail": str(entry.get("stderr_tail") or "")[-1600:],
             }
+            junit = entry.get("junit") if isinstance(entry.get("junit"), Mapping) else {}
+            if junit:
+                detail["junit"] = {
+                    "testcase_count": int(junit.get("testcase_count") or 0),
+                    "passed_count": len(junit.get("passed_node_ids") or []),
+                    "failed_node_ids": list(junit.get("failed_node_ids") or [])[:8],
+                    "errored_node_ids": list(junit.get("errored_node_ids") or [])[:8],
+                    "skipped_node_ids": list(junit.get("skipped_node_ids") or [])[:8],
+                    "unparsed_cases": list(junit.get("unparsed_cases") or [])[:12],
+                    "parse_error": str(junit.get("parse_error") or ""),
+                }
+            json_payload = (
+                entry.get("json_payload")
+                if isinstance(entry.get("json_payload"), Mapping)
+                else {}
+            )
+            skill_rows = (
+                json_payload.get("skills")
+                if isinstance(json_payload.get("skills"), Mapping)
+                else {}
+            )
+            capability_summary: dict[str, Any] = {}
+            for skill_id, skill_row in skill_rows.items():
+                if not isinstance(skill_row, Mapping):
+                    continue
+                execution = (
+                    skill_row.get("executed_supervision")
+                    if isinstance(skill_row.get("executed_supervision"), Mapping)
+                    else {}
+                )
+                capability = (
+                    execution.get("capability_regression")
+                    if isinstance(execution.get("capability_regression"), Mapping)
+                    else {}
+                )
+                if not capability:
+                    continue
+                missing = list(capability.get("missing_node_ids") or [])
+                unsafe = list(capability.get("unsafe_declared_node_ids") or [])
+                capability_summary[str(skill_id)] = {
+                    "ok": bool(capability.get("ok")),
+                    "receipt_terminal": bool(capability.get("receipt_terminal")),
+                    "identity_current": bool(capability.get("identity_current")),
+                    "proof_current": bool(capability.get("proof_current")),
+                    "junit_current": bool(capability.get("junit_current")),
+                    "missing_count": len(missing),
+                    "missing_node_ids": missing[:4],
+                    "unsafe_count": len(unsafe),
+                    "unsafe_declared_node_ids": unsafe[:4],
+                }
+            if capability_summary:
+                detail["capability_summary"] = capability_summary
+            if not junit and not capability_summary:
+                detail["stdout_tail"] = str(entry.get("stdout_tail") or "")[-600:]
+                detail["stderr_tail"] = str(entry.get("stderr_tail") or "")[-600:]
+            failure_details[str(name)] = detail
         raise RuntimeError(
             "Chaos Brain pre-restore assurance failed: "
             + json.dumps(

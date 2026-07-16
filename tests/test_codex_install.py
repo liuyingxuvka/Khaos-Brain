@@ -796,6 +796,17 @@ class CodexInstallTests(unittest.TestCase):
                         "exit_code": 1,
                         "timed_out": False,
                         "cleanup_confirmed": True,
+                        "junit": {
+                            "testcase_count": 2,
+                            "passed_node_ids": ["tests/test_one.py::test_ok"],
+                            "failed_node_ids": ["tests/test_two.py::test_failed"],
+                            "errored_node_ids": [],
+                            "skipped_node_ids": [],
+                            "unparsed_cases": [
+                                {"classname": "unexpected.module", "name": "test_unknown"}
+                            ],
+                            "parse_error": "",
+                        },
                         "stdout_tail": "one regression failed",
                         "stderr_tail": "assertion detail",
                     }
@@ -814,7 +825,7 @@ class CodexInstallTests(unittest.TestCase):
             ):
                 with self.assertRaisesRegex(
                     RuntimeError,
-                    "one regression failed",
+                    "unexpected.module",
                 ) as raised:
                     _run_pre_restore_upgrade_assurance(
                         root,
@@ -836,7 +847,9 @@ class CodexInstallTests(unittest.TestCase):
             message = str(raised.exception)
             self.assertIn('"terminal_status": "failed"', message)
             self.assertIn('"exit_code": 1', message)
-            self.assertIn("assertion detail", message)
+            self.assertIn('"passed_count": 1', message)
+            self.assertIn("tests/test_two.py::test_failed", message)
+            self.assertNotIn("one regression failed", message)
 
     def test_install_is_transactional_current_and_retires_exact_architect(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
