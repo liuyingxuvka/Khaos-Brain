@@ -78,6 +78,39 @@ machine receipt recording source and installed identities, migration and
 transaction checkpoints, preserved automation state, clean projection
 manifests, final target-native checks, and terminal status.
 
+The current upgrade-attempt authority SHALL consist of one bounded HEAD
+document and the one bounded current projection named by that HEAD. Ordinary
+installation currentness and health checks MUST NOT enumerate attempt
+directories, load immutable event payloads, or inspect prior attempt
+projections. A missing, malformed, oversized, stale, or escaping HEAD/current
+binding SHALL fail visibly; it MUST NOT select an attempt by scanning history
+or fall back to the committed install manifest.
+
+After the final upgrade-attempt checkpoint is published, the lightweight
+committed install state SHALL bind that exact attempt by both `attempt_id` and
+`receipt_hash`. An independent post-command installation check SHALL compare
+those fields with the sole current HEAD/current authority. The installer MUST
+NOT report durable completion from an earlier in-memory projection that omits
+or predates the final attempt receipt.
+
 #### Scenario: Only version metadata changed
 - **WHEN** no current transaction and validation receipt exists
 - **THEN** the upgrade MUST NOT be reported complete
+
+#### Scenario: Attempt history is very large
+- **WHEN** immutable attempt events and retired attempt projections occupy many gigabytes
+- **THEN** the ordinary currentness check reads only the bounded HEAD and its exact current projection
+- **AND** its declared read budget and history-scan count remain bounded independently of history size
+
+#### Scenario: Current attempt authority is absent or oversized
+- **WHEN** the HEAD or the exact current projection is missing, malformed, oversized, hash-mismatched, or outside the attempt root
+- **THEN** currentness fails immediately with the current-authority defect
+- **AND** no prior attempt, install-manifest copy, directory scan, compatibility reader, or fallback authority is consulted
+
+#### Scenario: Installer internal check passes but committed binding is missing
+- **WHEN** the installer publishes its final attempt checkpoint but the
+  lightweight install state omits or mismatches that attempt's `receipt_hash`
+- **THEN** the independent installation check fails with an exact
+  current-attempt binding defect
+- **AND** the four scheduled automations remain paused until one current
+  installer transaction persists and verifies the matching binding

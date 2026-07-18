@@ -10,6 +10,7 @@ from typing import Any, Mapping
 
 from local_kb.automation_runtime import content_hash
 from local_kb.install import (
+    MAINTENANCE_SKILL_NAMES,
     REPO_AUTOMATION_SPECS,
     _write_text_atomic,
     apply_repo_automation_restoration_plan,
@@ -21,19 +22,77 @@ from local_kb.install import (
 from scripts import check_chaos_brain_readiness as readiness
 
 
-SCHEMA_VERSION = "khaos-brain.operator-automation-activation.v1"
+SCHEMA_VERSION = "khaos-brain.operator-automation-activation.v3"
+HEAD_SCHEMA_VERSION = "khaos-brain.operator-automation-activation-head.v3"
+INSTALLATION_IDENTITY_SCHEMA_VERSION = (
+    "khaos-brain.operator-installation-currentness.v1"
+)
+SKILL_INVENTORY_SCHEMA_VERSION = (
+    "khaos-brain.operator-activation-skill-inventory.v1"
+)
+SCHEDULED_SKILL_IDS = tuple(
+    str(spec["skill_name"]) for spec in REPO_AUTOMATION_SPECS
+)
+MANUAL_ONLY_SKILL_IDS = tuple(
+    skill_id
+    for skill_id in MAINTENANCE_SKILL_NAMES
+    if skill_id not in SCHEDULED_SKILL_IDS
+)
 REQUIRED_READINESS_CHECKS = frozenset(
     {
         "flowguard_models",
         "flowguard_meshes",
-        "skillguard_source_install_parity",
-        "skillguard_source_assurance",
+        "logicguard_authority_cutover_model",
+        "logicguard_field_lifecycle",
+        "logicguard_model_mesh",
+        "logicguard_code_structure",
+        "logicguard_model_test_contract",
+        "logicguard_test_mesh",
+        "logicguard_runtime_model_miss",
+        "logicguard_runtime",
+        "logicguard_openspec",
+        "author_contract_assurance",
         "retired_architect_absence",
+        "current_runtime_only",
         "retrieval_quality",
         "full_regression",
         "model_code_test_alignment",
     }
 )
+
+
+def _expected_skill_inventory() -> dict[str, Any]:
+    return {
+        "schema_version": SKILL_INVENTORY_SCHEMA_VERSION,
+        "maintained_skill_ids": sorted(MAINTENANCE_SKILL_NAMES),
+        "scheduled_skill_ids": sorted(SCHEDULED_SKILL_IDS),
+        "manual_only_skill_ids": sorted(MANUAL_ONLY_SKILL_IDS),
+    }
+
+
+def _skill_inventory_issues(value: object) -> list[str]:
+    if not isinstance(value, Mapping):
+        return ["activation-skill-inventory-missing"]
+    expected = _expected_skill_inventory()
+    issues: list[str] = []
+    if value.get("schema_version") != SKILL_INVENTORY_SCHEMA_VERSION:
+        issues.append("activation-skill-inventory-schema-mismatch")
+    for key in (
+        "maintained_skill_ids",
+        "scheduled_skill_ids",
+        "manual_only_skill_ids",
+    ):
+        rows = value.get(key)
+        if not isinstance(rows, list) or rows != expected[key]:
+            issues.append(f"activation-skill-inventory-{key}-mismatch")
+    scheduled = set(value.get("scheduled_skill_ids") or [])
+    manual_only = set(value.get("manual_only_skill_ids") or [])
+    maintained = set(value.get("maintained_skill_ids") or [])
+    if scheduled.intersection(manual_only):
+        issues.append("activation-skill-inventory-overlap")
+    if scheduled.union(manual_only) != maintained:
+        issues.append("activation-skill-inventory-not-exhaustive")
+    return issues
 
 
 def _utc_now() -> str:
@@ -52,6 +111,102 @@ def _load_json(path: Path) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def installation_currentness_projection(
+    installation_check: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Project stable installed authority without hashing runtime diagnostics."""
+
+    history = (
+        installation_check.get("history_migration_check", {})
+        if isinstance(installation_check.get("history_migration_check"), Mapping)
+        else {}
+    )
+    history_state = (
+        history.get("maintenance_state", {})
+        if isinstance(history.get("maintenance_state"), Mapping)
+        else {}
+    )
+    history_journal = (
+        history.get("journal", {})
+        if isinstance(history.get("journal"), Mapping)
+        else {}
+    )
+    history_receipt = (
+        history.get("receipt", {})
+        if isinstance(history.get("receipt"), Mapping)
+        else {}
+    )
+    assurance = (
+        installation_check.get("upgrade_assurance", {})
+        if isinstance(installation_check.get("upgrade_assurance"), Mapping)
+        else {}
+    )
+    source_after = (
+        assurance.get("source_snapshot_after", {})
+        if isinstance(assurance.get("source_snapshot_after"), Mapping)
+        else {}
+    )
+    verifier = (
+        assurance.get("verifier_fingerprint", {})
+        if isinstance(assurance.get("verifier_fingerprint"), Mapping)
+        else {}
+    )
+    stable_keys = (
+        "ok",
+        "repo_root",
+        "manifest_repo_root",
+        "codex_home",
+        "skill_dir",
+        "skill_path",
+        "launcher_path",
+        "openai_path",
+        "global_agents_path",
+        "install_state_path",
+        "env_var_name",
+        "env_var_value",
+        "maintenance_skill_names",
+        "shell_tools",
+        "automation_runtime",
+        "checklist",
+        "canonical_interface_checks",
+        "maintenance_skill_checks",
+        "automation_checks",
+        "automation_restore_deferred",
+        "deferred_automation_restore_allowed",
+        "obsolete_update_state_settled",
+        "update_state_source_current",
+        "current_update_state",
+        "upgrade_attempt_authority",
+        "upgrade_attempt",
+        "install_transaction",
+        "retired_paths",
+        "issues",
+        "warnings",
+    )
+    return {
+        "schema_version": INSTALLATION_IDENTITY_SCHEMA_VERSION,
+        **{key: installation_check.get(key) for key in stable_keys},
+        "history_migration_gate": {
+            "required": installation_check.get("history_migration_required"),
+            "ok": history.get("ok"),
+            "migration_id": history.get("migration_id"),
+            "maintenance_committed": history_state.get("committed"),
+            "maintenance_phase": history_state.get("phase"),
+            "journal_status": history_journal.get("status"),
+            "receipt_status": history_receipt.get("status"),
+            "receipt_hash": history_receipt.get("receipt_hash"),
+        },
+        "upgrade_assurance_gate": {
+            "required": installation_check.get("upgrade_assurance_required"),
+            "ok": assurance.get("ok"),
+            "evidence_run_id": assurance.get("evidence_run_id"),
+            "failed_checks": assurance.get("failed_checks"),
+            "source_digest": source_after.get("digest"),
+            "verifier_digest": verifier.get("digest"),
+        },
+    }
+
+
 def _safe_proof_path(path: Path, root: Path) -> Path | None:
     try:
         resolved = path.resolve(strict=True)
@@ -66,7 +221,7 @@ def validate_activation_readiness(
     codex_home: Path,
     readiness_receipt_path: Path,
 ) -> dict[str, Any]:
-    """Verify the exact pre-restore aggregate and four scheduled completions."""
+    """Verify the exact pre-restore aggregate and its five-skill classification."""
 
     repo_root = Path(repo_root).resolve()
     codex_home = Path(codex_home).resolve()
@@ -120,66 +275,64 @@ def validate_activation_readiness(
     ):
         issues.append("aggregate-evidence-manifest-not-current")
 
-    scheduled_refs: dict[str, dict[str, str]] = {}
-    installed_entry = checks.get("skillguard_source_install_parity", {})
-    installed_report = (
-        installed_entry.get("json_payload", {})
-        if isinstance(installed_entry, Mapping)
+    maintained_refs: dict[str, dict[str, Any]] = {}
+    author_entry = checks.get("author_contract_assurance", {})
+    author_report = (
+        author_entry.get("json_payload", {})
+        if isinstance(author_entry, Mapping)
         else {}
     )
     skills = (
-        installed_report.get("skills", {})
-        if isinstance(installed_report, Mapping)
+        author_report.get("skills", {})
+        if isinstance(author_report, Mapping)
         else {}
     )
-    expected_skills = {
-        str(spec["skill_name"]) for spec in REPO_AUTOMATION_SPECS
-    }
+    expected_skills = set(MAINTENANCE_SKILL_NAMES)
+    if (
+        not isinstance(author_report, Mapping)
+        or author_report.get("schema_version")
+        != "khaos-brain.skill-author-maintenance.v1"
+        or author_report.get("source_only") is not True
+    ):
+        issues.append("author-maintenance-report-schema-mismatch")
     if not isinstance(skills, Mapping) or set(skills) != expected_skills:
-        issues.append("scheduled-production-skill-set-mismatch")
+        issues.append("maintained-skill-set-mismatch")
         skills = {}
-    proof_root = repo_root / ".local" / "automation-runs"
     for skill_id in sorted(expected_skills):
         skill = skills.get(skill_id, {})
-        execution = (
-            skill.get("executed_supervision", {})
+        projection = (
+            skill.get("consumer_projection", {})
             if isinstance(skill, Mapping)
             else {}
         )
-        production = (
-            execution.get("scheduled_production", {})
-            if isinstance(execution, Mapping)
-            else {}
-        )
-        proof_path = _safe_proof_path(
-            Path(str(production.get("guarded_result_path") or "")),
-            proof_root,
-        ) if isinstance(production, Mapping) else None
-        proof = _load_json(proof_path) if proof_path is not None else {}
-        if not (
-            isinstance(execution, Mapping)
-            and execution.get("ok") is True
-            and isinstance(production, Mapping)
-            and production.get("ok") is True
-            and proof.get("ok") is True
-            and proof.get("skill_id") == skill_id
+        if (
+            not isinstance(skill, Mapping)
+            or skill.get("ok") is not True
+            or skill.get("skill_id") != skill_id
+            or skill.get("maintenance_unit_id") != f"unit:{skill_id}"
+            or not isinstance(projection, Mapping)
+            or projection.get("ok") is not True
+            or not str(projection.get("manifest_digest") or "")
         ):
-            issues.append(f"scheduled-production-terminal-missing:{skill_id}")
+            issues.append(f"maintained-skill-author-evidence-invalid:{skill_id}")
             continue
-        scheduled_refs[skill_id] = {
-            "path": str(proof_path),
-            "sha256": _sha256(proof_path),
-            "run_id": str(proof.get("run_id") or ""),
-            "status": str(proof.get("status") or ""),
+        maintained_refs[skill_id] = {
+            "maintenance_unit_id": str(skill.get("maintenance_unit_id") or ""),
+            "consumer_projection_digest": str(
+                projection.get("manifest_digest") or ""
+            ),
+            "consumer_file_count": int(projection.get("file_count") or 0),
         }
 
     binding = {
+        "aggregate_receipt_path": str(receipt_path),
         "aggregate_receipt_sha256": _sha256(receipt_path) if receipt_path.is_file() else "",
         "evidence_manifest_path": str(evidence_path or ""),
         "evidence_manifest_sha256": _sha256(evidence_path) if evidence_path else "",
         "source_digest": str(current_source.get("digest") or ""),
         "verifier_digest": str(current_verifier.get("digest") or ""),
-        "scheduled_production_refs": scheduled_refs,
+        "skill_inventory": _expected_skill_inventory(),
+        "maintained_skill_refs": maintained_refs,
     }
     return {
         "ok": not issues,
@@ -222,31 +375,37 @@ def validate_operator_activation_receipt(
         != str(readiness_binding.get("evidence_manifest_sha256") or "")
     ):
         issues.append("operator-activation-evidence-manifest-stale")
-    scheduled_refs = readiness_binding.get("scheduled_production_refs", {})
-    expected_skills = {
-        str(spec["skill_name"]) for spec in REPO_AUTOMATION_SPECS
-    }
-    if not isinstance(scheduled_refs, Mapping) or set(scheduled_refs) != expected_skills:
-        issues.append("operator-activation-scheduled-proof-set-mismatch")
-        scheduled_refs = {}
-    proof_root = Path(repo_root).resolve() / ".local" / "automation-runs"
-    for skill_id in sorted(expected_skills):
-        ref = scheduled_refs.get(skill_id, {})
-        proof_path = (
-            _safe_proof_path(Path(str(ref.get("path") or "")), proof_root)
-            if isinstance(ref, Mapping)
-            else None
+    issues.extend(
+        f"operator-{issue}"
+        for issue in _skill_inventory_issues(
+            readiness_binding.get("skill_inventory")
         )
-        proof = _load_json(proof_path) if proof_path is not None else {}
-        if not (
-            proof_path is not None
-            and _sha256(proof_path) == str(ref.get("sha256") or "")
-            and proof.get("ok") is True
-            and proof.get("skill_id") == skill_id
-            and str(proof.get("run_id") or "") == str(ref.get("run_id") or "")
-            and str(proof.get("status") or "") == str(ref.get("status") or "")
+    )
+    maintained_refs = readiness_binding.get("maintained_skill_refs", {})
+    expected_skills = set(MAINTENANCE_SKILL_NAMES)
+    if not isinstance(maintained_refs, Mapping) or set(maintained_refs) != expected_skills:
+        issues.append("operator-activation-maintained-skill-ref-set-mismatch")
+    aggregate_path = _safe_proof_path(
+        Path(str(readiness_binding.get("aggregate_receipt_path") or "")),
+        Path(repo_root).resolve() / ".local" / "assurance",
+    )
+    if (
+        aggregate_path is None
+        or _sha256(aggregate_path)
+        != str(readiness_binding.get("aggregate_receipt_sha256") or "")
+    ):
+        issues.append("operator-activation-aggregate-receipt-stale")
+    else:
+        current_gate = validate_activation_readiness(
+            Path(repo_root).resolve(),
+            Path(codex_home).resolve(),
+            aggregate_path,
+        )
+        if (
+            current_gate.get("ok") is not True
+            or current_gate.get("binding") != dict(readiness_binding)
         ):
-            issues.append(f"operator-activation-scheduled-proof-stale:{skill_id}")
+            issues.append("operator-activation-readiness-binding-stale")
     snapshot = capture_repo_automation_state_snapshot(Path(codex_home))
     expected_ids = {str(spec["id"]) for spec in REPO_AUTOMATION_SPECS}
     if not (
@@ -261,7 +420,9 @@ def validate_operator_activation_receipt(
     )
     if final_check.get("ok") is not True:
         issues.append("operator-activation-install-check-failed")
-    if content_hash(final_check) != str(receipt.get("final_install_check_hash") or ""):
+    if content_hash(installation_currentness_projection(final_check)) != str(
+        receipt.get("final_install_identity_hash") or ""
+    ):
         issues.append("operator-activation-install-check-changed")
     return {
         "ok": not issues,
@@ -275,6 +436,14 @@ def validate_operator_activation_receipt(
 def _current_operator_activation_record(codex_home: Path) -> Path | None:
     root = _activation_root(codex_home)
     head = _load_json(root / "HEAD.json")
+    head_body = dict(head)
+    stored_head_hash = str(head_body.pop("head_hash", ""))
+    if (
+        head.get("schema_version") != HEAD_SCHEMA_VERSION
+        or not stored_head_hash
+        or stored_head_hash != content_hash(head_body)
+    ):
+        return None
     ref = head.get("receipt_ref", {}) if isinstance(head.get("receipt_ref"), Mapping) else {}
     relative = str(ref.get("relative_path") or "")
     if not relative:
@@ -367,7 +536,21 @@ def activate_all_for_current_machine(
             "before": before,
             "plan": plan,
         }
-    restoration = apply_repo_automation_restoration_plan(codex_home, plan)
+    try:
+        restoration = apply_repo_automation_restoration_plan(codex_home, plan)
+    except BaseException as exc:
+        pause = pause_repo_automations(codex_home)
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
+        return {
+            "ok": False,
+            "status": "apply-exception-repaused",
+            "error": f"{type(exc).__name__}:{exc}",
+            "gate": gate,
+            "before": before,
+            "plan": plan,
+            "pause": pause,
+        }
     exact = bool(
         restoration.get("ok") is True
         and restoration.get("restored") == target_states
@@ -385,7 +568,25 @@ def activate_all_for_current_machine(
             "restoration": restoration,
             "pause": pause,
         }
-    final_check = build_installation_check(repo_root=repo_root, codex_home=codex_home)
+    try:
+        final_check = build_installation_check(
+            repo_root=repo_root,
+            codex_home=codex_home,
+        )
+    except BaseException as exc:
+        pause = pause_repo_automations(codex_home)
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
+        return {
+            "ok": False,
+            "status": "install-check-exception-repaused",
+            "error": f"{type(exc).__name__}:{exc}",
+            "gate": gate,
+            "before": before,
+            "plan": plan,
+            "restoration": restoration,
+            "pause": pause,
+        }
     if final_check.get("ok") is not True:
         pause = pause_repo_automations(codex_home)
         return {
@@ -413,11 +614,18 @@ def activate_all_for_current_machine(
         "applied_hashes": dict(restoration.get("applied_hashes") or {}),
         "restored_states": dict(restoration.get("restored") or {}),
         "restored_user_paused": dict(restoration.get("restored_user_paused") or {}),
-        "final_install_check_hash": content_hash(final_check),
+        "final_install_identity_hash": content_hash(
+            installation_currentness_projection(final_check)
+        ),
         "claim_boundary": (
-            "This receipt authorizes only the user's explicit all-active, user_paused=false "
-            "override on this Codex home after the bound aggregate and four scheduled "
-            "SkillGuard completions. Portable installers still preserve each machine's prior state."
+            "This receipt authorizes only the user's explicit all-active, "
+            "user_paused=false override for the four scheduled automations on this "
+            "Codex home. It binds the complete five-skill inventory and keeps "
+            "khaos-brain-update manual-only. Installed currentness binds only the "
+            "stable installation authority projection; history-migration diagnostics "
+            "must still pass but are not receipt identity. It does not prove a future "
+            "scheduled run completed. Portable installers still preserve each "
+            "machine's prior state."
         ),
     }
     receipt = {**receipt_body, "receipt_hash": content_hash(receipt_body)}
@@ -434,8 +642,8 @@ def activate_all_for_current_machine(
             raise RuntimeError("operator activation receipt collision")
         if not record_path.exists():
             _write_text_atomic(record_path, record_text)
-        head = {
-            "schema_version": "khaos-brain.operator-automation-activation-head.v1",
+        head_body = {
+            "schema_version": HEAD_SCHEMA_VERSION,
             "receipt_id": receipt["receipt_id"],
             "receipt_hash": receipt["receipt_hash"],
             "receipt_ref": {
@@ -443,6 +651,7 @@ def activate_all_for_current_machine(
                 "sha256": _sha256(record_path),
             },
         }
+        head = {**head_body, "head_hash": content_hash(head_body)}
         _write_text_atomic(
             root / "HEAD.json",
             json.dumps(head, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
@@ -452,8 +661,10 @@ def activate_all_for_current_machine(
             codex_home,
             record_path,
         )
-    except Exception as exc:
+    except BaseException as exc:
         pause = pause_repo_automations(codex_home)
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
         return {
             "ok": False,
             "status": "receipt-write-blocked-repaused",

@@ -78,7 +78,9 @@ Preferred operating pattern:
 9. If the postflight check found a meaningful signal, append one structured observation:
 
    ```powershell
+   $eventId = [guid]::NewGuid().ToString()
    python "{{LAUNCHER_PATH}}" feedback `
+     --event-id "$eventId" `
      --task-summary "<what this task was>" `
      --route-hint "<best route>" `
      --entry-ids "<comma-separated matched ids or empty>" `
@@ -101,6 +103,22 @@ Preferred operating pattern:
      --suggested-action "<none|update-card|new-candidate|taxonomy-change|code-change>" `
      --json
    ```
+
+   Keep that `eventId` until the command reaches a terminal JSON result. If the
+   launcher itself is interrupted or times out, do not repeat the write with a
+   new id. Inspect the exact episode instead:
+
+   ```powershell
+   python "{{LAUNCHER_PATH}}" feedback `
+     --inspect-event-id "$eventId" `
+     --json
+   ```
+
+   `success` means exactly one durable history event and one matching terminal
+   receipt. `failed` is a known terminal failure. `timeout_unknown` means the
+   history effect exists without a matching terminal receipt and must be
+   settled by the current Sleep/upgrade path; it is never inferred as success
+   and never duplicated through a retry id.
 
    Preserve `thread-ref`, `project-ref`, and `workspace-root` whenever you know them. Sleep maintenance uses that provenance together with timestamps to reconstruct same-project chronology instead of treating every observation as an isolated note.
 

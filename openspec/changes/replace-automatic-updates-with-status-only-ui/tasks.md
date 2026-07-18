@@ -33,6 +33,8 @@
 
 ## 6. Verification and Local Activation
 
+- [x] 6.0 Define and test the exact activation inventory: five maintained
+  skills, four scheduled automations, and manual-only `khaos-brain-update`.
 - [ ] 6.1 Run the focused update/UI, installer, residual, author-contract, FlowGuard, field-lifecycle, commitment-ledger, conformance, and project-audit checks from the verification contract; fix every failure.
 - [ ] 6.2 Run one final full regression on the frozen integrated source and record its terminal result under one execution owner.
 - [ ] 6.3 Run the real transactional installer and independent install check, confirm the exact old task is absent, then apply the user's explicit current-machine all-active override and prove all four surviving tasks are `ACTIVE`; repeat the independent check for idempotence.

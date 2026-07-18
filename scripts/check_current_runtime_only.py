@@ -26,6 +26,14 @@ FORBIDDEN_BY_FILE: dict[str, tuple[str, ...]] = {
     "local_kb/install.py": (
         "AUTOMATION_FALLBACK_MODEL",
         "AUTOMATION_FALLBACK_REASONING_EFFORT",
+        'glob("*/current.json")',
+        "compact_upgrade_attempt_projection",
+        'UPGRADE_ATTEMPT_SCHEMA = "khaos-brain.upgrade-attempt.v1"',
+        'UPGRADE_ATTEMPT_PROJECTION_SCHEMA = "khaos-brain.upgrade-attempt-projection.v1"',
+    ),
+    "local_kb/operator_activation.py": (
+        'SCHEMA_VERSION = "khaos-brain.operator-automation-activation.v1"',
+        "scheduled_production_refs",
     ),
     "local_kb/org_cleanup.py": ("kb/trusted", "kb/candidates", "legacy_compatibility"),
     "local_kb/org_maintenance.py": ("kb/trusted", "kb/candidates", "legacy_compatibility"),
@@ -43,6 +51,14 @@ FORBIDDEN_BY_FILE: dict[str, tuple[str, ...]] = {
     ),
     "templates/predictive-kb-preflight/kb_launch.py": ("--path-hint", "implicit_search"),
     ".agents/skills/local-kb-retrieve/scripts/kb_search.py": ("--path-hint",),
+    "local_kb/feedback.py": (
+        "admit_observation(",
+        "replay_lifecycle(",
+        "maintenance_standard_is_active",
+    ),
+    ".agents/skills/local-kb-retrieve/scripts/kb_feedback.py": (
+        "from local_kb.lifecycle import admit_observation",
+    ),
     "scripts/open_khaos_brain_ui.py": ("--prefer-python", "_exe_candidates", "prefer_python"),
     "scripts/install_desktop_shortcut.py": ("--prefer-python", "_exe_candidates", "prefer_python"),
     "local_kb/settings.py": (
@@ -112,6 +128,18 @@ REQUIRED_BY_FILE: dict[str, tuple[str, ...]] = {
     "local_kb/install.py": (
         "migrate_obsolete_update_state",
         "resolve_automation_runtime",
+        'UPGRADE_ATTEMPT_SCHEMA = "khaos-brain.upgrade-attempt.v2"',
+        'UPGRADE_ATTEMPT_PROJECTION_SCHEMA = "khaos-brain.upgrade-attempt-projection.v2"',
+        'UPGRADE_ATTEMPT_HEAD_SCHEMA = "khaos-brain.upgrade-attempt-head.v1"',
+        "def current_upgrade_attempt_authority(",
+        '"history_files_scanned": 0',
+    ),
+    "local_kb/operator_activation.py": (
+        'SCHEMA_VERSION = "khaos-brain.operator-automation-activation.v3"',
+        "SKILL_INVENTORY_SCHEMA_VERSION",
+        '"maintained_skill_ids"',
+        '"scheduled_skill_ids"',
+        '"manual_only_skill_ids"',
     ),
     "local_kb/org_sources.py": (
         "obsolete organization roots are forbidden",
@@ -130,6 +158,19 @@ REQUIRED_BY_FILE: dict[str, tuple[str, ...]] = {
     ),
     ".agents/skills/local-kb-retrieve/scripts/kb_search.py": (
         'parser.add_argument("--route-hint"',
+    ),
+    "local_kb/feedback.py": (
+        "POSTFLIGHT_RECEIPT_SCHEMA",
+        "record_observation_result",
+        "inspect_observation_postflight",
+        "deferred_to_sleep_primary_path",
+        '"timeout_unknown"',
+    ),
+    ".agents/skills/local-kb-retrieve/scripts/kb_feedback.py": (
+        'parser.add_argument("--event-id"',
+        'parser.add_argument("--inspect-event-id"',
+        "record_observation_result",
+        "inspect_observation_postflight",
     ),
     "scripts/open_khaos_brain_ui.py": (
         '"--runtime"',

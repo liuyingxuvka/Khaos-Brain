@@ -83,14 +83,14 @@ Personal mode is the default. Each machine keeps its own local KB, including pri
 
 The system follows a brain-like rhythm:
 
-- **Awake work:** the agent retrieves relevant experience before a task and writes observations afterward.
+- **Awake work:** the agent retrieves relevant experience before a task and writes one caller-identified observation afterward. Postflight performs one durable append plus an event-bound terminal receipt; it never replays the full lifecycle or publishes models/indexes synchronously.
 - **Sleep consolidation:** `KB Sleep` is the sole canonical writer. It turns every admitted entry into an exact LogicGuard revision, audits missing support and opposition, assembles grounded scoped ModelMeshes, and atomically publishes models, meshes, projections, and the active index as one generation.
 - **Dream verification:** `KB Dream` pins an exact immutable generation and pressures evidence, assumptions, rebuttals/counterexamples, and boundaries. It can only send typed model-gap handoffs to Sleep and must prove canonical authority unchanged.
 - **Manual software update:** the desktop reports exact upstream status, and the transactional updater runs only after an explicit user request to AI in the current conversation; there is no scheduled update task.
 - **Organization maintenance:** shared organization sources have their own candidate, review, and maintenance path.
 - **Independent completion:** each of the four scheduled tasks and the separate manual-update Skill owns its own native route, non-overlapping obligations, tests, evidence, and immutable run receipt. SkillGuard checks those five source Skills only in the maintainer repository; installed Skills complete their work without SkillGuard, shared receipts, or external closure.
 
-After installation, scheduled maintenance runs through four local automations without requiring a human review queue. Task preflight and postflight keep retrieval and evidence write-back close to ordinary work, while Sleep, Dream, and organization maintenance improve the library over time; software update remains user-invoked.
+After installation, scheduled maintenance runs through four local automations without requiring a human review queue. The installation and operator-activation inventory always names all five maintained Skills, then classifies Sleep, Dream, organization contribution, and organization maintenance as scheduled while classifying only `khaos-brain-update` as manual-only. Task preflight and postflight keep retrieval and evidence write-back close to ordinary work, while Sleep, Dream, and organization maintenance improve the library over time; software update remains user-invoked.
 
 ### Personal Mode And Organization Mode
 
@@ -202,7 +202,7 @@ CHANGELOG.md           Release history
 
 MIT. See [`LICENSE`](./LICENSE).
 
-After the check passes, the machine has the global preflight skill, postflight rules, four scheduled maintenance entries (`KB Sleep`, `KB Dream`, organization contribution, and organization maintenance), plus the manually invoked `khaos-brain-update` Skill. There is no scheduled software-update task. The desktop UI only displays the exact configured Git upstream status; updating starts only when the user explicitly asks AI in the current conversation. Each installed Skill is a self-contained consumer product with its own native checks and receipts; no installed tree contains `.skillguard` or calls SkillGuard. Upgrades remove the retired Architect and system-update surfaces and settle old history, candidate, cache, sandbox, and maintenance debt. Old managed formats are upgrade-only input: the AI-run transaction converts them directly into exact LogicGuard models, scoped ModelMeshes, deterministic projections, and an exact active index, publishes the generation pointer last, deletes retired authority, and requires a residual-zero receipt. Normal operation has no compatibility layer or projection fallback; missing or stale current facts fail visibly. During a real manual update, all four scheduled automations remain paused while one target-native transaction validates, restores, reads back, runs the normal install check, and marks the update current.
+After the check passes, the machine has the global preflight skill, bounded postflight rules, four scheduled maintenance entries (`KB Sleep`, `KB Dream`, organization contribution, and organization maintenance), plus the manually invoked `khaos-brain-update` Skill. There is no scheduled software-update task. The desktop UI only displays the exact configured Git upstream status; updating starts only when the user explicitly asks AI in the current conversation. Each installed Skill is a self-contained consumer product with its own native checks and receipts; no installed tree contains `.skillguard` or calls SkillGuard. Upgrades remove the retired Architect and system-update surfaces and settle old history, candidate, cache, sandbox, and maintenance debt. Old managed formats are upgrade-only input: the AI-run transaction converts them directly into exact LogicGuard models, scoped ModelMeshes, deterministic projections, and an exact active index, publishes the generation pointer last, deletes retired authority, and requires a residual-zero receipt. Normal operation has no compatibility layer or projection fallback; missing or stale current facts fail visibly. Upgrade-attempt currentness reads one bounded `HEAD.json` and the exact bounded current projection it names; immutable event history and prior attempt directories are never scanned by the ordinary check. The committed lightweight install state binds that same final attempt by exact ID and receipt hash, and an independent post-command check must match both. During a real manual update, all four scheduled automations remain paused while one target-native transaction validates, restores, reads back, runs the normal install check, and marks the update current.
 
 The exact migration phases, rollback behavior, pause-state preservation, and success gates are documented in [Chaos Brain upgrade contract](docs/chaos_brain_upgrade.md).
 
@@ -301,15 +301,15 @@ Organization mode 是可选的。Settings 验证 organization KB GitHub reposito
 
 系统刻意采用脑式节律：
 
-- **醒着做任务：** agent 在任务前检索相关经验，在任务后写回观察。
+- **醒着做任务：** agent 在任务前检索相关经验，在任务后用一个稳定事件 ID 写回一条观察。Postflight 只做一次持久写入和事件绑定终态回执，不同步重放完整生命周期，也不发布模型或索引。
 - **睡眠整理：** `KB Sleep` 是唯一正常运行时模型写入者。它把每条经验整理成精确 LogicGuard revision，检查证据、warrant、假设、反驳和边界缺口，再把模型、ModelMesh、卡片投影和索引作为一个 generation 原子发布。
 - **快速而守门的检索：** 日常查询先用路线和词法找到入口，再读取精确模型、根 ArgumentBlock、缺口和已验证的 mesh 邻域；`related_cards`、共同出现或 YAML 投影都不能授权扩展。
 - **做梦验证：** `KB Dream` 固定一个不可变 generation，测试移除证据、移除假设、加强反驳/反例和压力边界；它只能把模型缺口交给 Sleep，并且结束前必须证明权威没有被改写。
-- **系统维护：** 一个很窄的 system-update automation 只负责检查和执行已授权的软件更新；普通产品改动仍走明确的开发流程，不再由自修改维护 lane 处理。
+- **手动软件更新：** 桌面只显示精确上游状态；只有用户在当前对话里明确要求 AI 更新时，事务式更新流程才会运行。系统没有软件自动更新计划任务。
 - **组织维护：** 共享组织来源有自己的 candidate、review 和 maintenance 路径。
 - **独立完成：** 四个计划任务与单独的手动更新 Skill 各自拥有自己的原生路线、不重叠的职责、测试、证据和不可变运行回执。SkillGuard 只在维护者仓库里检查这五个源技能；安装后的技能不依赖 SkillGuard、共享回执或外部闭环。
 
-安装后，这些节律由本地 automations 全自动运行，不要求人工阅读文件或维护 review queue。任务 preflight/postflight 负责检索与证据写回；Sleep、Dream、system update 和 organization maintenance 在后续窗口持续收敛系统。
+安装后，四个本地 automations（Sleep、Dream、organization contribution、organization maintenance）全自动运行，不要求人工阅读文件或维护 review queue。任务 preflight/postflight 负责检索与有界证据写回；软件更新保持当前对话显式调用。
 
 ### 个人模式和组织模式
 
@@ -398,7 +398,7 @@ python scripts/install_codex_kb.py --json
 python scripts/install_codex_kb.py --check --json
 ```
 
-检查通过后，这台机器会安装 global preflight skill、postflight rules、四个计划维护入口（`KB Sleep`、`KB Dream`、organization contribution、organization maintenance），以及只能由当前对话显式调用的 `khaos-brain-update` Skill。系统没有软件自动更新计划任务；桌面 UI 只显示精确配置的 Git 上游是否有新版本，不写入授权，也不启动更新。每个安装技能都是能够独立工作的消费者产品，拥有自己的原生检查与回执；安装树里不含 `.skillguard`，运行时也不调用 SkillGuard。旧电脑升级时会删除已退役的 Architect 与 system-update 精确受管表面，并清理历史经验债务与维护债务。旧受管格式只允许作为升级输入：AI 事务直接生成当前 LogicGuard models、分域 ModelMeshes、确定性卡片投影和精确 active index，最后发布 generation pointer、删除旧权威并要求残留为零。日常运行没有兼容层、YAML 语义 fallback 或浮动 head；缺少或过期的当前事实会明确失败。真实手动更新期间，四个计划任务会保持暂停，由一次目标原生事务完成校验、恢复、回读、普通安装检查并把更新状态标记为当前。
+检查通过后，这台机器会安装 global preflight skill、有界 postflight rules、四个计划维护入口（`KB Sleep`、`KB Dream`、organization contribution、organization maintenance），以及只能由当前对话显式调用的 `khaos-brain-update` Skill。系统没有软件自动更新计划任务；桌面 UI 只显示精确配置的 Git 上游是否有新版本，不写入授权，也不启动更新。每个安装技能都是能够独立工作的消费者产品，拥有自己的原生检查与回执；安装树里不含 `.skillguard`，运行时也不调用 SkillGuard。旧电脑升级时会删除已退役的 Architect 与 system-update 精确受管表面，并清理历史经验债务与维护债务。旧受管格式只允许作为升级输入：AI 事务直接生成当前 LogicGuard models、分域 ModelMeshes、确定性卡片投影和精确 active index，最后发布 generation pointer、删除旧权威并要求残留为零。日常运行没有兼容层、YAML 语义 fallback 或浮动 head；缺少或过期的当前事实会明确失败。轻量安装状态还必须用精确 attempt ID 和回执哈希绑定同一个最终升级尝试，独立检查会在安装器退出后重新核对二者。真实手动更新期间，四个计划任务会保持暂停，由一次目标原生事务完成校验、恢复、回读、普通安装检查并把更新状态标记为当前。
 
 完整迁移阶段、失败回滚、暂停状态保留和成功门槛见 [Chaos Brain 升级契约](docs/chaos_brain_upgrade.md)。
 

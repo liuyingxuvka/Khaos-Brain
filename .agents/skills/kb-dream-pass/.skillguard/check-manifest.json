@@ -386,7 +386,7 @@
         "classification_rule_ids": [
           "skillguard.content_role_classifier.current:runtime_source"
         ],
-        "component_hash": "sha256:ddda0879f799c6f0d55ddf3d95e696f7f709f8147cc27c5a59359d576f1ef710",
+        "component_hash": "sha256:0b1897bbecc8243e0f8b799278f9072b2dcdc097536be44b252a9d4c2d779de5",
         "component_id": "component:runtime_source:2f8e4d8e6f20054e",
         "consumer_ids": [
           "projection:kb-dream-pass:target-runtime-sources"
@@ -441,7 +441,7 @@
       "owner_cycles": [],
       "unmapped_paths": []
     },
-    "impact_graph_hash": "sha256:4c6913774bad78a9ffea78b20f90372951f84e1db0e456455564ab9fc459e7fa",
+    "impact_graph_hash": "sha256:a926eaa240ebf01fc74dfb55f15342afa92882c6d378cc9439764b602fe93f6a",
     "inventory": [
       {
         "classification_rule_id": "skillguard.content_role_classifier.current:contract_schema",
@@ -501,14 +501,14 @@
       },
       {
         "classification_rule_id": "skillguard.content_role_classifier.current:runtime_source",
-        "content_hash": "sha256:1f38b26a839e0928a6ca38a20038227840006f839cdd236d591ae7b06c224151",
+        "content_hash": "sha256:68215f42c087c19477525287f9aa83cc819ce40feb71d07bfd2bd7fd936df017",
         "install_disposition": "source_only",
         "path": "local_kb/install.py",
         "role": "runtime_source"
       },
       {
         "classification_rule_id": "skillguard.content_role_classifier.current:runtime_source",
-        "content_hash": "sha256:b53083c80ae9e43bd245541d84da69ca73dc599830c8bf66e4122b5b69245583",
+        "content_hash": "sha256:66b3a1c376ed3d461d26bc461f6183b38150f8892eaa893a6270ad109138612c",
         "install_disposition": "source_only",
         "path": "local_kb/lifecycle.py",
         "role": "runtime_source"
@@ -598,7 +598,7 @@
         "role": "test_dev"
       }
     ],
-    "inventory_hash": "sha256:e5e9aa1181ffa4ea934b6c2c6c519d1fed06af6e1e70e7488e1417115e8ce6d8",
+    "inventory_hash": "sha256:56252f821514d0fbea5cece2641aac8b8ac65639413b5b31fe26b39171c734d3",
     "member_root_path": ".agents/skills/kb-dream-pass",
     "owner_receipt_root_ref": {
       "path_token": "owner_evidence_root",
@@ -743,7 +743,7 @@
       },
       {
         "consumer_id": "projection:kb-dream-pass:target-runtime-sources",
-        "consumer_projection_hash": "sha256:b16f75d4a9c129d1f5622eaeaaf03d0ad42175e55395ec1186440570d53eca5e",
+        "consumer_projection_hash": "sha256:c6bc2fcff6b1ea12b93a05542451572ff297259707db304e242da45479ce702b",
         "impact_plan_schema_version": "skillguard.content_impact_plan.current",
         "impact_policy_id": "skillguard.content_impact_policy.current",
         "input_component_ids": [
@@ -751,7 +751,7 @@
           "component:runtime_source:2f8e4d8e6f20054e",
           "component:runtime_source:3a6dad62afd9fb23"
         ],
-        "input_projection_hash": "sha256:946318205a33c59661c3a3ca32d1abd5df22f546348fef400864f51756395fb2",
+        "input_projection_hash": "sha256:c9a5b9ab82926c2a2f6f97c8170f468cb75cd867f939c126e14f1c4f69292aea",
         "kind": "target_runtime_source",
         "projection_declaration_hash": "sha256:db3550b2e86542d7f1c85f654935ebd3ab57549f6ea2f682f7e39ccab316de3e"
       },
@@ -791,9 +791,9 @@
     "schema_version": "skillguard.content_impact_plan.current",
     "unknown_mapping_disposition": "block"
   },
-  "contract_hash": "17F48C143E83B9EF598CF5D79F27EACC4079F50417726DBA18F694FFDF870E88",
+  "contract_hash": "734BFF5AEB0944368656AFDE9C72EE6B84A9F3BD3B1032D84DE86DB2E289F784",
   "maintenance_unit_id": "unit:kb-dream-pass",
-  "manifest_hash": "F939B749B23D0224622C711F3ED050C3ED18AEC69AC003FCF2B668ABFD8843ED",
+  "manifest_hash": "CB0A5939FF2AC1D1794E808EDB796651688A02521E1310D1AC52ED11C9366395",
   "member_skill_ids": [
     "kb-dream-pass"
   ],
@@ -809,8 +809,8 @@
     "implementation:local_kb/automation_contracts.py": "78C15E8881F07BE1789FD3DB0B4F78C65029CE5429D54F169B5D28D6B8D0BFCB",
     "implementation:local_kb/automation_runtime.py": "78FEAB1A86F360BD88FDF947197E818A666780F2B4D876B22EFEB457C8C7C680",
     "implementation:local_kb/dream.py": "6D99AC6B4DC40E07A501A03D0D51540F8CD55BBBC0295448F3FF0CC9EF115E2E",
-    "implementation:local_kb/install.py": "1F38B26A839E0928A6CA38A20038227840006F839CDD236D591AE7B06C224151",
-    "implementation:local_kb/lifecycle.py": "B53083C80AE9E43BD245541D84DA69CA73DC599830C8BF66E4122B5B69245583",
+    "implementation:local_kb/install.py": "68215F42C087C19477525287F9AA83CC819CE40FEB71D07BFD2BD7FD936DF017",
+    "implementation:local_kb/lifecycle.py": "66B3A1C376ED3D461D26BC461F6183B38150F8892EAA893A6270AD109138612C",
     "implementation:local_kb/logicguard_models.py": "1FADB46EF9FF0A54F57F4D9F8A795471CE726108D9767903D7F13C33BF3AF974",
     "implementation:local_kb/maintenance_lanes.py": "411CBBAD055787F0FF38C6E682056A2ED5824150B01A744EC45C7FF4321058BC",
     "implementation:local_kb/model_maintenance.py": "358CCCC7488CF752F65244C11D48628A8ABB2488C96518AB163AD77C6A474553",

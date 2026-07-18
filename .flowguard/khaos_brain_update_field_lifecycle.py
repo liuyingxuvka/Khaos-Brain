@@ -202,6 +202,129 @@ def build_rows() -> tuple[FieldLifecycleRow, ...]:
         )
     )
 
+    for field_id, role in (
+        ("operator_activation.schema_version", "schema_version"),
+        ("operator_activation.final_install_identity_hash", "persisted"),
+        ("operator_activation.skill_inventory.schema_version", "schema_version"),
+        ("operator_activation.skill_inventory.maintained_skill_ids", "routing"),
+        ("operator_activation.skill_inventory.scheduled_skill_ids", "routing"),
+        ("operator_activation.skill_inventory.manual_only_skill_ids", "routing"),
+    ):
+        rows.append(
+            _row(
+                field_id,
+                "group:operator-activation-inventory",
+                locations=(
+                    "local_kb/operator_activation.py",
+                    ".khaos-brain-install/operator-activation/receipts",
+                ),
+                role=role,
+                lifecycle="new",
+                impacts=("schema", "routing", "external_contract"),
+                readers=(
+                    "local_kb.operator_activation.validate_activation_readiness",
+                    "local_kb.operator_activation.validate_operator_activation_receipt",
+                ),
+                writers=(
+                    "local_kb.operator_activation.activate_all_for_current_machine",
+                ),
+                obligation="req.automation.activation-inventory",
+                contract="contract:operator_activation.five_four_one_inventory",
+                inputs=(
+                    "five maintained skill ids",
+                    "four repository automation specs",
+                ),
+                outputs=(field_id,),
+                state_reads=("current aggregate author assurance",),
+                state_writes=("operator activation receipt",),
+                side_effects=("activate exactly four scheduled automations",),
+                errors=(
+                    "manual skill treated as scheduled",
+                    "overlapping inventory",
+                    "non-exhaustive inventory",
+                    "old receipt schema",
+                    "runtime migration diagnostics used as receipt identity",
+                    "activation exception leaves an unreceipted ACTIVE state",
+                ),
+            )
+        )
+
+    for field_id, role in (
+        ("upgrade_attempt.head.schema_version", "schema_version"),
+        ("upgrade_attempt.head.attempt_id", "routing"),
+        ("upgrade_attempt.head.sequence", "state"),
+        ("upgrade_attempt.head.current_receipt_hash", "persisted"),
+        ("upgrade_attempt.head.current_ref.relative_path", "routing"),
+        ("upgrade_attempt.head.current_ref.sha256", "persisted"),
+        ("upgrade_attempt.head.head_hash", "persisted"),
+        ("upgrade_attempt.current.schema_version", "schema_version"),
+        ("upgrade_attempt.current.projection_schema_version", "schema_version"),
+    ):
+        rows.append(
+            _row(
+                field_id,
+                "group:upgrade-attempt-current-authority",
+                locations=(
+                    "local_kb/install.py",
+                    ".khaos-brain-install/attempts/HEAD.json",
+                    ".khaos-brain-install/attempts/<attempt-id>/current.json",
+                ),
+                role=role,
+                lifecycle="new",
+                impacts=("schema", "state", "routing", "external_contract"),
+                readers=(
+                    "local_kb.install.current_upgrade_attempt_authority",
+                    "local_kb.install.build_installation_check",
+                ),
+                writers=("local_kb.install._record_upgrade_attempt",),
+                obligation="req.upgrade-attempt.bounded-current-authority",
+                contract="contract:install.upgrade_attempt_head_current",
+                inputs=("one current attempt checkpoint",),
+                outputs=(field_id,),
+                state_reads=("bounded HEAD", "bounded current projection"),
+                state_writes=("HEAD written after current projection",),
+                side_effects=("atomic current-authority publication",),
+                errors=(
+                    "missing or oversized HEAD",
+                    "current hash mismatch",
+                    "path escapes attempt root",
+                    "history enumeration",
+                    "install-manifest fallback",
+                ),
+            )
+        )
+
+    rows.append(
+        _row(
+            "install_state.upgrade_attempt.receipt_hash",
+            "group:upgrade-attempt-current-authority",
+            locations=(
+                "local_kb/config.py",
+                "predictive-kb/install.json",
+            ),
+            role="persisted",
+            lifecycle="new",
+            impacts=("schema", "state", "external_contract"),
+            readers=("local_kb.install.build_installation_check",),
+            writers=(
+                "local_kb.config.build_install_state",
+                "local_kb.config.save_install_state",
+            ),
+            obligation="req.upgrade-attempt.committed-install-state-binding",
+            contract="contract:config.install_state_attempt_receipt_binding",
+            inputs=("final bounded upgrade-attempt current projection",),
+            outputs=("exact current attempt receipt hash",),
+            state_reads=("upgrade_attempt.receipt_hash",),
+            state_writes=("install_state.upgrade_attempt.receipt_hash",),
+            side_effects=("atomic lightweight install-state publication",),
+            errors=(
+                "missing committed receipt hash",
+                "attempt id or receipt hash mismatch",
+                "internal check green but independent check red",
+            ),
+        )
+    )
+
     retired = (
         ("update.v1.user_requested", "", "deleted"),
         ("update.v1.status.prepared", "update.status", "migrated"),
@@ -211,6 +334,16 @@ def build_rows() -> tuple[FieldLifecycleRow, ...]:
         ("routing.system_update_check", "manual_update.explicit_user_request", "migrated"),
         ("routing.architect_update_check", "", "deleted"),
         ("entrypoint.run_khaos_brain_system_update", "entrypoint.run_khaos_brain_manual_update", "migrated"),
+        (
+            "operator_activation.v1.scheduled_production_refs",
+            "operator_activation.skill_inventory.scheduled_skill_ids",
+            "blocked",
+        ),
+        (
+            "upgrade_attempt.v1.current_projection",
+            "upgrade_attempt.head.current_ref.relative_path",
+            "blocked",
+        ),
     )
     for field_id, replacement, disposition in retired:
         rows.append(
@@ -251,6 +384,8 @@ def build_plan() -> FieldLifecyclePlan:
         ("group:update-status-v2", "status_schema", "field_lifecycle_mesh"),
         ("group:update-status-ui", "ui_projection", "ui_flow_structure"),
         ("group:manual-update-trigger", "invocation_routing", "model_first_function_flow"),
+        ("group:operator-activation-inventory", "activation_schema", "field_lifecycle_mesh"),
+        ("group:upgrade-attempt-current-authority", "currentness_schema", "field_lifecycle_mesh"),
         ("group:retired-update-authority", "retired_surface", "field_lifecycle_mesh"),
     )
     groups = tuple(
@@ -272,8 +407,10 @@ def build_plan() -> FieldLifecyclePlan:
         claim_scope="bounded",
         allow_scoped_confidence=False,
         notes=(
-            "Complete inventory for changed status schema, UI projection, manual trigger, and retired update authority. "
-            "Unchanged transactional installer receipts are outside this bounded field change.",
+            "Complete inventory for changed status schema, UI projection, manual "
+            "trigger, exact five/four/one activation inventory, bounded upgrade-attempt "
+            "HEAD/current authority plus its exact committed install-state receipt "
+            "binding, and retired update authority.",
         ),
     )
 

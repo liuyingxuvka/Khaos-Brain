@@ -10,13 +10,20 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from local_kb.feedback import build_observation, record_observation
+from local_kb.feedback import (
+    POSTFLIGHT_TERMINAL_BUDGET_MS,
+    build_observation,
+    inspect_observation_postflight,
+    record_observation,
+    record_observation_result,
+)
 from local_kb.history import record_history_event
 from local_kb.lifecycle import (
     admit_observation,
     build_observation_admission_event,
     build_observation_disposition_event,
     commit_lifecycle_events,
+    content_fingerprint,
     _lifecycle_lock,
     evidence_items_for_observation,
     lifecycle_events_path,
@@ -137,6 +144,110 @@ class KbLifecycleTests(unittest.TestCase):
             owner = json.loads((lock_dir / "owner.json").read_text(encoding="utf-8"))
             self.assertEqual(owner["pid"], os.getpid())
 
+    def test_postflight_is_durable_unique_terminal_and_does_not_replay_lifecycle(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            lifecycle_root = repo_root / "kb" / "history" / "lifecycle"
+            lifecycle_root.mkdir(parents=True)
+            (lifecycle_root / "events.jsonl").write_bytes(b"x" * (8 * 1024 * 1024))
+            (lifecycle_root / "current.json").write_text(
+                '{"schema_version":1,"event_count":0}\n',
+                encoding="utf-8",
+            )
+            authority = (
+                repo_root
+                / ".local"
+                / "khaos-brain"
+                / "logicguard-authority"
+                / "current-generation.json"
+            )
+            authority.parent.mkdir(parents=True)
+            authority.write_text('{"generation_id":"fixture-current"}\n', encoding="utf-8")
+            index_root = repo_root / "kb" / "indexes"
+            index_root.mkdir(parents=True)
+            (index_root / "active.json").write_text(
+                '{"generation":1,"records":[]}\n',
+                encoding="utf-8",
+            )
+            (index_root / "active-authority.json").write_text(
+                '{"generation":1}\n',
+                encoding="utf-8",
+            )
+            observation = build_observation(
+                task_summary="Postflight keeps active work on bounded history intake.",
+                outcome="success",
+                event_id="postflight-stable-event",
+            )
+
+            with patch(
+                "local_kb.lifecycle.replay_lifecycle",
+                side_effect=AssertionError("active-task postflight must not replay lifecycle"),
+            ):
+                first = record_observation_result(repo_root, observation)
+                repeated = record_observation_result(repo_root, observation)
+
+            self.assertTrue(first["ok"], first)
+            self.assertEqual("success", first["status"])
+            self.assertTrue(first["created"])
+            self.assertTrue(first["receipt"]["runtime_authority_unchanged"])
+            self.assertTrue(
+                first["receipt"]["lifecycle_writer_lock_release_confirmed"]
+            )
+            self.assertLess(first["duration_ms"], POSTFLIGHT_TERMINAL_BUDGET_MS)
+            self.assertFalse((lifecycle_root / ".writer.lock").exists())
+            self.assertEqual("success", repeated["status"])
+            self.assertTrue(repeated["idempotent_reuse"])
+            history_rows = [
+                json.loads(line)
+                for line in (
+                    repo_root / "kb" / "history" / "events.jsonl"
+                ).read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertEqual(
+                1,
+                sum(
+                    row.get("event_id") == observation["event_id"]
+                    for row in history_rows
+                ),
+            )
+            self.assertEqual(
+                "success",
+                inspect_observation_postflight(
+                    repo_root,
+                    observation["event_id"],
+                )["status"],
+            )
+
+    def test_postflight_event_without_terminal_receipt_is_timeout_unknown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            observation = build_observation(
+                task_summary="Interrupted postflight effect",
+                outcome="unknown",
+                event_id="postflight-interrupted-event",
+            )
+            record_history_event(repo_root, observation)
+
+            inspection = inspect_observation_postflight(
+                repo_root,
+                observation["event_id"],
+            )
+            repeated = record_observation_result(repo_root, observation)
+
+            self.assertFalse(inspection["ok"])
+            self.assertEqual("timeout_unknown", inspection["status"])
+            self.assertEqual("timeout_unknown", repeated["status"])
+            self.assertFalse(repeated["created"])
+            rows = [
+                json.loads(line)
+                for line in (
+                    repo_root / "kb" / "history" / "events.jsonl"
+                ).read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertEqual(1, len(rows))
+
     def test_observation_is_admitted_and_disposed_by_next_sleep(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)
@@ -151,8 +262,10 @@ class KbLifecycleTests(unittest.TestCase):
                 outcome="success",
             )
             record_observation(repo_root, observation)
-            admitted = load_lifecycle_state(repo_root)["observations"][observation["event_id"]]
-            self.assertEqual(admitted["state"], "new")
+            self.assertNotIn(
+                observation["event_id"],
+                load_lifecycle_state(repo_root)["observations"],
+            )
 
             receipt = run_incremental_sleep(repo_root, run_id="sleep-one")
 
@@ -690,6 +803,44 @@ class KbLifecycleTests(unittest.TestCase):
             max(0.1, small_duration) * 3.2,
             "doubling the event log must remain near-linear, not quadratic",
         )
+
+    def test_replay_lifecycle_streams_events_and_preserves_the_exact_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            path = lifecycle_events_path(repo_root)
+            path.parent.mkdir(parents=True)
+            events = [
+                {
+                    "sequence": sequence,
+                    "idempotency_key": f"key-{sequence}",
+                    "event_type": "noop",
+                    "item_id": f"item-{sequence}",
+                    "payload": {"text": "x" * 4096},
+                }
+                for sequence in range(1, 65)
+            ]
+            with path.open("w", encoding="utf-8") as handle:
+                for event in events:
+                    handle.write(
+                        json.dumps(
+                            event,
+                            ensure_ascii=False,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        )
+                        + "\n"
+                    )
+
+            with patch(
+                "local_kb.lifecycle._read_jsonl",
+                side_effect=AssertionError("replay must not materialize the event log"),
+            ):
+                state = replay_lifecycle(repo_root)
+
+            self.assertEqual(state["event_count"], len(events))
+            self.assertEqual(state["last_sequence"], len(events))
+            self.assertEqual(state["event_digest"], content_fingerprint(events))
+            self.assertTrue(state["validation"]["ok"])
 
     def test_legacy_mode_does_not_create_lifecycle_authority(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

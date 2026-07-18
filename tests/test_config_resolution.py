@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from local_kb.config import resolve_repo_root, save_install_state
+from local_kb.config import load_install_state, resolve_repo_root, save_install_state
 
 
 def write_minimal_repo(root: Path) -> None:
@@ -48,6 +48,29 @@ class RepoRootResolutionTests(unittest.TestCase):
 
             with patch.dict(os.environ, {"CODEX_PREDICTIVE_KB_ROOT": ""}, clear=False):
                 self.assertEqual(resolve_repo_root("auto", cwd=nested), repo_root.resolve())
+
+    def test_install_state_preserves_final_upgrade_attempt_receipt_binding(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            codex_home = Path(tmp_dir) / ".codex"
+            receipt_hash = "A" * 64
+            save_install_state(
+                {
+                    "upgrade_attempt": {
+                        "attempt_id": "upgrade-current",
+                        "status": "completed",
+                        "phase": "post_install_check_passed",
+                        "updated_at": "2026-07-18T12:43:24+00:00",
+                        "receipt_hash": receipt_hash,
+                    }
+                },
+                codex_home,
+            )
+
+            persisted = load_install_state(codex_home)
+            self.assertEqual(
+                persisted["upgrade_attempt"]["receipt_hash"],
+                receipt_hash,
+            )
 
 
 if __name__ == "__main__":

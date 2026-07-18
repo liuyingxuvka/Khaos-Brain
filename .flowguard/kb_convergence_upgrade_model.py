@@ -28,6 +28,10 @@ AUTOMATION_TARGET_OBLIGATIONS = {
     for skill_id in AUTOMATION_COMPLETION_CONTRACTS
 }
 AUTOMATION_TARGET_IDS = tuple(AUTOMATION_TARGET_OBLIGATIONS)
+SCHEDULED_SKILL_IDS = tuple(
+    skill_id for skill_id in AUTOMATION_TARGET_IDS if skill_id != UPDATE_SKILL_ID
+)
+MANUAL_ONLY_SKILL_IDS = (UPDATE_SKILL_ID,)
 AUTOMATION_CHECK_KINDS = (
     "intake-runtime",
     "native-runtime",
@@ -54,6 +58,16 @@ class ConsumerInput:
     restoration_ok: bool = True
     final_health_ok: bool = True
     mark_current_ok: bool = True
+    maintained_skill_ids: tuple[str, ...] = ()
+    scheduled_skill_ids: tuple[str, ...] = ()
+    manual_only_skill_ids: tuple[str, ...] = ()
+    activation_checks_ok: bool = True
+    activation_transaction_completed: bool = True
+    attempt_head_current: bool = True
+    attempt_projection_bounded: bool = True
+    attempt_manifest_binding_current: bool = True
+    attempt_history_scan_count: int = 0
+    attempt_manifest_fallback_used: bool = False
 
 
 @dataclass(frozen=True)
@@ -76,6 +90,14 @@ class ConsumerState:
     update_final_health_ok: bool = False
     update_mark_current_ok: bool = False
     update_survivors_paused: bool = False
+    activation_inventory_validated: bool = False
+    active_scheduled_skills: tuple[str, ...] = ()
+    manual_only_skills: tuple[str, ...] = ()
+    activation_survivors_paused: bool = False
+    upgrade_attempt_authority_status: str = "unknown"
+    upgrade_attempt_manifest_binding_current: bool = False
+    upgrade_attempt_history_scan_count: int = 0
+    upgrade_attempt_manifest_fallback_used: bool = False
 
 
 def _append_unique(values: tuple[str, ...], item: str) -> tuple[str, ...]:
@@ -231,6 +253,106 @@ class ConsumerIndependenceBlock:
                 ),
             )
 
+        if input_obj.kind == "operator_activate":
+            maintained = tuple(sorted(input_obj.maintained_skill_ids))
+            scheduled = tuple(sorted(input_obj.scheduled_skill_ids))
+            manual_only = tuple(sorted(input_obj.manual_only_skill_ids))
+            inventory_ok = bool(
+                maintained == tuple(sorted(AUTOMATION_TARGET_IDS))
+                and scheduled == tuple(sorted(SCHEDULED_SKILL_IDS))
+                and manual_only == tuple(sorted(MANUAL_ONLY_SKILL_IDS))
+                and not set(scheduled).intersection(manual_only)
+                and set(scheduled).union(manual_only) == set(maintained)
+            )
+            if not inventory_ok:
+                return (
+                    FunctionResult(
+                        ConsumerOutput("activation_inventory_blocked"),
+                        replace(
+                            state,
+                            activation_inventory_validated=False,
+                            active_scheduled_skills=(),
+                            manual_only_skills=(),
+                            activation_survivors_paused=True,
+                        ),
+                        label="activation_inventory_blocked",
+                    ),
+                )
+            if not (
+                input_obj.activation_checks_ok
+                and input_obj.activation_transaction_completed
+            ):
+                return (
+                    FunctionResult(
+                        ConsumerOutput(
+                            "activation_failed_survivors_paused"
+                        ),
+                        replace(
+                            state,
+                            activation_inventory_validated=True,
+                            active_scheduled_skills=(),
+                            manual_only_skills=tuple(
+                                sorted(MANUAL_ONLY_SKILL_IDS)
+                            ),
+                            activation_survivors_paused=True,
+                        ),
+                        label="activation_failed_survivors_paused",
+                    ),
+                )
+            return (
+                FunctionResult(
+                    ConsumerOutput(
+                        "scheduled_automations_activated_manual_update_unscheduled"
+                    ),
+                    replace(
+                        state,
+                        activation_inventory_validated=True,
+                        active_scheduled_skills=tuple(sorted(SCHEDULED_SKILL_IDS)),
+                        manual_only_skills=tuple(sorted(MANUAL_ONLY_SKILL_IDS)),
+                        activation_survivors_paused=False,
+                    ),
+                    label="scheduled_automations_activated_manual_update_unscheduled",
+                ),
+            )
+
+        if input_obj.kind == "check_upgrade_attempt_current":
+            current = bool(
+                input_obj.attempt_head_current
+                and input_obj.attempt_projection_bounded
+                and input_obj.attempt_manifest_binding_current
+                and input_obj.attempt_history_scan_count == 0
+                and not input_obj.attempt_manifest_fallback_used
+            )
+            return (
+                FunctionResult(
+                    ConsumerOutput(
+                        "upgrade_attempt_current_authority"
+                        if current
+                        else "upgrade_attempt_current_authority_blocked"
+                    ),
+                    replace(
+                        state,
+                        upgrade_attempt_authority_status=(
+                            "current" if current else "blocked"
+                        ),
+                        upgrade_attempt_manifest_binding_current=(
+                            input_obj.attempt_manifest_binding_current
+                        ),
+                        upgrade_attempt_history_scan_count=(
+                            input_obj.attempt_history_scan_count
+                        ),
+                        upgrade_attempt_manifest_fallback_used=(
+                            input_obj.attempt_manifest_fallback_used
+                        ),
+                    ),
+                    label=(
+                        "upgrade_attempt_current_authority"
+                        if current
+                        else "upgrade_attempt_current_authority_blocked"
+                    ),
+                ),
+            )
+
         if input_obj.kind == "third_party_overlap":
             return (
                 FunctionResult(
@@ -305,6 +427,51 @@ def _current_update_requires_native_completion(
     return InvariantResult.pass_()
 
 
+def _activation_excludes_manual_only_skill(
+    state: ConsumerState, trace: object
+) -> InvariantResult:
+    del trace
+    if not state.activation_inventory_validated:
+        return InvariantResult.pass_()
+    if state.activation_survivors_paused:
+        if state.active_scheduled_skills:
+            return InvariantResult.fail(
+                "failed operator activation left scheduled automations active"
+            )
+        return InvariantResult.pass_()
+    if (
+        set(state.active_scheduled_skills) != set(SCHEDULED_SKILL_IDS)
+        or set(state.manual_only_skills) != set(MANUAL_ONLY_SKILL_IDS)
+        or set(state.active_scheduled_skills).intersection(
+            state.manual_only_skills
+        )
+    ):
+        return InvariantResult.fail(
+            "operator activation did not preserve the exact four scheduled "
+            "plus one manual-only inventory"
+        )
+    return InvariantResult.pass_()
+
+
+def _attempt_currentness_has_no_history_or_manifest_fallback(
+    state: ConsumerState, trace: object
+) -> InvariantResult:
+    del trace
+    if state.upgrade_attempt_authority_status != "current":
+        return InvariantResult.pass_()
+    if (
+        not state.upgrade_attempt_manifest_binding_current
+        or
+        state.upgrade_attempt_history_scan_count != 0
+        or state.upgrade_attempt_manifest_fallback_used
+    ):
+        return InvariantResult.fail(
+            "upgrade-attempt currentness lacks the exact committed manifest binding, "
+            "scanned history, or used manifest fallback"
+        )
+    return InvariantResult.pass_()
+
+
 CONSUMER_INVARIANTS = (
     Invariant(
         "consumer_has_no_author_control",
@@ -325,6 +492,17 @@ CONSUMER_INVARIANTS = (
         "manual_update_closes_natively",
         "CURRENT requires explicit authorization, restoration, final health, and mark-current.",
         _current_update_requires_native_completion,
+    ),
+    Invariant(
+        "operator_activation_excludes_manual_only_skill",
+        "Operator activation binds four scheduled skills and keeps the update skill manual-only.",
+        _activation_excludes_manual_only_skill,
+    ),
+    Invariant(
+        "upgrade_attempt_currentness_is_pointer_only",
+        "Currentness reads one bounded HEAD/current binding, requires the committed "
+        "install state to bind its exact receipt, and uses no history scan or manifest fallback.",
+        _attempt_currentness_has_no_history_or_manifest_fallback,
     ),
 )
 
@@ -371,6 +549,36 @@ CONSUMER_INPUTS = (
         explicit_user_request=True,
         restoration_ok=False,
     ),
+    ConsumerInput(
+        "operator_activate",
+        maintained_skill_ids=AUTOMATION_TARGET_IDS,
+        scheduled_skill_ids=SCHEDULED_SKILL_IDS,
+        manual_only_skill_ids=MANUAL_ONLY_SKILL_IDS,
+    ),
+    ConsumerInput(
+        "operator_activate",
+        maintained_skill_ids=AUTOMATION_TARGET_IDS,
+        scheduled_skill_ids=AUTOMATION_TARGET_IDS,
+        manual_only_skill_ids=(),
+    ),
+    ConsumerInput(
+        "operator_activate",
+        maintained_skill_ids=AUTOMATION_TARGET_IDS,
+        scheduled_skill_ids=SCHEDULED_SKILL_IDS,
+        manual_only_skill_ids=MANUAL_ONLY_SKILL_IDS,
+        activation_checks_ok=False,
+        activation_transaction_completed=False,
+    ),
+    ConsumerInput("check_upgrade_attempt_current"),
+    ConsumerInput(
+        "check_upgrade_attempt_current",
+        attempt_history_scan_count=1,
+        attempt_manifest_fallback_used=True,
+    ),
+    ConsumerInput(
+        "check_upgrade_attempt_current",
+        attempt_manifest_binding_current=False,
+    ),
     ConsumerInput("third_party_overlap"),
 )
 
@@ -385,6 +593,8 @@ __all__ = [
     "AUTOMATION_TARGET_OBLIGATIONS",
     "AUTOMATION_TARGET_IDS",
     "AUTOMATION_CHECK_KINDS",
+    "SCHEDULED_SKILL_IDS",
+    "MANUAL_ONLY_SKILL_IDS",
     "UPDATE_SKILL_ID",
     "ConsumerInput",
     "ConsumerOutput",

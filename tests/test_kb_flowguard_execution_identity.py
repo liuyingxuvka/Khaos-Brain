@@ -103,6 +103,68 @@ def test_manual_update_failure_keeps_survivors_paused() -> None:
     assert state.update_survivors_paused
 
 
+def test_operator_activation_uses_four_scheduled_and_one_manual_only_skill() -> None:
+    label, state = _advance(
+        model.ConsumerState(),
+        model.ConsumerInput(
+            "operator_activate",
+            maintained_skill_ids=model.AUTOMATION_TARGET_IDS,
+            scheduled_skill_ids=model.SCHEDULED_SKILL_IDS,
+            manual_only_skill_ids=model.MANUAL_ONLY_SKILL_IDS,
+        ),
+    )
+    assert label == "scheduled_automations_activated_manual_update_unscheduled"
+    assert set(state.active_scheduled_skills) == set(model.SCHEDULED_SKILL_IDS)
+    assert state.manual_only_skills == ("khaos-brain-update",)
+    assert "khaos-brain-update" not in state.active_scheduled_skills
+
+
+def test_operator_activation_rejects_five_as_scheduled() -> None:
+    label, state = _advance(
+        model.ConsumerState(),
+        model.ConsumerInput(
+            "operator_activate",
+            maintained_skill_ids=model.AUTOMATION_TARGET_IDS,
+            scheduled_skill_ids=model.AUTOMATION_TARGET_IDS,
+            manual_only_skill_ids=(),
+        ),
+    )
+    assert label == "activation_inventory_blocked"
+    assert not state.activation_inventory_validated
+    assert state.active_scheduled_skills == ()
+
+
+def test_upgrade_attempt_currentness_has_no_history_or_manifest_fallback() -> None:
+    label, state = _advance(
+        model.ConsumerState(),
+        model.ConsumerInput("check_upgrade_attempt_current"),
+    )
+    assert label == "upgrade_attempt_current_authority"
+    assert state.upgrade_attempt_manifest_binding_current
+    assert state.upgrade_attempt_history_scan_count == 0
+    assert not state.upgrade_attempt_manifest_fallback_used
+
+    label, state = _advance(
+        model.ConsumerState(),
+        model.ConsumerInput(
+            "check_upgrade_attempt_current",
+            attempt_history_scan_count=1,
+            attempt_manifest_fallback_used=True,
+        ),
+    )
+    assert label == "upgrade_attempt_current_authority_blocked"
+
+    label, state = _advance(
+        model.ConsumerState(),
+        model.ConsumerInput(
+            "check_upgrade_attempt_current",
+            attempt_manifest_binding_current=False,
+        ),
+    )
+    assert label == "upgrade_attempt_current_authority_blocked"
+    assert not state.upgrade_attempt_manifest_binding_current
+
+
 def test_flowguard_consumer_independence_report_passes() -> None:
     report = checks.build_report()
     assert report["ok"], report

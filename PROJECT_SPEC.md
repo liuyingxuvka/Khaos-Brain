@@ -911,6 +911,15 @@ The preferred unit of memory capture is an **episode** or **task observation**:
 
 During normal work, the system should prefer recording structured observations first, rather than immediately committing a new durable card.
 
+That active-task postflight has one bounded primary path: write exactly one
+caller-identified observation durably, preserve a matching terminal receipt,
+and return. It does not synchronously replay the lifecycle ledger, create a
+candidate, publish a model, or rebuild an index. Sleep alone admits the episode
+and performs those later stages in its bounded batch. A retry with the same
+event id reuses a verified terminal receipt; an event without that receipt is
+reported as `timeout_unknown`, never inferred as success and never duplicated
+under a new id.
+
 An observation may include fields such as:
 
 - task or episode summary
@@ -1185,6 +1194,14 @@ router reference, author receipt, or cross-unit receipt dependency in a staged
 consumer tree. No compatibility, converter, renewal path, alias, or fallback
 runtime survives.
 
+Current-machine operator activation uses one exact inventory schema that names
+all five maintained Skills and partitions them into exactly four scheduled
+members plus the manual-only `khaos-brain-update`. The partition is disjoint and
+exhaustive. Activation, restoration, and live automation readback operate only
+on the four scheduled automation ids; the manual Skill remains installed with
+no automation binding. An old or ambiguous receipt is rejected rather than
+reinterpreted.
+
 Fresh installation and every supported upgrade provision only
 `kb-sleep-maintenance`, `kb-dream-pass`, `kb-organization-contribute`,
 `kb-organization-maintenance`, and `khaos-brain-update`, plus the surviving
@@ -1289,6 +1306,15 @@ assurance; it does not refresh or consult a SkillGuard router. If assurance or
 any later post-commit check fails, the previous successful manifest is
 preserved, the failed attempt remains explicitly retryable, and all four tasks
 remain or return to `PAUSED`.
+
+Attempt history is immutable evidence, not ordinary currentness authority. The
+sole current attempt authority is one bounded `HEAD.json` plus the one bounded
+current projection it names and hash-binds. Install, health, and activation
+checks read only those two files, publish a zero history-scan count and explicit
+byte budgets, and fail visibly when either file is missing, malformed,
+oversized, stale, or outside the attempt root. They never enumerate attempt
+directories, inspect event payloads, select a prior attempt, or fall back to the
+install manifest.
 
 The history migration lock must be interruption-safe too. A current holder
 publishes a versioned owner token, process id, and heartbeat. A live owner or a

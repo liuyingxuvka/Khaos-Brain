@@ -6,10 +6,15 @@ from pathlib import Path
 import tempfile
 from unittest.mock import patch
 
-from local_kb.install import REPO_AUTOMATION_SPECS
+from local_kb.automation_runtime import content_hash
+from local_kb.install import MAINTENANCE_SKILL_NAMES, REPO_AUTOMATION_SPECS
 from local_kb.operator_activation import (
+    MANUAL_ONLY_SKILL_IDS,
     REQUIRED_READINESS_CHECKS,
+    SCHEDULED_SKILL_IDS,
+    SKILL_INVENTORY_SCHEMA_VERSION,
     activate_all_for_current_machine,
+    installation_currentness_projection,
     validate_activation_readiness,
     validate_operator_activation_receipt,
 )
@@ -30,45 +35,34 @@ def _gate(repo_root: Path) -> dict:
     evidence = repo_root / ".local" / "assurance" / "validation-evidence" / "run" / "manifest.json"
     evidence.parent.mkdir(parents=True, exist_ok=True)
     evidence.write_text("{}\n", encoding="utf-8")
-    scheduled_refs = {}
-    for spec in REPO_AUTOMATION_SPECS:
-        skill_id = str(spec["skill_name"])
-        proof = (
-            repo_root
-            / ".local"
-            / "automation-runs"
-            / skill_id
-            / "test"
-            / "guarded-result.json"
-        )
-        proof.parent.mkdir(parents=True, exist_ok=True)
-        proof.write_text(
-            json.dumps(
-                {
-                    "ok": True,
-                    "skill_id": skill_id,
-                    "run_id": str(spec["id"]),
-                    "status": "completed",
-                }
-            ),
-            encoding="utf-8",
-        )
-        scheduled_refs[skill_id] = {
-            "path": str(proof),
-            "sha256": hashlib.sha256(proof.read_bytes()).hexdigest(),
-            "run_id": str(spec["id"]),
-            "status": "completed",
-        }
+    aggregate = repo_root / ".local" / "assurance" / "readiness.json"
+    aggregate.write_text("{}\n", encoding="utf-8")
     return {
         "ok": True,
         "issues": [],
         "binding": {
-            "aggregate_receipt_sha256": "A" * 64,
+            "aggregate_receipt_path": str(aggregate),
+            "aggregate_receipt_sha256": hashlib.sha256(
+                aggregate.read_bytes()
+            ).hexdigest(),
             "evidence_manifest_path": str(evidence),
             "evidence_manifest_sha256": hashlib.sha256(evidence.read_bytes()).hexdigest(),
             "source_digest": "source",
             "verifier_digest": "verifier",
-            "scheduled_production_refs": scheduled_refs,
+            "skill_inventory": {
+                "schema_version": SKILL_INVENTORY_SCHEMA_VERSION,
+                "maintained_skill_ids": sorted(MAINTENANCE_SKILL_NAMES),
+                "scheduled_skill_ids": sorted(SCHEDULED_SKILL_IDS),
+                "manual_only_skill_ids": sorted(MANUAL_ONLY_SKILL_IDS),
+            },
+            "maintained_skill_refs": {
+                skill_id: {
+                    "maintenance_unit_id": f"unit:{skill_id}",
+                    "consumer_projection_digest": f"digest:{skill_id}",
+                    "consumer_file_count": 1,
+                }
+                for skill_id in MAINTENANCE_SKILL_NAMES
+            },
         },
     }
 
@@ -90,41 +84,26 @@ def test_activation_gate_requires_exact_current_aggregate_and_four_scheduled_ter
         evidence.parent.mkdir(parents=True)
         evidence.write_text("{}\n", encoding="utf-8")
         skills = {}
-        for spec in REPO_AUTOMATION_SPECS:
-            skill_id = str(spec["skill_name"])
-            result_path = (
-                repo_root
-                / ".local"
-                / "automation-runs"
-                / skill_id
-                / "run"
-                / "guarded-result.json"
-            )
-            result_path.parent.mkdir(parents=True)
-            result_path.write_text(
-                json.dumps(
-                    {
-                        "ok": True,
-                        "skill_id": skill_id,
-                        "run_id": str(spec["id"]),
-                        "status": "completed",
-                    }
-                ),
-                encoding="utf-8",
-            )
+        for skill_id in MAINTENANCE_SKILL_NAMES:
             skills[skill_id] = {
-                "executed_supervision": {
+                "ok": True,
+                "skill_id": skill_id,
+                "maintenance_unit_id": f"unit:{skill_id}",
+                "consumer_projection": {
                     "ok": True,
-                    "scheduled_production": {
-                        "ok": True,
-                        "guarded_result_path": str(result_path),
-                    },
-                }
+                    "manifest_digest": f"digest:{skill_id}",
+                    "file_count": 1,
+                },
             }
         checks = {check_id: {"ok": True} for check_id in REQUIRED_READINESS_CHECKS}
-        checks["skillguard_source_install_parity"] = {
+        checks["author_contract_assurance"] = {
             "ok": True,
-            "json_payload": {"ok": True, "skills": skills},
+            "json_payload": {
+                "schema_version": "khaos-brain.skill-author-maintenance.v1",
+                "ok": True,
+                "source_only": True,
+                "skills": skills,
+            },
         }
         receipt = {
             "ok": True,
@@ -155,9 +134,15 @@ def test_activation_gate_requires_exact_current_aggregate_and_four_scheduled_ter
                 receipt_path,
             )
         assert result["ok"], result
-        assert set(result["binding"]["scheduled_production_refs"]) == {
-            str(spec["skill_name"]) for spec in REPO_AUTOMATION_SPECS
-        }
+        assert set(
+            result["binding"]["skill_inventory"]["maintained_skill_ids"]
+        ) == set(MAINTENANCE_SKILL_NAMES)
+        assert set(
+            result["binding"]["skill_inventory"]["scheduled_skill_ids"]
+        ) == {str(spec["skill_name"]) for spec in REPO_AUTOMATION_SPECS}
+        assert result["binding"]["skill_inventory"]["manual_only_skill_ids"] == [
+            "khaos-brain-update"
+        ]
 
 
 def test_current_machine_override_activates_all_and_writes_current_receipt() -> None:
@@ -208,6 +193,55 @@ def test_current_machine_override_activates_all_and_writes_current_receipt() -> 
             )
         assert repeated["ok"], repeated
         assert repeated["status"] == "current-machine-all-active-reused"
+
+
+def test_installation_identity_ignores_runtime_migration_diagnostics_only() -> None:
+    first = {
+        "ok": True,
+        "repo_root": "repo",
+        "manifest_repo_root": "repo",
+        "maintenance_skill_checks": [{"name": "kb-sleep-maintenance"}],
+        "automation_checks": [{"id": "kb-sleep", "issues": []}],
+        "issues": [],
+        "warnings": [],
+        "history_migration_required": True,
+        "history_migration_check": {
+            "ok": True,
+            "migration_id": "migration-current",
+            "maintenance_state": {"committed": True, "phase": "committed"},
+            "journal": {"status": "committed"},
+            "receipt": {
+                "status": "committed",
+                "receipt_hash": "migration-receipt",
+            },
+            "validation": {
+                "ok": True,
+                "runtime_diagnostic": "first-pass",
+            },
+        },
+        "upgrade_assurance_required": True,
+        "upgrade_assurance": {
+            "ok": True,
+            "evidence_run_id": "run-current",
+            "failed_checks": [],
+            "source_snapshot_after": {"digest": "source"},
+            "verifier_fingerprint": {"digest": "verifier"},
+        },
+    }
+    second = json.loads(json.dumps(first))
+    second["history_migration_check"]["validation"]["runtime_diagnostic"] = (
+        "second-pass"
+    )
+
+    first_projection = installation_currentness_projection(first)
+    second_projection = installation_currentness_projection(second)
+    assert first_projection == second_projection
+    assert content_hash(first_projection) == content_hash(second_projection)
+
+    second["history_migration_check"]["receipt"]["receipt_hash"] = "changed"
+    assert installation_currentness_projection(first) != (
+        installation_currentness_projection(second)
+    )
 
 
 def test_current_machine_override_blocks_without_current_readiness() -> None:
@@ -269,7 +303,41 @@ def test_current_machine_override_repauses_group_when_final_check_fails() -> Non
             assert 'status = "PAUSED"' in text
 
 
-def test_current_activation_receipt_rejects_changed_scheduled_proof() -> None:
+def test_current_machine_override_repauses_group_when_final_check_exhausts_memory() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        repo_root = root / "repo"
+        codex_home = root / ".codex"
+        repo_root.mkdir()
+        _write_paused_automations(codex_home)
+        with patch(
+            "local_kb.operator_activation.validate_activation_readiness",
+            return_value=_gate(repo_root),
+        ), patch(
+            "local_kb.operator_activation.build_installation_check",
+            side_effect=MemoryError("injected"),
+        ):
+            result = activate_all_for_current_machine(
+                repo_root,
+                codex_home,
+                repo_root / "readiness.json",
+            )
+
+        assert not result["ok"]
+        assert result["status"] == "install-check-exception-repaused"
+        assert result["error"] == "MemoryError:injected"
+        assert result["pause"]["ok"]
+        for spec in REPO_AUTOMATION_SPECS:
+            text = (
+                codex_home
+                / "automations"
+                / str(spec["id"])
+                / "automation.toml"
+            ).read_text(encoding="utf-8")
+            assert 'status = "PAUSED"' in text
+
+
+def test_current_activation_receipt_rejects_ambiguous_skill_inventory() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         repo_root = root / "repo"
@@ -292,15 +360,23 @@ def test_current_activation_receipt_rejects_changed_scheduled_proof() -> None:
         assert result["ok"], result
         receipt_path = Path(result["receipt_path"])
         receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-        proof_path = Path(
-            next(iter(receipt["readiness"]["scheduled_production_refs"].values()))[
-                "path"
-            ]
+        receipt["readiness"]["skill_inventory"]["scheduled_skill_ids"] = sorted(
+            MAINTENANCE_SKILL_NAMES
         )
-        proof_path.write_text("{}\n", encoding="utf-8")
+        receipt["readiness"]["skill_inventory"]["manual_only_skill_ids"] = []
+        unsigned = dict(receipt)
+        unsigned.pop("receipt_hash")
+        receipt["receipt_hash"] = content_hash(unsigned)
+        receipt_path.write_text(
+            json.dumps(receipt, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
         with patch(
             "local_kb.operator_activation.build_installation_check",
             return_value=final_check,
+        ), patch(
+            "local_kb.operator_activation.validate_activation_readiness",
+            return_value=_gate(repo_root),
         ):
             validation = validate_operator_activation_receipt(
                 repo_root,
@@ -309,6 +385,6 @@ def test_current_activation_receipt_rejects_changed_scheduled_proof() -> None:
             )
         assert not validation["ok"]
         assert any(
-            issue.startswith("operator-activation-scheduled-proof-stale:")
+            "activation-skill-inventory" in issue
             for issue in validation["issues"]
         )

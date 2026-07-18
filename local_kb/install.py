@@ -49,9 +49,16 @@ AUTOMATION_MODEL_POLICY = "strongest-available"
 AUTOMATION_REASONING_EFFORT_POLICY = "deepest"
 AUTOMATION_MODEL_ENV_VAR = "CODEX_KB_AUTOMATION_MODEL"
 AUTOMATION_REASONING_EFFORT_ENV_VAR = "CODEX_KB_AUTOMATION_REASONING_EFFORT"
-UPGRADE_ATTEMPT_SCHEMA = "khaos-brain.upgrade-attempt.v1"
-UPGRADE_ATTEMPT_PROJECTION_SCHEMA = "khaos-brain.upgrade-attempt-projection.v1"
+UPGRADE_ATTEMPT_SCHEMA = "khaos-brain.upgrade-attempt.v2"
+UPGRADE_ATTEMPT_EVENT_SCHEMA = "khaos-brain.upgrade-attempt-event.v2"
+UPGRADE_ATTEMPT_PROJECTION_SCHEMA = "khaos-brain.upgrade-attempt-projection.v2"
+UPGRADE_ATTEMPT_HEAD_SCHEMA = "khaos-brain.upgrade-attempt-head.v1"
+UPGRADE_ATTEMPT_AUTHORITY_SCHEMA = (
+    "khaos-brain.upgrade-attempt-current-authority.v1"
+)
 UPGRADE_ATTEMPT_ROOT = Path(".khaos-brain-install") / "attempts"
+UPGRADE_ATTEMPT_HEAD_MAX_BYTES = 32 * 1024
+UPGRADE_ATTEMPT_CURRENT_MAX_BYTES = 256 * 1024
 REASONING_EFFORT_ORDER = ("none", "minimal", "low", "medium", "high", "xhigh")
 AUTOMATION_DAILY_BYDAY = "SU,MO,TU,WE,TH,FR,SA"
 RETIRED_MAINTENANCE_SKILL_IDS = ("kb-architect-pass",)
@@ -959,18 +966,48 @@ def _upgrade_attempt_dir(codex_home: Path, attempt_id: str) -> Path:
     return codex_home / UPGRADE_ATTEMPT_ROOT / attempt_id
 
 
-def _load_upgrade_attempt(path: Path) -> dict[str, Any]:
+def _read_bounded_json(
+    path: Path,
+    *,
+    max_bytes: int,
+) -> tuple[dict[str, Any], bytes, str]:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
+        size = path.stat().st_size
+    except OSError:
+        return {}, b"", "missing"
+    if size <= 0:
+        return {}, b"", "empty"
+    if size > max_bytes:
+        return {}, b"", "oversized"
+    try:
+        with path.open("rb") as handle:
+            raw = handle.read(max_bytes + 1)
+        if len(raw) > max_bytes:
+            return {}, raw, "oversized"
+        payload = json.loads(raw.decode("utf-8"))
+    except OSError:
+        return {}, b"", "unreadable"
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return {}, raw if "raw" in locals() else b"", "malformed"
     if not isinstance(payload, dict):
+        return {}, raw, "not-object"
+    return payload, raw, ""
+
+
+def _load_upgrade_attempt(path: Path) -> dict[str, Any]:
+    payload, _raw, issue = _read_bounded_json(
+        path,
+        max_bytes=UPGRADE_ATTEMPT_CURRENT_MAX_BYTES,
+    )
+    if issue:
         return {}
     supplied_hash = str(payload.get("receipt_hash") or "")
     body = dict(payload)
     body.pop("receipt_hash", None)
     if (
         payload.get("schema_version") != UPGRADE_ATTEMPT_SCHEMA
+        or payload.get("projection_schema_version")
+        != UPGRADE_ATTEMPT_PROJECTION_SCHEMA
         or not supplied_hash
         or supplied_hash != _canonical_payload_hash(body)
     ):
@@ -1265,26 +1302,104 @@ def _upgrade_attempt_detail_projection(details: Mapping[str, Any]) -> dict[str, 
     return projected
 
 
-def latest_upgrade_attempt(codex_home: Path) -> dict[str, Any]:
+def current_upgrade_attempt_authority(codex_home: Path) -> dict[str, Any]:
+    """Read only the bounded current HEAD and its exact current projection."""
+
     root = codex_home / UPGRADE_ATTEMPT_ROOT
-    if not root.is_dir():
-        return {}
-    candidates: list[tuple[int, Path, dict[str, Any]]] = []
-    for current in root.glob("*/current.json"):
-        payload = _load_upgrade_attempt(current)
-        if payload:
-            candidates.append((int(payload.get("sequence") or 0), current, payload))
-    if not candidates:
-        return {}
-    _sequence, path, payload = max(
-        candidates,
-        key=lambda row: (
-            str(row[2].get("updated_at") or ""),
-            row[0],
-            row[1].as_posix(),
-        ),
+    head_path = root / "HEAD.json"
+    head, head_raw, head_issue = _read_bounded_json(
+        head_path,
+        max_bytes=UPGRADE_ATTEMPT_HEAD_MAX_BYTES,
     )
-    return {**payload, "current_path": str(path)}
+    issues: list[str] = []
+    if head_issue:
+        issues.append(f"upgrade-attempt-head-{head_issue}")
+    else:
+        supplied_hash = str(head.get("head_hash") or "")
+        body = dict(head)
+        body.pop("head_hash", None)
+        if (
+            head.get("schema_version") != UPGRADE_ATTEMPT_HEAD_SCHEMA
+            or not supplied_hash
+            or supplied_hash != _canonical_payload_hash(body)
+        ):
+            issues.append("upgrade-attempt-head-invalid")
+
+    current_path: Path | None = None
+    current: dict[str, Any] = {}
+    current_raw = b""
+    if not issues:
+        ref = head.get("current_ref")
+        relative = str(ref.get("relative_path") or "") if isinstance(ref, Mapping) else ""
+        if not relative:
+            issues.append("upgrade-attempt-current-ref-missing")
+        else:
+            candidate = (root / Path(relative)).resolve()
+            try:
+                candidate.relative_to(root.resolve())
+            except ValueError:
+                issues.append("upgrade-attempt-current-ref-escapes-root")
+            else:
+                current_path = candidate
+                payload, current_raw, current_issue = _read_bounded_json(
+                    candidate,
+                    max_bytes=UPGRADE_ATTEMPT_CURRENT_MAX_BYTES,
+                )
+                if current_issue:
+                    issues.append(f"upgrade-attempt-current-{current_issue}")
+                else:
+                    current = payload
+                    supplied_hash = str(current.get("receipt_hash") or "")
+                    body = dict(current)
+                    body.pop("receipt_hash", None)
+                    if (
+                        current.get("schema_version") != UPGRADE_ATTEMPT_SCHEMA
+                        or current.get("projection_schema_version")
+                        != UPGRADE_ATTEMPT_PROJECTION_SCHEMA
+                        or not supplied_hash
+                        or supplied_hash != _canonical_payload_hash(body)
+                        or hashlib.sha256(current_raw).hexdigest().upper()
+                        != str(ref.get("sha256") or "")
+                        or supplied_hash
+                        != str(head.get("current_receipt_hash") or "")
+                        or current.get("attempt_id") != head.get("attempt_id")
+                        or int(current.get("sequence") or 0)
+                        != int(head.get("sequence") or 0)
+                    ):
+                        issues.append("upgrade-attempt-current-binding-invalid")
+
+    attempt = (
+        {**current, "current_path": str(current_path)}
+        if not issues and current_path is not None
+        else {}
+    )
+    return {
+        "schema_version": UPGRADE_ATTEMPT_AUTHORITY_SCHEMA,
+        "ok": not issues,
+        "status": "current" if not issues else "blocked",
+        "issues": issues,
+        "head_path": str(head_path),
+        "current_path": str(current_path or ""),
+        "attempt": attempt,
+        "read_budget": {
+            "head_max_bytes": UPGRADE_ATTEMPT_HEAD_MAX_BYTES,
+            "current_max_bytes": UPGRADE_ATTEMPT_CURRENT_MAX_BYTES,
+            "observed_head_bytes": len(head_raw),
+            "observed_current_bytes": len(current_raw),
+            "history_files_scanned": 0,
+        },
+    }
+
+
+def latest_upgrade_attempt(codex_home: Path) -> dict[str, Any]:
+    """Return the sole current attempt; history is never searched."""
+
+    authority = current_upgrade_attempt_authority(codex_home)
+    return (
+        dict(authority.get("attempt") or {})
+        if authority.get("ok") is True
+        else {}
+    )
 
 
 def _record_upgrade_attempt(
@@ -1303,7 +1418,7 @@ def _record_upgrade_attempt(
     sequence = int(previous.get("sequence") or 0) + 1
     now = utc_now_iso()
     event_body = {
-        "schema_version": "khaos-brain.upgrade-attempt-event.v1",
+        "schema_version": UPGRADE_ATTEMPT_EVENT_SCHEMA,
         "attempt_id": attempt_id,
         "sequence": sequence,
         "phase": phase,
@@ -1363,29 +1478,29 @@ def _record_upgrade_attempt(
         current_path,
         json.dumps(current, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
     )
-    return {**current, "current_path": str(current_path)}
-
-
-def compact_upgrade_attempt_projection(
-    codex_home: Path,
-    attempt_id: str,
-) -> dict[str, Any]:
-    """Replace one oversized current pointer with a bounded event-backed projection."""
-
-    current_path = _upgrade_attempt_dir(codex_home, attempt_id) / "current.json"
-    current = _load_upgrade_attempt(current_path)
-    if not current:
-        raise RuntimeError(f"current upgrade attempt is missing or invalid: {attempt_id}")
-    return _record_upgrade_attempt(
-        codex_home,
-        attempt_id,
-        phase=str(current.get("phase") or ""),
-        status=str(current.get("status") or ""),
-        details={
-            "projection_compacted": True,
-            "projection_source_sequence": int(current.get("sequence") or 0),
+    current_raw = current_path.read_bytes()
+    head_body = {
+        "schema_version": UPGRADE_ATTEMPT_HEAD_SCHEMA,
+        "attempt_id": attempt_id,
+        "sequence": sequence,
+        "updated_at": now,
+        "current_receipt_hash": current["receipt_hash"],
+        "current_ref": {
+            "relative_path": current_path.relative_to(
+                codex_home / UPGRADE_ATTEMPT_ROOT
+            ).as_posix(),
+            "sha256": hashlib.sha256(current_raw).hexdigest().upper(),
         },
+    }
+    head = {
+        **head_body,
+        "head_hash": _canonical_payload_hash(head_body),
+    }
+    _write_text_atomic(
+        codex_home / UPGRADE_ATTEMPT_ROOT / "HEAD.json",
+        json.dumps(head, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
     )
+    return {**current, "current_path": str(current_path)}
 
 
 def _start_upgrade_attempt(
@@ -3106,14 +3221,12 @@ def build_installation_check(
         if isinstance(manifest.get("upgrade_attempt"), Mapping)
         else {}
     )
-    latest_attempt = latest_upgrade_attempt(home)
-    active_upgrade_attempt = dict(manifest_attempt)
-    if latest_attempt and (
-        not active_upgrade_attempt
-        or str(latest_attempt.get("updated_at") or "")
-        >= str(active_upgrade_attempt.get("updated_at") or "")
-    ):
-        active_upgrade_attempt = latest_attempt
+    upgrade_attempt_authority = current_upgrade_attempt_authority(home)
+    active_upgrade_attempt = (
+        dict(upgrade_attempt_authority.get("attempt") or {})
+        if upgrade_attempt_authority.get("ok") is True
+        else {}
+    )
     manifest_root_raw = str(manifest.get("repo_root", "") or "").strip()
     env_value = os.environ.get(KB_ROOT_ENV_VAR, "").strip()
     managed_automations = manifest.get("automations", [])
@@ -3123,6 +3236,32 @@ def build_installation_check(
 
     issues: list[str] = []
     warnings: list[str] = []
+    attempt_authority_required = bool(manifest_attempt) or Path(
+        str(upgrade_attempt_authority.get("head_path") or "")
+    ).is_file()
+    if attempt_authority_required and upgrade_attempt_authority.get("ok") is not True:
+        issues.append(
+            "Upgrade-attempt current authority is not usable: "
+            + ", ".join(
+                str(item)
+                for item in upgrade_attempt_authority.get("issues", [])
+            )
+        )
+    if (
+        manifest_override is None
+        and manifest_attempt
+        and active_upgrade_attempt
+        and (
+            str(manifest_attempt.get("attempt_id") or "")
+            != str(active_upgrade_attempt.get("attempt_id") or "")
+            or str(manifest_attempt.get("receipt_hash") or "")
+            != str(active_upgrade_attempt.get("receipt_hash") or "")
+        )
+        and active_upgrade_attempt.get("status") != "failed"
+    ):
+        issues.append(
+            "Committed install state does not bind the sole current upgrade-attempt authority."
+        )
     if (
         manifest_override is None
         and active_upgrade_attempt.get("status") == "failed"
@@ -4136,6 +4275,7 @@ def build_installation_check(
         "current_update_state": current_update_state,
         "upgrade_assurance_required": upgrade_assurance_required,
         "upgrade_assurance": upgrade_assurance,
+        "upgrade_attempt_authority": upgrade_attempt_authority,
         "upgrade_attempt": active_upgrade_attempt,
         "install_transaction": install_transaction,
         "retired_paths": [str(path) for path in retired_paths],

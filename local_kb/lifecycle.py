@@ -263,7 +263,7 @@ def _lifecycle_lock(
     timeout_seconds: float = LIFECYCLE_WRITER_LOCK_TIMEOUT_SECONDS,
     orphan_grace_seconds: float = LIFECYCLE_WRITER_LOCK_ORPHAN_GRACE_SECONDS,
     release_timeout_seconds: float = LIFECYCLE_WRITER_LOCK_RELEASE_TIMEOUT_SECONDS,
-) -> Iterator[None]:
+) -> Iterator[dict[str, Any]]:
     lock_dir = lifecycle_root(repo_root) / ".writer.lock"
     lock_dir.parent.mkdir(parents=True, exist_ok=True)
     lock_key = (str(lock_dir.resolve()), os.getpid(), threading.get_ident())
@@ -272,8 +272,9 @@ def _lifecycle_lock(
         if current_depth:
             _LIFECYCLE_LOCK_DEPTHS[lock_key] = current_depth + 1
     if current_depth:
+        current_owner = _read_lifecycle_lock_owner(lock_dir)
         try:
-            yield
+            yield dict(current_owner)
         finally:
             with _LIFECYCLE_LOCK_STATE_GUARD:
                 next_depth = _LIFECYCLE_LOCK_DEPTHS.get(lock_key, 1) - 1
@@ -331,7 +332,7 @@ def _lifecycle_lock(
         _LIFECYCLE_LOCK_DEPTHS[lock_key] = 1
     body_error: BaseException | None = None
     try:
-        yield
+        yield dict(owner)
     except BaseException as exc:
         body_error = exc
         raise
@@ -353,10 +354,9 @@ def _lifecycle_lock(
             )
 
 
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+def _iter_jsonl(path: Path) -> Iterator[dict[str, Any]]:
     if not path.exists():
-        return []
-    rows: list[dict[str, Any]] = []
+        return
     with path.open("r", encoding="utf-8") as handle:
         for line_number, raw_line in enumerate(handle, start=1):
             line = raw_line.strip()
@@ -368,8 +368,11 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
                 raise ValueError(f"Malformed JSONL at {path}:{line_number}: {exc}") from exc
             if not isinstance(payload, dict):
                 raise ValueError(f"Expected object at {path}:{line_number}")
-            rows.append(payload)
-    return rows
+            yield payload
+
+
+def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    return list(_iter_jsonl(path))
 
 
 def _empty_replay() -> dict[str, Any]:
@@ -386,17 +389,23 @@ def _empty_replay() -> dict[str, Any]:
 
 
 def replay_lifecycle(repo_root: Path) -> dict[str, Any]:
-    events = _read_jsonl(lifecycle_events_path(repo_root))
-    if not events:
-        return _empty_replay()
     observations: dict[str, dict[str, Any]] = {}
     entries: dict[str, dict[str, Any]] = {}
     idempotency_keys: list[str] = []
     seen_idempotency_keys: set[str] = set()
     issues: list[str] = []
     expected_sequence = 1
-    for event in events:
+    event_count = 0
+    last_sequence = 0
+    event_hasher = hashlib.sha256()
+    event_hasher.update(b"[")
+    for event in _iter_jsonl(lifecycle_events_path(repo_root)):
+        if event_count:
+            event_hasher.update(b",")
+        event_hasher.update(_canonical_json(event).encode("utf-8"))
+        event_count += 1
         sequence = int(event.get("sequence") or 0)
+        last_sequence = sequence or event_count
         if sequence != expected_sequence:
             issues.append(f"sequence {sequence} found where {expected_sequence} was expected")
             expected_sequence = max(expected_sequence, sequence)
@@ -464,11 +473,14 @@ def replay_lifecycle(repo_root: Path) -> dict[str, Any]:
                 "updated_at": str(event.get("created_at") or ""),
                 "latest_event_id": event.get("lifecycle_event_id", ""),
             }
+    event_hasher.update(b"]")
+    if not event_count:
+        return _empty_replay()
     return {
         "schema_version": LIFECYCLE_SCHEMA_VERSION,
-        "event_count": len(events),
-        "event_digest": content_fingerprint(events),
-        "last_sequence": int(events[-1].get("sequence") or len(events)),
+        "event_count": event_count,
+        "event_digest": event_hasher.hexdigest(),
+        "last_sequence": last_sequence,
         "observations": observations,
         "entries": entries,
         "idempotency_keys": idempotency_keys,

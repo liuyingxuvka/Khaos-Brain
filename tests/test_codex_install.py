@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 import json
 import os
@@ -7,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -18,12 +20,15 @@ from local_kb.install import (
     REPO_AUTOMATION_SPECS,
     RETIRED_AUTOMATION_IDS,
     RETIRED_MAINTENANCE_SKILL_IDS,
+    UPGRADE_ATTEMPT_CURRENT_MAX_BYTES,
+    UPGRADE_ATTEMPT_HEAD_SCHEMA,
     automation_rrule_for_spec,
     build_installation_check,
-    compact_upgrade_attempt_projection,
+    current_upgrade_attempt_authority,
     global_agents_path,
     install_codex_integration,
     latest_upgrade_attempt,
+    _canonical_payload_hash,
     _record_upgrade_attempt,
     _automation_spec_payload,
     _freeze_flowguard_validation_toolchain,
@@ -134,7 +139,7 @@ class CodexInstallTests(unittest.TestCase):
             self.assertLess(current_path.stat().st_size, 100_000)
             self.assertEqual(
                 first["projection_schema_version"],
-                "khaos-brain.upgrade-attempt-projection.v1",
+                "khaos-brain.upgrade-attempt-projection.v2",
             )
             self.assertNotIn("journal", first["history_migration"])
             self.assertEqual(first["upgrade_assurance"]["check_count"], 1)
@@ -148,16 +153,113 @@ class CodexInstallTests(unittest.TestCase):
                 / first["checkpoint_refs"][0]["relative_path"]
             )
             self.assertGreater(event_path.stat().st_size, 6_000_000)
+            head_path = (
+                codex_home / ".khaos-brain-install" / "attempts" / "HEAD.json"
+            )
+            self.assertTrue(head_path.is_file())
+            self.assertLess(head_path.stat().st_size, 32_000)
+            old_attempt = (
+                codex_home
+                / ".khaos-brain-install"
+                / "attempts"
+                / "unreferenced-old-attempt"
+            )
+            old_attempt.mkdir(parents=True)
+            (old_attempt / "current.json").write_bytes(b"X" * 8_000_000)
 
-            compacted = compact_upgrade_attempt_projection(codex_home, attempt_id)
-            self.assertTrue(compacted["projection_compacted"])
-            self.assertEqual(compacted["projection_source_sequence"], 1)
-            self.assertEqual(compacted["status"], "in_progress")
-            self.assertEqual(compacted["phase"], "aggregate_assurance_passed")
-            self.assertEqual(len(compacted["checkpoint_refs"]), 2)
+            started = time.perf_counter()
+            authority = current_upgrade_attempt_authority(codex_home)
+            elapsed = time.perf_counter() - started
+            self.assertTrue(authority["ok"], authority)
+            self.assertLess(elapsed, 1.0)
+            self.assertEqual(
+                authority["read_budget"]["history_files_scanned"],
+                0,
+            )
+            self.assertLess(
+                authority["read_budget"]["observed_current_bytes"],
+                authority["read_budget"]["current_max_bytes"],
+            )
             self.assertEqual(
                 latest_upgrade_attempt(codex_home)["receipt_hash"],
-                compacted["receipt_hash"],
+                first["receipt_hash"],
+            )
+
+    def test_upgrade_attempt_currentness_fails_fast_without_head(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            old_attempt = (
+                codex_home
+                / ".khaos-brain-install"
+                / "attempts"
+                / "old-only"
+            )
+            old_attempt.mkdir(parents=True)
+            (old_attempt / "current.json").write_bytes(b"X" * 8_000_000)
+
+            started = time.perf_counter()
+            authority = current_upgrade_attempt_authority(codex_home)
+            elapsed = time.perf_counter() - started
+
+            self.assertFalse(authority["ok"])
+            self.assertIn("upgrade-attempt-head-missing", authority["issues"])
+            self.assertEqual(authority["read_budget"]["history_files_scanned"], 0)
+            self.assertEqual(authority["read_budget"]["observed_current_bytes"], 0)
+            self.assertLess(elapsed, 1.0)
+            self.assertEqual(latest_upgrade_attempt(codex_home), {})
+
+    def test_upgrade_attempt_currentness_reads_at_most_one_bounded_projection(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            attempt_root = (
+                codex_home / ".khaos-brain-install" / "attempts"
+            )
+            current_path = attempt_root / "oversized-current" / "current.json"
+            current_path.parent.mkdir(parents=True)
+            current_path.write_bytes(
+                b"X" * (UPGRADE_ATTEMPT_CURRENT_MAX_BYTES + 10_000)
+            )
+            current_raw_hash = hashlib.sha256(
+                current_path.read_bytes()
+            ).hexdigest().upper()
+            head_body = {
+                "schema_version": UPGRADE_ATTEMPT_HEAD_SCHEMA,
+                "attempt_id": "oversized-current",
+                "sequence": 1,
+                "updated_at": "2026-07-18T00:00:00+00:00",
+                "current_receipt_hash": "A" * 64,
+                "current_ref": {
+                    "relative_path": (
+                        "oversized-current/current.json"
+                    ),
+                    "sha256": current_raw_hash,
+                },
+            }
+            head = {
+                **head_body,
+                "head_hash": _canonical_payload_hash(head_body),
+            }
+            (attempt_root / "HEAD.json").write_text(
+                json.dumps(head, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            authority = current_upgrade_attempt_authority(codex_home)
+
+            self.assertFalse(authority["ok"])
+            self.assertIn(
+                "upgrade-attempt-current-oversized",
+                authority["issues"],
+            )
+            self.assertEqual(
+                authority["read_budget"]["history_files_scanned"],
+                0,
+            )
+            self.assertLessEqual(
+                authority["read_budget"]["observed_current_bytes"],
+                UPGRADE_ATTEMPT_CURRENT_MAX_BYTES + 1,
             )
 
     def test_update_state_rollback_restores_exact_bytes_or_prior_absence(self) -> None:
@@ -240,6 +342,16 @@ class CodexInstallTests(unittest.TestCase):
             self.assertEqual(_automation_status(dream), "PAUSED")
             self.assertFalse(architect.parent.exists())
             self.assertEqual(payload["upgrade_attempt"]["status"], "completed")
+            persisted = load_install_state(codex_home)
+            current_attempt = latest_upgrade_attempt(codex_home)
+            self.assertEqual(
+                persisted["upgrade_attempt"]["attempt_id"],
+                current_attempt["attempt_id"],
+            )
+            self.assertEqual(
+                persisted["upgrade_attempt"]["receipt_hash"],
+                current_attempt["receipt_hash"],
+            )
             phases = [
                 row["phase"]
                 for row in payload["upgrade_attempt"]["checkpoint_refs"]

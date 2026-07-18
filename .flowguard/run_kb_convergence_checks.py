@@ -171,6 +171,93 @@ def _scenarios() -> tuple[Scenario, ...]:
             ),
         ),
         Scenario(
+            "operator_activation_separates_scheduled_and_manual_skills",
+            "The complete five-skill inventory activates only the four scheduled members.",
+            model.ConsumerState(),
+            (
+                model.ConsumerInput(
+                    "operator_activate",
+                    maintained_skill_ids=model.AUTOMATION_TARGET_IDS,
+                    scheduled_skill_ids=model.SCHEDULED_SKILL_IDS,
+                    manual_only_skill_ids=model.MANUAL_ONLY_SKILL_IDS,
+                ),
+            ),
+            ScenarioExpectation(
+                required_trace_labels=(
+                    "scheduled_automations_activated_manual_update_unscheduled",
+                )
+            ),
+        ),
+        Scenario(
+            "ambiguous_activation_inventory_is_blocked",
+            "Treating all five maintained skills as scheduled is rejected.",
+            model.ConsumerState(),
+            (
+                model.ConsumerInput(
+                    "operator_activate",
+                    maintained_skill_ids=model.AUTOMATION_TARGET_IDS,
+                    scheduled_skill_ids=model.AUTOMATION_TARGET_IDS,
+                    manual_only_skill_ids=(),
+                ),
+            ),
+            ScenarioExpectation(
+                required_trace_labels=("activation_inventory_blocked",),
+                forbidden_trace_labels=(
+                    "scheduled_automations_activated_manual_update_unscheduled",
+                ),
+            ),
+        ),
+        Scenario(
+            "operator_activation_exception_repauses_every_survivor",
+            "A failed activation check cannot leave an unreceipted ACTIVE automation.",
+            model.ConsumerState(),
+            (
+                model.ConsumerInput(
+                    "operator_activate",
+                    maintained_skill_ids=model.AUTOMATION_TARGET_IDS,
+                    scheduled_skill_ids=model.SCHEDULED_SKILL_IDS,
+                    manual_only_skill_ids=model.MANUAL_ONLY_SKILL_IDS,
+                    activation_checks_ok=False,
+                    activation_transaction_completed=False,
+                ),
+            ),
+            ScenarioExpectation(
+                required_trace_labels=(
+                    "activation_failed_survivors_paused",
+                ),
+                forbidden_trace_labels=(
+                    "scheduled_automations_activated_manual_update_unscheduled",
+                ),
+            ),
+        ),
+        Scenario(
+            "upgrade_attempt_currentness_is_pointer_only",
+            "Currentness accepts one bounded HEAD/current authority without history scanning.",
+            model.ConsumerState(),
+            (model.ConsumerInput("check_upgrade_attempt_current"),),
+            ScenarioExpectation(
+                required_trace_labels=("upgrade_attempt_current_authority",)
+            ),
+        ),
+        Scenario(
+            "upgrade_attempt_history_fallback_is_blocked",
+            "Attempt-history scanning and manifest fallback cannot satisfy currentness.",
+            model.ConsumerState(),
+            (
+                model.ConsumerInput(
+                    "check_upgrade_attempt_current",
+                    attempt_history_scan_count=1,
+                    attempt_manifest_fallback_used=True,
+                ),
+            ),
+            ScenarioExpectation(
+                required_trace_labels=(
+                    "upgrade_attempt_current_authority_blocked",
+                ),
+                forbidden_trace_labels=("upgrade_attempt_current_authority",),
+            ),
+        ),
+        Scenario(
             "third_party_overlap_is_outside_guarantee",
             "Unknown third-party overlap does not create cross-skill proof sharing.",
             model.ConsumerState(),
@@ -191,12 +278,16 @@ def _model_report() -> dict[str, Any]:
             "partial native receipt accepted",
             "manual update marks CURRENT before restoration",
             "cross-skill evidence reuse",
+            "manual-only update skill treated as a scheduled automation",
+            "upgrade currentness scans attempt history or falls back to manifest state",
         ),
         protected_error_classes=(
             "consumer_author_control_leak",
             "shallow_native_completion",
             "premature_update_current",
             "shared_test_evidence",
+            "ambiguous_activation_inventory",
+            "unbounded_attempt_currentness",
         ),
         protected_harms=(
             "ordinary projects gain hidden maintenance control",
@@ -207,11 +298,15 @@ def _model_report() -> dict[str, Any]:
             "consumer projection activation",
             "native terminal completion",
             "manual update restoration and CURRENT",
+            "four-automation activation from a five-skill classified inventory",
+            "bounded HEAD-to-current attempt lookup",
         ),
         completion_evidence=(
             "clean consumer projection",
             "exact target obligation inventory",
             "current target-native receipt",
+            "exact scheduled/manual-only skill inventory",
+            "bounded hash-bound current attempt authority",
         ),
         hard_invariants=tuple(item.name for item in model.CONSUMER_INVARIANTS),
         known_bad_cases=(
@@ -222,6 +317,8 @@ def _model_report() -> dict[str, Any]:
             "consumer projection containing author-control files",
             "partial or stale native receipt",
             "manual update restoration failure",
+            "five maintained skills incorrectly treated as five scheduled tasks",
+            "missing current pointer with a readable historical attempt",
         ),
         blindspots=(
             "third-party skills on other machines are outside the guarantee",
@@ -243,6 +340,10 @@ def _model_report() -> dict[str, Any]:
             "native_completion_blocked",
             "manual_update_current_and_restored",
             "manual_update_failed_survivors_paused",
+            "scheduled_automations_activated_manual_update_unscheduled",
+            "activation_inventory_blocked",
+            "upgrade_attempt_current_authority",
+            "upgrade_attempt_current_authority_blocked",
         ),
         risk_profile=RiskProfile(
             modeled_boundary=(
@@ -421,7 +522,9 @@ def build_report() -> dict[str, Any]:
         "claim_boundary": (
             "Executable FlowGuard evidence for clean consumer distribution, "
             "target-native completion, independent test ownership, and direct "
-            "manual-update closure. It does not guarantee third-party skill compatibility."
+            "manual-update closure, exact scheduled/manual-only activation inventory, "
+            "and bounded pointer-only upgrade currentness. It does not guarantee "
+            "third-party skill compatibility."
         ),
     }
     return report

@@ -44,3 +44,42 @@
   maintenance validation.
 - [x] 5.5 Commit only the intended repository changes, preserve unrelated
   worktree changes, and perform the predictive-KB postflight.
+
+## 6. Repair current-machine activation and bounded attempt currentness
+
+- [x] 6.1 Replace the ambiguous maintained/scheduled skill comparison with one
+  current inventory schema for five maintained skills, four scheduled members,
+  and one manual-only update member.
+- [x] 6.2 Replace upgrade-attempt directory enumeration with one bounded,
+  hash-bound HEAD-to-current authority and remove manifest/history fallback.
+- [x] 6.3 Extend the existing convergence FlowGuard owner, field inventory,
+  focused tests, and documentation for both repaired boundaries.
+- [x] 6.4 Remove the three empty superseded OpenSpec change shells and require
+  strict validation over the remaining real changes.
+
+## 7. Repair postflight terminality on a large lifecycle ledger
+
+- [x] 7.1 Remove synchronous lifecycle admission from active-task feedback and
+  preserve Sleep as the sole normal-runtime admission/model/index owner.
+- [x] 7.2 Add caller-stable event identity, durable unique history append,
+  terminal success/failure/timeout-unknown inspection, runtime-authority
+  unchanged evidence, lock-release evidence, and a measured terminal budget.
+- [x] 7.3 Add focused persistence, uniqueness, interruption, no-replay,
+  current-authority/index-consistency, lock-release, and write-after-retrieval
+  tests plus a FlowGuard model-miss artifact.
+- [x] 7.4 Settle current residual observation/candidate debt, rebuild the sole
+  current LogicGuard authority and active index, and prove one controlled
+  preflight → postflight → Sleep → retrieval closure before installation retry.
+
+## 8. Close independent install currentness and activate the machine
+
+- [x] 8.1 Bind the final upgrade-attempt `attempt_id` and `receipt_hash` into
+  the committed lightweight install state and add observed plus same-class
+  FlowGuard/field-lifecycle/test evidence.
+- [x] 8.2 Rerun the one foreground installer and independent installation
+  check, then run the current aggregate readiness owner.
+- [x] 8.3 Activate and read back exactly the four scheduled automations while
+  leaving `khaos-brain-update` manual-only and retired tasks absent.
+- [x] 8.4 Stream lifecycle replay with exact digest parity and make every
+  post-activation exception transactionally restore all four automations to
+  `PAUSED` before rebuilding the current activation receipt.

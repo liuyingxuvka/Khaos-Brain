@@ -94,6 +94,28 @@ The migration SHALL settle historical observations and entries through bounded a
 - **WHEN** an upgrade resumes after some lifecycle events and candidate files were already committed by an older per-item implementation
 - **THEN** the batch settlement MUST reuse their idempotency keys and stable candidate identities, MUST append only missing events, and MUST converge to the same terminal state without deleting or duplicating the partial work
 
+### Requirement: Active-task postflight has one bounded history-intake path
+An active-task postflight SHALL durably append exactly one caller-identified
+observation and SHALL emit one matching terminal receipt without synchronously
+admitting the observation, replaying lifecycle history, creating a candidate,
+publishing LogicGuard authority, or rebuilding the active index. Sleep SHALL be
+the sole normal-runtime owner of those later stages. The terminal receipt SHALL
+bind the event fingerprint, uniqueness result, lifecycle/current-authority/index
+identities before and after the append, writer-lock release, measured duration,
+and terminal budget.
+
+#### Scenario: Postflight records an observation on a large KB
+- **WHEN** the lifecycle ledger is large but an active task records one new observation
+- **THEN** the command MUST complete through the bounded history-intake path without reading or replaying that lifecycle ledger, MUST leave lifecycle/current-authority/index identities unchanged, and MUST return terminal `success` only after the history event and matching receipt are durable
+
+#### Scenario: Postflight is retried with the same event id
+- **WHEN** a caller repeats a postflight request with the same event id and identical event fingerprint after terminal success
+- **THEN** the system MUST reuse the existing success receipt, MUST keep exactly one history event, and MUST NOT admit, create, publish, or index anything synchronously
+
+#### Scenario: A process stopped after the event append but before terminal receipt
+- **WHEN** inspection finds exactly one matching history event but no valid matching terminal receipt
+- **THEN** the result MUST be `timeout_unknown`, MUST NOT be inferred as success or failure, and a retry MUST NOT append a duplicate event; the current Sleep or versioned upgrade owner SHALL settle the episode through the sole current lifecycle path
+
 ### Requirement: Integrity-preserving cold archive
 The migration SHALL move retention-required but non-active evidence into an immutable, content-addressed cold archive with a manifest that preserves original paths, hashes, provenance, timestamps, disposition links, and restore instructions. Cold history, including retired-lane evidence, MUST remain auditable and restorable but MUST NOT participate in active retrieval, Sleep watermarks, Dream opportunity selection, candidate aging, or upgrade readiness except through explicit archive inspection.
 

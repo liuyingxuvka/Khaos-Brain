@@ -382,7 +382,7 @@
         "classification_rule_ids": [
           "skillguard.content_role_classifier.current:runtime_source"
         ],
-        "component_hash": "sha256:568fbe1f41a0c2a85615b92bc4acd3cde165cea4382fae000720af6e16a89614",
+        "component_hash": "sha256:563ca8f144a2f8364c3d402a31ceb3d283f885f1f04e522df048f4d629de0cff",
         "component_id": "component:runtime_source:55aaa5572316f643",
         "consumer_ids": [
           "projection:kb-organization-contribute:target-runtime-sources"
@@ -437,7 +437,7 @@
       "owner_cycles": [],
       "unmapped_paths": []
     },
-    "impact_graph_hash": "sha256:3f0d66bd7056841a859298422ec373d60db0685b16d755b208239ed5eab67552",
+    "impact_graph_hash": "sha256:d5bebe46d514e86c819e9621b3444ffba92f3a4fe3908b8bb48de50afc5d9c16",
     "inventory": [
       {
         "classification_rule_id": "skillguard.content_role_classifier.current:contract_schema",
@@ -483,7 +483,7 @@
       },
       {
         "classification_rule_id": "skillguard.content_role_classifier.current:runtime_source",
-        "content_hash": "sha256:1f38b26a839e0928a6ca38a20038227840006f839cdd236d591ae7b06c224151",
+        "content_hash": "sha256:68215f42c087c19477525287f9aa83cc819ce40feb71d07bfd2bd7fd936df017",
         "install_disposition": "source_only",
         "path": "local_kb/install.py",
         "role": "runtime_source"
@@ -594,7 +594,7 @@
         "role": "test_dev"
       }
     ],
-    "inventory_hash": "sha256:9d967b51cc45bd1c0e042959b70bd825c27535ef0005b83e74960273c6fa9c1f",
+    "inventory_hash": "sha256:3b3d6dd96effa59b3e10ddcdc13c51431fe3f93cc28536ce2402d62c147fe9d0",
     "member_root_path": ".agents/skills/kb-organization-contribute",
     "owner_receipt_root_ref": {
       "path_token": "owner_evidence_root",
@@ -739,7 +739,7 @@
       },
       {
         "consumer_id": "projection:kb-organization-contribute:target-runtime-sources",
-        "consumer_projection_hash": "sha256:f3cff992bd91e350e8d4a99f06f46dd8f1efc7dd39f40a5c703d7bca5d14c251",
+        "consumer_projection_hash": "sha256:639763fd335ee402dc530ee5be5dd1024e4931229d5e2a1faaa0ef7456ae3f7f",
         "impact_plan_schema_version": "skillguard.content_impact_plan.current",
         "impact_policy_id": "skillguard.content_impact_policy.current",
         "input_component_ids": [
@@ -747,7 +747,7 @@
           "component:runtime_source:55aaa5572316f643",
           "component:runtime_source:8eaabf96e832e663"
         ],
-        "input_projection_hash": "sha256:b4ac435d57353668dcbfd410e6988d9a839dc31e399387619984bc940f90b3c9",
+        "input_projection_hash": "sha256:792e439ea458c4c0a020d2867c92c9633b54553aad57aae7316510817036dc90",
         "kind": "target_runtime_source",
         "projection_declaration_hash": "sha256:3e43d371dc1d1c1436bad7d9e4a5b8c5ed8b47c6c0aa7e289d2d37c547a3117a"
       },
@@ -787,9 +787,9 @@
     "schema_version": "skillguard.content_impact_plan.current",
     "unknown_mapping_disposition": "block"
   },
-  "contract_hash": "516665A0D387F627A18DD1D747E60363123939139D08131F6BFFB435258D9DC5",
+  "contract_hash": "8F2FA1E28BBCF358BA8CE4CC6AFE2095E01F94363BF0DEC0FED1377ACBD35896",
   "maintenance_unit_id": "unit:kb-organization-contribute",
-  "manifest_hash": "29CFC26543C0395B4E68171326899CBDA7C7E7D4770D1E2852D75201382F9D51",
+  "manifest_hash": "580DE239876DE9702EA37F46EE8A9300A182F2F457B89555E24296B1A29E9EA0",
   "member_skill_ids": [
     "kb-organization-contribute"
   ],
@@ -803,7 +803,7 @@
     "implementation:.flowguard/kb_org_contribute_skill_contract_model.py": "B56CF0E29B133FDCECDC72914D1F9BC33F8611240E366187B740EBA4D1967BBC",
     "implementation:local_kb/automation_contracts.py": "78C15E8881F07BE1789FD3DB0B4F78C65029CE5429D54F169B5D28D6B8D0BFCB",
     "implementation:local_kb/automation_runtime.py": "78FEAB1A86F360BD88FDF947197E818A666780F2B4D876B22EFEB457C8C7C680",
-    "implementation:local_kb/install.py": "1F38B26A839E0928A6CA38A20038227840006F839CDD236D591AE7B06C224151",
+    "implementation:local_kb/install.py": "68215F42C087C19477525287F9AA83CC819CE40FEB71D07BFD2BD7FD936DF017",
     "implementation:local_kb/org_automation.py": "179205EF03680B0E5481A96A0F753C5F1EC76D558E6EA9E0F6BEC462D9A040F7",
     "implementation:local_kb/org_outbox.py": "A7E260ED6237303C1C27C17FAD2E46BCBE5933BAC05C60A7AAA0D624C22BCC86",
     "implementation:local_kb/process_control.py": "2B29B195BBF85C3501A0D3C9E2DEF3976D7C3090F3D7178894C4F17C52AD0C06",

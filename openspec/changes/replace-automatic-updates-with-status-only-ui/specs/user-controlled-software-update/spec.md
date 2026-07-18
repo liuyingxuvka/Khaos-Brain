@@ -66,10 +66,16 @@ Fresh install, upgrade, repair, and repeated install SHALL keep the exact manage
 - **THEN** the old task remains absent and absence is reported as healthy
 
 #### Scenario: Current machine returns maintenance to normal operation
-- **WHEN** the current aggregate and four scheduled-production receipts are valid and the user explicitly requires the retained maintenance tasks to run normally
+- **WHEN** the current aggregate, exact five-skill activation inventory, clean installed state, and four scheduled-skill classifications are valid and the user explicitly requires the retained maintenance tasks to run normally
 - **THEN** one hash-bound operator transaction activates exactly Sleep, Dream, organization contribution, and organization maintenance with no user-pause bit
+- **AND** the installed `khaos-brain-update` skill remains classified as manual-only and receives no automation binding
 - **AND** the exact Architect and system-update tasks remain absent
 - **AND** any partial activation or final health failure re-pauses all four retained tasks
+
+#### Scenario: All five maintained skills appear in assurance
+- **WHEN** readiness reports the four scheduled skills and the manual-only update skill
+- **THEN** the five-member report is accepted as the complete maintained inventory
+- **AND** only the four scheduled members are required in automation activation and readback
 
 ### Requirement: Former authorization state is directly migrated
 The installer-owned upgrade path SHALL convert the exact former update-state schema directly to the current status-only schema and SHALL leave no normal-runtime legacy reader.

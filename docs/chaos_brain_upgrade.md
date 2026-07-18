@@ -81,6 +81,20 @@ restores the last known good files, re-pauses all four automations, records the
 retry point, and leaves the attempt incomplete. Interruption recovery finishes
 or rolls back the old transaction before a new attempt begins.
 
+Ordinary install currentness is independent of attempt-history size. It reads
+only `.khaos-brain-install/attempts/HEAD.json` and the bounded `current.json`
+projection named and hash-bound by that HEAD. Prior attempt directories and
+immutable event files remain historical evidence and are not scanned. A
+missing, old-schema, oversized, escaping, or hash-mismatched current binding
+fails immediately; there is no manifest fallback or historical latest-attempt
+search.
+
+After the final attempt checkpoint is published, the lightweight committed
+install state stores that exact attempt's `attempt_id` and `receipt_hash`.
+The independent `--check` command reloads both authorities and requires an
+exact match. An installer-internal green result cannot substitute for this
+durable post-command binding.
+
 The history migration lock uses a versioned owner token, process id, and
 heartbeat. A live owner is never displaced. A dead recorded owner is quarantined
 with a recovery receipt before the migration resumes.
@@ -100,6 +114,13 @@ Each runner owns one exact command, one run identity, one non-overlapping
 obligation inventory, and one immutable terminal receipt. Capability regression
 proves that a software version can perform the behavior; it cannot replace the
 receipt of a concrete scheduled run.
+
+Installation and current-machine activation use one current five-member skill
+inventory: the four runners above are `scheduled`, while
+`khaos-brain-update` is the sole `manual-only` member. The operator transaction
+activates and reads back exactly four automation IDs. It does not require or
+invent a fifth scheduler, and its activation receipt is not evidence that a
+future scheduled run completed.
 
 The manual `khaos-brain-update` Skill has no scheduler. It begins only after an
 explicit request in the current conversation and completes in one target-native

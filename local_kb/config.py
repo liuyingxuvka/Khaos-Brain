@@ -94,6 +94,7 @@ def build_install_state(payload: dict[str, Any]) -> dict[str, Any]:
             "status",
             "phase",
             "updated_at",
+            "receipt_hash",
         )
         if key in attempt
     }

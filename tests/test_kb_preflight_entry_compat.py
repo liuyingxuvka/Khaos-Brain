@@ -106,6 +106,64 @@ class KbPreflightEntryCurrentGrammarTests(unittest.TestCase):
         self.assertIn("--task-summary", completed.stdout)
         self.assertLess(elapsed, 5)
 
+    def test_feedback_emits_terminal_json_and_inspects_the_same_event_id(self) -> None:
+        repo_root, _launcher_path = self._launcher()
+        script_path = (
+            repo_root
+            / ".agents"
+            / "skills"
+            / "local-kb-retrieve"
+            / "scripts"
+            / "kb_feedback.py"
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            event_id = "cli-postflight-stable-event"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(script_path),
+                    "--repo-root",
+                    tmp_dir,
+                    "--event-id",
+                    event_id,
+                    "--task-summary",
+                    "Verify bounded feedback terminality.",
+                    "--outcome",
+                    "success",
+                    "--json",
+                ],
+                cwd=repo_root,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            payload = json.loads(completed.stdout)
+            self.assertTrue(payload["ok"])
+            self.assertEqual("success", payload["status"])
+            self.assertEqual(event_id, payload["postflight"]["event_id"])
+
+            inspected = subprocess.run(
+                [
+                    sys.executable,
+                    str(script_path),
+                    "--repo-root",
+                    tmp_dir,
+                    "--inspect-event-id",
+                    event_id,
+                    "--json",
+                ],
+                cwd=repo_root,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            self.assertEqual(inspected.returncode, 0, inspected.stderr)
+            inspection = json.loads(inspected.stdout)
+            self.assertTrue(inspection["ok"])
+            self.assertEqual("success", inspection["status"])
+            self.assertEqual(1, inspection["history_event_count"])
+
 
 if __name__ == "__main__":
     unittest.main()

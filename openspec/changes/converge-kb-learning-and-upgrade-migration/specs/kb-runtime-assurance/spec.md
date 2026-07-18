@@ -53,6 +53,29 @@ The installer SHALL own clean consumer projection and transactional activation.
 The final readiness evaluator SHALL aggregate these current owners without
 rerunning one skill's test as another skill's proof.
 
+Current-machine activation SHALL bind one exact maintained-skill inventory
+schema. That schema SHALL list all five maintained consumer skills, classify
+exactly four as scheduled, and classify only `khaos-brain-update` as
+manual-only. Scheduled activation and live readback SHALL operate only on the
+four scheduled automation IDs. The manual-only skill MUST remain installed but
+MUST NOT be treated as missing scheduled-production evidence or receive an
+automation binding.
+
+Activation SHALL replay large lifecycle ledgers in a streaming form that
+preserves the exact canonical event digest without materializing the complete
+event array. After any automation has been changed to `ACTIVE`, every
+exception, including memory exhaustion during the installation check or
+receipt self-validation, SHALL restore all four managed automations to
+`PAUSED`. An `ACTIVE` state without one current validated activation receipt
+MUST NOT be accepted as completion.
+
+The activation receipt SHALL bind one deterministic installation-currentness
+projection. The full history-migration validation MUST pass and remain visible
+as runtime evidence, but volatile validation diagnostics MUST NOT participate
+in receipt identity. Migration status and its committed receipt identity SHALL
+remain inside the deterministic projection, so excluding diagnostics cannot
+turn a changed migration authority into a current installation.
+
 #### Scenario: Final readiness is evaluated
 - **WHEN** source and tool identities are frozen
 - **THEN** one repository regression owner, the current FlowGuard suite, target-native checks, clean installation checks, and the separate author-contract audit all reach terminal results
@@ -60,6 +83,25 @@ rerunning one skill's test as another skill's proof.
 #### Scenario: A launcher times out
 - **WHEN** an execution owner is interrupted or times out
 - **THEN** its evidence is non-reusable until the entire descendant process tree is confirmed stopped
+
+#### Scenario: Readiness contains all five maintained skills
+- **WHEN** current author and consumer assurance report the four scheduled skills plus `khaos-brain-update`
+- **THEN** activation validates the complete five-skill inventory
+- **AND** it activates and reads back only the four scheduled automations
+
+#### Scenario: An inventory uses an old or ambiguous shape
+- **WHEN** the activation receipt omits the manual-only classification, overlaps the scheduled and manual sets, or does not exhaust the five maintained skills
+- **THEN** activation fails without interpreting an older receipt or inferring a fallback classification
+
+#### Scenario: Activation assurance exhausts memory
+- **WHEN** a large lifecycle ledger cannot complete the installation check or receipt self-validation
+- **THEN** the activation route reports non-success and restores all four scheduled automations to `PAUSED`
+- **AND** no unreceipted `ACTIVE` state is accepted or recovered through a second runtime path
+
+#### Scenario: Two healthy installation checks emit different diagnostics
+- **WHEN** consecutive checks have the same installed authority, both pass, and only history-validation diagnostics differ
+- **THEN** they produce the same installation-currentness identity
+- **AND** a changed migration receipt, installed skill projection, automation specification, or upgrade-attempt authority still changes that identity
 
 ### Requirement: Manual update closes in one native route
 The explicit conversational update skill SHALL perform authorization, safe

@@ -87,12 +87,11 @@ def _upgrade_attempt_projection(
     *,
     codex_home: Path,
 ) -> dict[str, Any]:
-    latest = latest_upgrade_attempt(codex_home)
-    source = latest if latest else value
-    if not isinstance(source, Mapping):
+    del codex_home
+    if not isinstance(value, Mapping):
         return {}
     projected = {
-        key: source.get(key)
+        key: value.get(key)
         for key in (
             "attempt_id",
             "sequence",
@@ -106,7 +105,7 @@ def _upgrade_attempt_projection(
             "survivors_must_remain_paused",
             "post_install_check_ok",
         )
-        if source.get(key) is not None
+        if value.get(key) is not None
     }
     return {
         key: _bounded_text(item) if isinstance(item, str) else item
@@ -195,6 +194,10 @@ def _installation_check_result_projection(
             payload.get("upgrade_attempt"),
             codex_home=codex_home,
         ),
+        "upgrade_attempt_authority": _status_projection(
+            payload.get("upgrade_attempt_authority"),
+            extra_keys=("head_path", "current_path"),
+        ),
         "install_transaction": _status_projection(
             payload.get("install_transaction")
         ),
@@ -209,8 +212,9 @@ def _installation_check_result_projection(
         "warnings_omitted": omitted_warnings,
         "claim_boundary": (
             "This is a bounded terminal projection. Full installation and assurance "
-            "evidence remains at install_state_path and the upgrade-attempt current/event "
-            "references; this projection is not an alternate evidence authority."
+            "evidence remains at install_state_path and the upgrade-attempt "
+            "HEAD/current/event references; this projection is not an alternate "
+            "evidence authority."
         ),
     }
 

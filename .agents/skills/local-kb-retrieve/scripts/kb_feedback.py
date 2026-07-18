@@ -15,7 +15,9 @@ if str(SCRIPT_REPO_ROOT) not in sys.path:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", default="auto")
-    parser.add_argument("--task-summary", required=True)
+    parser.add_argument("--task-summary", default="")
+    parser.add_argument("--event-id", default="")
+    parser.add_argument("--inspect-event-id", default="")
     parser.add_argument("--route-hint", default="")
     parser.add_argument("--entry-ids", default="")
     parser.add_argument(
@@ -59,11 +61,31 @@ def main() -> None:
     # feedback write but must not turn ``feedback --help`` into a slow KB boot.
     from local_kb.cli_output import print_json, print_text
     from local_kb.common import csv_to_list
-    from local_kb.feedback import build_observation, record_observation
+    from local_kb.feedback import (
+        build_observation,
+        inspect_observation_postflight,
+        record_observation_result,
+    )
     from local_kb.lifecycle import record_outcome_receipt
     from local_kb.store import history_events_path, resolve_repo_root
 
     repo_root = resolve_repo_root(args.repo_root)
+    if args.inspect_event_id:
+        inspection = inspect_observation_postflight(
+            repo_root,
+            args.inspect_event_id,
+        )
+        if args.json:
+            print_json(inspection)
+        else:
+            print_text(
+                f"Postflight {inspection['event_id']}: {inspection['status']}"
+            )
+        if not inspection.get("ok"):
+            raise SystemExit(2)
+        return
+    if not args.task_summary.strip():
+        parser.error("--task-summary is required unless --inspect-event-id is used")
     event = build_observation(
         task_summary=args.task_summary,
         route_hint=args.route_hint,
@@ -87,8 +109,27 @@ def main() -> None:
         thread_ref=args.thread_ref,
         project_ref=args.project_ref,
         workspace_root=args.workspace_root,
+        event_id=args.event_id,
     )
-    record_observation(repo_root, event)
+    postflight = record_observation_result(repo_root, event)
+    if not postflight.get("ok"):
+        payload = {
+            "schema_version": "khaos-brain.feedback-result.v1",
+            "ok": False,
+            "status": str(postflight.get("status") or "failed"),
+            "event": event,
+            "history_path": str(history_events_path(repo_root)),
+            "postflight": postflight,
+            "outcome_receipt": None,
+        }
+        if args.json:
+            print_json(payload)
+        else:
+            print_text(
+                f"Observation {event['event_id']} did not reach terminal success: "
+                f"{payload['status']}"
+            )
+        raise SystemExit(2)
     outcome_receipt = None
     if args.retrieval_request_id:
         used_entry_ids = csv_to_list(args.used_entry_ids or args.entry_ids)
@@ -106,8 +147,12 @@ def main() -> None:
     if args.json:
         print_json(
             {
+                "schema_version": "khaos-brain.feedback-result.v1",
+                "ok": True,
+                "status": "success",
                 "event": event,
                 "history_path": str(history_events_path(repo_root)),
+                "postflight": postflight,
                 "outcome_receipt": outcome_receipt,
             }
         )

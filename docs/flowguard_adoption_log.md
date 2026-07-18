@@ -2005,3 +2005,84 @@ un_khaos_brain_conformance.py` - conformance replay passed lane lock, organizati
 - python -m flowguard project-audit --root . --json
 - python scripts/verify_skill_suite_markers.py --root . --json
 - Rerun affected FlowGuard model checks and focused tests before broad confidence.
+
+
+## khaos-brain-v065-current-activation-and-attempt-authority - Separate the five maintained Skills from the four scheduled automations and make attempt currentness pointer-only.
+
+- Project: Khaos-Brain
+- Trigger reason: Current-machine activation treated the maintained Skill inventory as if every member were scheduled, while installation currentness still enumerated multi-gigabyte attempt history.
+- Status: completed
+- Skill decision: used_existing_model_preflight_development_process_flow_field_lifecycle_model_test_alignment_and_test_mesh
+- Started: 2026-07-18T10:16:08+00:00
+- Ended: 2026-07-18T10:16:08+00:00
+- Duration seconds: 0.000
+- Commands OK: True
+
+### Model Files
+- .flowguard/kb_convergence_upgrade_model.py
+- .flowguard/khaos_brain_update_field_lifecycle.py
+- .flowguard/run_kb_convergence_checks.py
+
+### Commands
+- OK (0.000s): `Affected Khaos tests passed: 85 tests and 47 subtests.`
+- OK (0.000s): `Current-machine attempt-authority benchmark: 100 reads, median 0.104 ms, p95 0.173 ms, max 0.425 ms, zero history files scanned.`
+- OK (0.000s): `FlowGuard convergence passed 10/10 scenarios; current field lifecycle passed and known-bad retired shapes blocked.`
+- OK (0.000s): `All six OpenSpec changes passed strict validation and all five Khaos SkillGuard source units passed source-only assurance.`
+
+### Findings
+- Maintained-Skill assurance and scheduler activation are separate inventories: five maintained Skills equal four scheduled members plus one manual-only update Skill.
+- Bounded currentness is one bounded hash-bound HEAD plus its exact current projection; a compact projection is insufficient if lookup still enumerates history.
+
+### Counterexamples
+- Do not schedule khaos-brain-update, claim a future scheduled run completed, enumerate attempt history for currentness, or use an install-manifest fallback.
+
+### Friction Points
+- Repository-level FlowGuard adoption remains blocked by the pre-existing missing .skillguard/flowguard-suite/suite-map.json.
+
+### Skipped Steps
+- Full installer execution, global Codex installation, scheduled-automation activation, remote publication, and release evidence remain under the root execution owner.
+
+### Risk Evidence Summary
+- Exact 5/4/1 good and ambiguous bad cases are executable; missing, oversized, escaping, stale, and history-dependent current-attempt paths fail closed.
+
+### Next Actions
+- Run the one root-owned transactional installation to publish current v2 attempt HEAD/current authority.
+- Run the root-owned pre-restore aggregate gate, then activate and read back exactly the four scheduled automations.
+- Resolve the separate canonical FlowGuard suite-map blocker before repository-wide adoption closure.
+
+
+## khaos-brain-v065-postflight-and-install-binding-model-misses - Close real large-ledger postflight terminality and final upgrade-attempt install-state binding.
+
+- Project: Khaos-Brain
+- Trigger reason: A timed-out postflight left unknown partial state, and the first independent post-install check found the committed locator omitted the final attempt receipt hash.
+- Status: completed
+- Skill decision: used_predictive_kb_existing_model_preflight_model_miss_review_field_lifecycle_development_process_flow
+
+### Model Files
+- .flowguard/kb_postflight_terminal_flow.py
+- .flowguard/kb_convergence_upgrade_model.py
+- .flowguard/khaos_brain_update_field_lifecycle.py
+
+### Current Evidence
+- Real postflight returned in 809.473 ms with one durable unique event, a matching receipt, unchanged runtime authority, and released writer lock.
+- Foreground Sleep `kb-sleep-20260718T122121Z` disposed 5/5 observations, left zero actionable backlog, created one candidate, and committed LogicGuard generation `generation-078324017d4dba849784ccca5083e952` plus active index 144.
+- FlowGuard explored 666 traces with zero violations; the current field lifecycle passed and the known-bad plan blocked.
+- Focused model, config, and installer coverage passed 33 tests.
+- Foreground installer attempt `upgrade-1784379215254-1307b575f0` completed with migration no-delta and consumer assurance passed.
+- The independent installed currentness check passed 37/37 rows with zero issues and zero warnings after matching the committed attempt ID and receipt hash.
+
+### Findings
+- Active-task feedback must remain a bounded append-and-receipt path; Sleep owns lifecycle admission, candidate decisions, model publication, and index rebuild.
+- An installer-internal green result is not durable completion unless the lightweight install state binds the final attempt by exact ID and receipt hash and an independent process verifies both.
+- Both repairs use one current path with no fallback, compatibility reader, alias, or alternate authority.
+
+### Counterexamples
+- Do not synchronously replay lifecycle history from postflight.
+- Do not infer success from a persisted event without its event-bound receipt.
+- Do not omit or guess the final attempt receipt binding.
+- Do not activate automations before aggregate readiness.
+
+### Remaining Separate Gates
+- Validate one current aggregate readiness receipt.
+- Activate and read back exactly four scheduled automations; keep `khaos-brain-update` manual-only and retired task IDs absent.
+- Complete Git and release freshness before publishing v0.6.5.
