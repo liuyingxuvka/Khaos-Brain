@@ -1,9 +1,8 @@
-"""Compose every current Chaos Brain upgrade gate into one hard receipt.
+"""Compose the current target-owned Chaos Brain upgrade gates.
 
-The release gate is the sole owner of expensive leaf execution.  Downstream
-consumers (notably Model-Test Alignment and OpenSpec closure) consume the
-immutable proof artifacts emitted here instead of recursively launching the
-same commands again.
+The repository-wide regression is the sole owner of its test execution.
+Author-side SkillGuard maintenance is a separate static contract audit and is
+never part of the installed consumer runtime or proof chain.
 """
 
 from __future__ import annotations
@@ -35,7 +34,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 from local_kb.transactional_install import tree_manifest  # noqa: E402
 from local_kb.automation_contracts import (  # noqa: E402
-    AGGREGATE_SKILLGUARD_TIMEOUT_SECONDS,
+    AGGREGATE_ASSURANCE_TIMEOUT_SECONDS,
 )
 from local_kb.process_control import run_with_timeout_cleanup  # noqa: E402
 
@@ -154,42 +153,6 @@ def _package_version(name: str) -> str:
         return "missing"
 
 
-def _skillguard_toolchain_identity() -> dict[str, Any]:
-    configured = os.environ.get(
-        "KHAOS_BRAIN_SKILLGUARD_VALIDATION_ROOT", ""
-    ).strip()
-    root = (
-        Path(configured).resolve()
-        if configured
-        else Path.home() / ".codex" / "skills" / "skillguard"
-    )
-    manifest = tree_manifest(root) if root.is_dir() else {}
-    digest = str(manifest.get("digest") or "")
-    expected = os.environ.get(
-        "KHAOS_BRAIN_SKILLGUARD_VALIDATION_DIGEST", ""
-    ).strip()
-    if not (
-        digest
-        and (root / "scripts" / "skillguard_compile.py").is_file()
-        and (root / "scripts" / "skillguard.py").is_file()
-    ):
-        raise RuntimeError("Current SkillGuard validation toolchain is unavailable")
-    if expected and digest != expected:
-        raise RuntimeError(
-            "Frozen SkillGuard validation toolchain digest does not match its declared identity"
-        )
-    return {
-        "digest": digest,
-        "file_count": int(manifest.get("file_count") or 0),
-        "compiler_sha256": hashlib.sha256(
-            (root / "scripts" / "skillguard_compile.py").read_bytes()
-        ).hexdigest(),
-        "cli_sha256": hashlib.sha256(
-            (root / "scripts" / "skillguard.py").read_bytes()
-        ).hexdigest(),
-    }
-
-
 def _flowguard_toolchain_identity(flowguard_module: Any) -> dict[str, Any]:
     configured = os.environ.get(
         "KHAOS_BRAIN_FLOWGUARD_VALIDATION_ROOT", ""
@@ -283,7 +246,6 @@ def _verifier_fingerprint() -> dict[str, Any]:
         "flowguard_package_digest": str(flowguard_identity["digest"]),
         "flowguard_toolchain": flowguard_identity,
         "logicguard_toolchain": logicguard_identity,
-        "skillguard_toolchain": _skillguard_toolchain_identity(),
     }
     body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     payload["digest"] = hashlib.sha256(body).hexdigest()
@@ -294,7 +256,6 @@ def _environment_contract(repo_root: Path) -> dict[str, str]:
     import flowguard
     import logicguard
 
-    skillguard_identity = _skillguard_toolchain_identity()
     flowguard_identity = _flowguard_toolchain_identity(flowguard)
     logicguard_identity = _logicguard_toolchain_identity(logicguard)
     return {
@@ -302,7 +263,6 @@ def _environment_contract(repo_root: Path) -> dict[str, str]:
         "KHAOS_BRAIN_ASSURANCE_ACTIVE": "1",
         "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
         "python_executable": str(Path(sys.executable).resolve()),
-        "skillguard_toolchain_digest": str(skillguard_identity["digest"]),
         "flowguard_toolchain_digest": str(flowguard_identity["digest"]),
         "logicguard_toolchain_digest": str(logicguard_identity["digest"]),
     }
@@ -374,7 +334,6 @@ def _commands(
     junit_path = junit_path or (
         DEFAULT_EVIDENCE_ROOT / "adhoc" / "full-regression.junit.xml"
     )
-    capability_receipt = junit_path.parent / "full_regression.receipt.json"
     commands = {
         "flowguard_models": [
             sys.executable,
@@ -431,26 +390,11 @@ def _commands(
             "--json",
             "--no-interactive",
         ],
-        "skillguard_source_install_parity": [
-            sys.executable,
-            "scripts/check_kb_skillguard.py",
-            "--json",
-            "--execute-checks",
-            "--capability-receipt",
-            str(capability_receipt),
-            "--codex-home",
-            str(codex_home),
-        ],
-        "skillguard_source_assurance": [
+        "author_contract_assurance": [
             sys.executable,
             "scripts/check_kb_skillguard.py",
             "--json",
             "--source-only",
-            "--execute-checks",
-            "--capability-receipt",
-            str(capability_receipt),
-            "--codex-home",
-            str(codex_home),
         ],
         "retired_architect_absence": [
             sys.executable,
@@ -932,9 +876,9 @@ def _execute_plan(
             aliases[name] = owner
 
     results: dict[str, dict[str, Any]] = {}
-    # The repository-wide suite is the sole owner of capability pytest.  Run
-    # it first on its exclusive lane so later SkillGuard source/install checks
-    # can consume its exact JUnit receipt instead of launching nested copies.
+    # The repository-wide suite is the sole owner of capability pytest. Run it
+    # first on its exclusive lane; no other maintenance unit consumes or
+    # projects this receipt as its own evidence.
     if "full_regression" in owners:
         reusable = _current_full_regression_receipt(
             current_manifest_path,
@@ -965,10 +909,7 @@ def _execute_plan(
     # run them in a fixed order: LogicGuard benchmarks first and installed
     # scheduled production last.  This prevents either owner from losing its
     # declared budget to sibling CPU or filesystem pressure.
-    exclusive_sequence = (
-        "logicguard_runtime",
-        "skillguard_source_install_parity",
-    )
+    exclusive_sequence = ("logicguard_runtime",)
     exclusive_names = set(exclusive_sequence)
     parallel = {
         name: cmd
@@ -985,11 +926,7 @@ def _execute_plan(
                     source_snapshot=source_snapshot,
                     verifier_fingerprint=verifier_fingerprint,
                     inventory_revision=inventory_revision,
-                    timeout_seconds=(
-                        AGGREGATE_SKILLGUARD_TIMEOUT_SECONDS
-                        if item[0] == "skillguard_source_install_parity"
-                        else 3600
-                    ),
+                    timeout_seconds=3600,
                 ),
                 parallel.items(),
             )
@@ -1005,7 +942,7 @@ def _execute_plan(
             source_snapshot=source_snapshot,
             verifier_fingerprint=verifier_fingerprint,
             inventory_revision=inventory_revision,
-            timeout_seconds=AGGREGATE_SKILLGUARD_TIMEOUT_SECONDS,
+            timeout_seconds=AGGREGATE_ASSURANCE_TIMEOUT_SECONDS,
         )
         results[owner_name] = result
 
@@ -1197,10 +1134,11 @@ def build_report(
         "duplicate_exact_executions": manifest["duplicate_exact_executions"],
         "claim_boundary": (
             "Current final-source LogicGuard authority/model/mesh/projection, FlowGuard, "
-            "OpenSpec, SkillGuard, retirement, install, retrieval, performance, "
+            "OpenSpec, author-side contract audit, retirement, install, retrieval, performance, "
             "and one repository-wide regression execution or exact current immutable owner "
-            "receipt reuse. Model-Test Alignment consumes "
-            "the exact leaf receipts; OpenSpec archival and external release publication "
+            "receipt reuse. Each maintained skill owns distinct test evidence; Model-Test "
+            "Alignment checks ownership without consuming another skill's receipt. "
+            "OpenSpec archival and external release publication "
             "remain separate explicit operations. Installer calls inside the aggregate "
             "regression are isolated fixtures; the outer upgrade owns real migration and "
             "restoration gates."

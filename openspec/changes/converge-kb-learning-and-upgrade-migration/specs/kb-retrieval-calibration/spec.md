@@ -113,7 +113,7 @@ The retrieval regression suite SHALL contain versioned cases for useful-card que
 - **THEN** the suite MUST fail regardless of aggregate relevance or latency scores
 
 ### Requirement: Foreground retrieval uses a compact fail-closed authority snapshot
-Routine retrieval SHALL validate the generated index, its activation receipt, and only the source records that can actually be returned. It MUST NOT rescan every inactive card or replay the complete lifecycle event log on each query. Observation-only events SHALL NOT invalidate entry eligibility. Before any lifecycle event that can change entry eligibility is committed, the writer MUST durably invalidate the active authority; a validated rebuild is the only operation permitted to reactivate it. Full manifest and lifecycle replay SHALL remain mandatory for rebuild, Sleep, migration, and aggregate audit rather than foreground query latency.
+Routine retrieval SHALL validate the generated index, its activation receipt, and only the source records that can actually be returned. It MUST NOT rescan every inactive card or replay the complete lifecycle event log on each query. Within one process it MAY reuse only a successful exact indexed-source and LogicGuard projection validation whose key binds the repository root, active-index generation and content digest, invalidation token, active authority digest, current LogicGuard generation pointer digest, and raw content digest of every indexed source. Each query MUST compare indexed-source content signatures before and after its snapshot. A changed source, index, authority, LogicGuard generation, or invalidation token MUST force exact revalidation or visible failure; failed validation MUST NOT be cached. Observation-only events SHALL NOT invalidate entry eligibility. Before any lifecycle event that can change entry eligibility is committed, the writer MUST durably invalidate the active authority; a validated rebuild is the only operation permitted to reactivate it. Full manifest and lifecycle replay SHALL remain mandatory for rebuild, Sleep, migration, and aggregate audit rather than foreground query latency.
 
 #### Scenario: Observation intake does not stale entry authority
 - **WHEN** another AI records a new observation without changing any card lifecycle state
@@ -126,6 +126,11 @@ Routine retrieval SHALL validate the generated index, its activation receipt, an
 #### Scenario: Active source changes outside the lifecycle writer
 - **WHEN** an indexed source file is deleted, moved outside its declared scope, changes identity, or changes content
 - **THEN** the compact query check MUST reject that generation even if no lifecycle invalidation marker was emitted
+
+#### Scenario: Repeated queries use one exact immutable validation
+- **WHEN** repeated foreground queries observe the same active-index, authority, LogicGuard generation, invalidation, and indexed-source identities
+- **THEN** the process MAY reuse the prior successful exact validation without reparsing the same immutable LogicGuard meshes
+- **AND** any identity or source-content drift MUST bypass that result and run exact validation again without a fallback reader
 
 ### Requirement: Indexed retrieval meets the P95 latency budget
 The active-index query path SHALL complete with P95 latency below 1.0 second on the declared representative real-corpus benchmark and reference environment. The measurement MUST include route selection, active-status filtering, lexical scoring, confidence and trust reranking, related-card eligibility checks, and result serialization; it MUST exclude index construction but report index age and generation. The benchmark MUST run enough queries to calculate P95, publish raw timing evidence and the corpus digest, and distinguish cold-start, warm-query, rebuild, skipped, and failed measurements. A missing, stale, skipped, or environment-incomparable result MUST NOT be reported as passing.

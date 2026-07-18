@@ -245,7 +245,7 @@ class KbHistoryMigrationTests(unittest.TestCase):
             self.assertTrue(all(item["reopen_condition"]["requires_new_fingerprint"] for item in parked))
             self.assertEqual(
                 {item["owner"] for item in parked},
-                {"khaos-brain-system-update", "kb-sleep"},
+                {"future-active-development-task", "kb-sleep"},
             )
             retired_queue = completed["receipt"]["checkpoints"]["settle-logical-debt"]["details"][
                 "retired_architect_queue"

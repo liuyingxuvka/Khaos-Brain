@@ -15,7 +15,7 @@ Run:
 
 `python .agents/skills/local-kb-retrieve/scripts/kb_sleep.py --json`
 
-The native lifecycle implementation owns all mutation. SkillGuard supervises its declared route and checks; it must not create a parallel Sleep implementation or a second model writer.
+The native lifecycle implementation owns all mutation, terminal validation, and its immutable run receipt. Do not create a parallel Sleep implementation or a second model writer.
 
 ## Required behavior
 
@@ -39,12 +39,10 @@ The native lifecycle implementation owns all mutation. SkillGuard supervises its
 
 Return the run id, consumed range and digest, opening/new/terminal/parked/closing backlog counts, candidate create/reuse counts, promotions, downgrades, reopen decisions, Dream acknowledgements, exact LogicGuard generation/model/mesh counts, unresolved relation proposals, model-gap counts, active-index receipt and validation, rollback status, blockers, and final run state. Never infer success from prose when a required receipt is missing.
 
-## SkillGuard completion boundary
+## Native completion boundary
 
-For a scheduled run, intake, planning, or proposal-only output is incomplete. Run `python scripts/run_kb_guarded_automation.py --skill kb-sleep-maintenance --json`; do not call the child entrypoint directly. The guarded runner invokes the native Sleep owner once, writes an immutable run receipt, and requires the sole current enforced SkillGuard closure receipt for that exact run. A declared no-op counts only when the native gate receipt proves its terminal. Positive and shallow fixtures remain target-owned checks; SkillGuard supervises their exact receipts without interpreting their domain meaning. Fixture or capability evidence cannot replace the concrete scheduled run. The installed SkillGuard builder—not caller-authored fields—binds the trigger, execution id, current installation receipt id/hash plus portable receipt-root reference, and installed runtime fingerprint. SkillGuard does not create a parallel Sleep executor.
+For a scheduled run, intake, planning, or proposal-only output is incomplete. Run `python scripts/run_kb_automation.py --skill kb-sleep-maintenance --json`. The target-owned wrapper invokes the native Sleep owner once and accepts only its immutable terminal receipt for that exact run. A declared no-op counts only when the Sleep gate receipt proves it terminal. Fixture or capability evidence cannot replace the concrete scheduled run.
 
-If the native owner or any validation child times out, the run is incomplete until the guarded launcher terminates the complete owned process tree, confirms zero remaining descendants, and records that cleanup under the ordered native-to-scheduled-to-aggregate timeout budget.
+If the native owner or any validation child times out, the run is incomplete until the target-owned launcher terminates the complete process tree, confirms zero remaining descendants, and records that cleanup.
 
-## SkillGuard boundary
-
-The current authority is `.skillguard/contract-source.json` plus its declared FlowGuard model. `.skillguard/compiled-contract.json` and `.skillguard/check-manifest.json` are generated projections. No former work contract, underscore manifest, flat run record, compatibility, conversion, renewal, retirement-receipt, alias, or fallback closure route may exist. SkillGuard attaches to the native Sleep owner, preserves current evidence and failure visibility, and cannot manufacture knowledge decisions.
+Ordinary use is self-contained and does not read an author-maintenance contract, external receipt, router, or installed maintenance tool. Author-side checks may validate Sleep before distribution but never participate in a scheduled Sleep run.

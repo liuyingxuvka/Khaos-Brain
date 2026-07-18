@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.6.5 - 2026-07-16
+
+- Retired the exact `Khaos Brain System Update` scheduled task. Fresh installs, upgrades, repairs, and repeated installs keep it absent while preserving the four scheduled Sleep, Dream, and organization automations.
+- Replaced the desktop update action with a read-only status for the exact configured Git upstream. The UI no longer writes authorization, enters a prepared state, or launches an updater.
+- Made software update an explicit current-conversation AI action with strict fast-forward topology, UI-closed, clean-tree, transactional install, rollback, migration, SkillGuard, and four-automation restoration gates. `no-update` is the only successful no-op; authorization, UI, topology, and operational blockers remain unfinished.
+- Removed persisted `user_requested` and `prepared` authority from normal runtime through a direct schema-v1-to-v2 upgrade migration with no compatibility reader or fallback path.
+- Made SkillGuard conditional branches target-owned, so the update contract contains only `no-update` and `explicit-manual-update`; manual execution carries no scheduler identity, authorization emits no premature target terminal, and finalization consumes the exact staged depth receipt.
+- Repaired shared knowledge retrieval for the original `model-004` example by restoring exact current LogicGuard manifest/index authorization and confirming zero missing or drifted projections across the full local corpus.
+- Replaced the oversized installed-state payload with a lightweight current manifest, removing the startup/help latency caused by serializing hundreds of megabytes of installation detail.
+- Made the desktop window and read-only version status visible before the 3,429-card catalog finishes loading; initial catalog construction now runs in the background with navigation held inert until the current payload is ready.
+
 ## v0.6.4 - 2026-07-16
 
 - Made `main` the sole final full-validation owner. Tag CI now proves the tag SHA equals `origin/main` and consumes the exact successful `main` Actions receipt for that SHA instead of rerunning the stateful installer/system-update owner in a detached tag environment.

@@ -43,7 +43,7 @@ REQUIRED_CHECKS = (
     "logicguard_runtime_model_miss",
     "logicguard_runtime",
     "logicguard_openspec",
-    "skillguard_source_install_parity",
+    "author_contract_assurance",
     "retired_architect_absence",
     "current_runtime_only",
     "retrieval_quality",
@@ -53,12 +53,6 @@ REQUIRED_CHECKS = (
 )
 
 _VALIDATION_TOOLCHAINS = (
-    (
-        "skillguard_validation_toolchain",
-        "KHAOS_BRAIN_SKILLGUARD_VALIDATION_ROOT",
-        "KHAOS_BRAIN_SKILLGUARD_VALIDATION_DIGEST",
-        False,
-    ),
     (
         "flowguard_validation_toolchain",
         "KHAOS_BRAIN_FLOWGUARD_VALIDATION_ROOT",
@@ -78,18 +72,12 @@ _INSTALLATION_IDENTITY_PYTHONPATH_PRESENT_ENV = (
 _INSTALLATION_IDENTITY_PYTHONPATH_VALUE_ENV = (
     "KHAOS_BRAIN_INSTALLATION_IDENTITY_PYTHONPATH_VALUE"
 )
-_INSTALLATION_IDENTITY_PYTHON_EXECUTABLE_ENV = (
-    "KHAOS_BRAIN_INSTALLATION_IDENTITY_PYTHON_EXECUTABLE"
-)
-
-
 def _configure_completed_install_toolchains(codex_home: Path) -> dict[str, Any]:
     """Bind standalone readiness to the successful install's frozen tools.
 
-    The installer already freezes one immutable SkillGuard, FlowGuard, and
-    LogicGuard identity.  A later standalone final-owner invocation must use
-    those same bytes instead of resolving whichever packages happen to be on
-    the ambient Python path.
+    The installer freezes immutable FlowGuard and LogicGuard identities. A
+    later standalone final-owner invocation must use those same bytes instead
+    of resolving whichever packages happen to be on the ambient Python path.
     """
 
     production_pythonpath_present = "PYTHONPATH" in os.environ
@@ -115,10 +103,6 @@ def _configure_completed_install_toolchains(codex_home: Path) -> dict[str, Any]:
         receipt = attempt.get(field)
         if not isinstance(receipt, dict):
             raise RuntimeError(f"Completed install attempt is missing {field}")
-        if field == "skillguard_validation_toolchain":
-            os.environ[_INSTALLATION_IDENTITY_PYTHON_EXECUTABLE_ENV] = str(
-                receipt.get("installation_python_executable") or sys.executable
-            )
         root = Path(str(receipt.get("snapshot_root") or "")).resolve()
         expected = str((receipt.get("manifest") or {}).get("digest") or "")
         actual = tree_manifest(root) if root.is_dir() else {}
@@ -211,8 +195,8 @@ def build_report(
             "This is the sole frozen-snapshot aggregate execution owner for the "
             "LogicGuard-native Khaos Brain cutover. It proves current dependency, "
             "model/mesh/projection/index authority, Sleep/Dream regressions, migration "
-            "residuals, runtime performance, FlowGuard/OpenSpec structure, SkillGuard "
-            "source-install parity, installation health, and one repository-wide test "
+            "residuals, runtime performance, FlowGuard/OpenSpec structure, the separate "
+            "author-side contract audit, installation health, and one repository-wide test "
             "execution or exact current immutable owner receipt. It does not establish "
             "factual truth, publish a release, or certify future AI behavior."
         ),

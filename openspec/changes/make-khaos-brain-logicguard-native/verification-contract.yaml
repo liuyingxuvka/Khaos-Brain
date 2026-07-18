@@ -2,244 +2,54 @@ contract_version: 1
 change: make-khaos-brain-logicguard-native
 
 obligations:
-  - id: req.authority.exact-projection
-    source: "specs/khaos-logicguard-card-authority/spec.md#Requirement: Every current card is an exact LogicGuard model projection"
-    claim: Every retrievable card resolves to one exact valid scoped LogicGuard revision, block, root node, and projection digest with visible failure on mismatch.
+  - id: req.logicguard.flowguard-models
+    source: "specs/khaos-logicguard-assurance/spec.md#Requirement: Executable FlowGuard models own behavior assurance"
+    claim: Current FlowGuard models and known-bad calibrations pass.
     required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-  - id: req.authority.argument-block
-    source: "specs/khaos-logicguard-card-authority/spec.md#Requirement: Predictive experience is represented as an ArgumentBlock"
-    claim: Predictive meaning is expressed through typed ArgumentBlock roles and grounded provenance while missing roles remain explicit gaps.
+    evidence: [check.logicguard.flowguard]
+  - id: req.logicguard.consumer-native
+    source: "specs/khaos-logicguard-assurance/spec.md#Requirement: LogicGuard and installed skills remain consumer-native"
+    claim: Installed skills contain no author-control dependency.
     required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-  - id: req.authority.projection-only
-    source: "specs/khaos-logicguard-card-authority/spec.md#Requirement: Projection fields have no independent semantic authority"
-    claim: Human card fields and related_cards are projections only and cannot independently change or link canonical knowledge.
+    evidence: [check.logicguard.install]
+  - id: req.logicguard.author-separate
+    source: "specs/khaos-logicguard-assurance/spec.md#Requirement: Author contracts are separate maintenance evidence"
+    claim: Author contracts are current and remain source-only.
     required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-  - id: req.authority.atomic-publication
-    source: "specs/khaos-logicguard-card-authority/spec.md#Requirement: Knowledge publication is model first and atomic"
-    claim: Model and mesh CAS commits precede projection/index publication and conflicts preserve the prior complete generation.
+    evidence: [check.logicguard.author]
+  - id: req.logicguard.alignment
+    source: "specs/khaos-logicguard-assurance/spec.md#Requirement: Model, code, fields, and target-owned tests align"
+    claim: Model, code, and unique target-owned tests align.
     required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-  - id: req.authority.privacy
-    source: "specs/khaos-logicguard-card-authority/spec.md#Requirement: Canonical authority is partitioned by privacy scope"
-    claim: Scoped stores and graph validation prevent cross-scope authority and private-to-public material leakage.
+    evidence: [check.logicguard.alignment]
+  - id: req.logicguard.final-snapshot
+    source: "specs/khaos-logicguard-assurance/spec.md#Requirement: Final validation has one stable execution snapshot"
+    claim: Final aggregate evidence is current and terminal.
     required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-
-  - id: req.maintenance.sleep-owner
-    source: "specs/khaos-logicguard-model-maintenance/spec.md#Requirement: Sleep is the sole canonical model maintenance owner"
-    claim: Existing Sleep owns canonical writes and watermark advancement; every other route is read-only or handoff-only.
-    required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-  - id: req.maintenance.mesh-consolidation
-    source: "specs/khaos-logicguard-model-maintenance/spec.md#Requirement: Sleep consolidates small models through ModelMesh"
-    claim: Exact card revisions are assembled by memberships and provenance-qualified edges without copied node authority or ungrounded relations.
-    required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-  - id: req.maintenance.gap-review
-    source: "specs/khaos-logicguard-model-maintenance/spec.md#Requirement: Sleep evaluates model completeness before strengthening knowledge"
-    claim: Important support, warrant, assumption, opposition, boundary, duplicate, and stale-revision gaps receive bounded dispositions and no-delta is idempotent.
-    required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-  - id: req.maintenance.dream-read-only
-    source: "specs/khaos-logicguard-model-maintenance/spec.md#Requirement: Dream validates one exact mesh revision without mutation authority"
-    claim: Dream performs bounded exact-revision simulations and writes only experiment evidence, simulation receipts, and Sleep handoffs.
-    required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-  - id: req.maintenance.dream-convergence
-    source: "specs/khaos-logicguard-model-maintenance/spec.md#Requirement: Dream work is convergent and evidence-fingerprinted"
-    claim: Identical exact evidence fingerprints do not repeat experiments, handoffs, or history writes, while changed evidence reopens under a new fingerprint.
-    required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-
-  - id: req.retrieval.current-index
-    source: "specs/khaos-logicguard-retrieval/spec.md#Requirement: Foreground retrieval uses only a current model-bound active index"
-    claim: Routine retrieval is current-index and exact-binding only with visible failure and zero YAML/related_cards fallback.
-    required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-  - id: req.retrieval.neighborhood
-    source: "specs/khaos-logicguard-retrieval/spec.md#Requirement: Exact card or node lookup expands through the model"
-    claim: Exact card/model/node lookup returns a deterministic revision-pinned bounded neighborhood with explicit truncation diagnostics.
-    required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-  - id: req.retrieval.ranking
-    source: "specs/khaos-logicguard-retrieval/spec.md#Requirement: Retrieval ranking remains explainable and lifecycle-safe"
-    claim: Model-native ranking contributions are receipted and ineligible or unauthorized neighbors have zero exposure.
-    required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-  - id: req.retrieval.desktop
-    source: "specs/khaos-logicguard-retrieval/spec.md#Requirement: Desktop detail is a graph-first projection of one current authority"
-    claim: The desktop renders one localized bounded graph from the same exact authority and exposes stale/unavailable state safely.
-    required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-  - id: req.retrieval.performance
-    source: "specs/khaos-logicguard-retrieval/spec.md#Requirement: Model-native retrieval meets bounded performance budgets"
-    claim: Representative P95 lookup/materialization and memory use meet frozen declared budgets.
-    required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-
-  - id: req.migration.only-legacy-reader
-    source: "specs/khaos-logicguard-migration/spec.md#Requirement: Legacy card authority is consumed only by a versioned direct migration"
-    claim: Only the upgrade transaction reads legacy semantics and zero compatibility, alias, fallback, or dual-authority normal-runtime path survives.
-    required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-  - id: req.migration.complete-conservative
-    source: "specs/khaos-logicguard-migration/spec.md#Requirement: Migration is complete, deterministic, and conservative"
-    claim: Every card receives a receipt-bound deterministic disposition without invented evidence, silent loss, or ungrounded edges.
-    required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-  - id: req.migration.transactional
-    source: "specs/khaos-logicguard-migration/spec.md#Requirement: Migration is atomic, resumable, idempotent, and rollbackable"
-    claim: Interruption, concurrency, conflict, privacy failure, and projection failure preserve or restore one complete authority generation and keep automations paused.
-    required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-  - id: req.migration.install
-    source: "specs/khaos-logicguard-migration/spec.md#Requirement: Installer and install check enforce current model authority"
-    claim: Fresh/upgrade installation creates and validates current authority, reports structured readiness, and blocks missing or stale LogicGuard.
-    required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-
-  - id: req.assurance.flowguard
-    source: "specs/khaos-logicguard-assurance/spec.md#Requirement: Executable FlowGuard model owns the authority-cutover behavior"
-    claim: Current executable model checks and calibrated known-bad cases prove the child boundary and reject duplicate or partial authority paths.
-    required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-  - id: req.assurance.alignment
-    source: "specs/khaos-logicguard-assurance/spec.md#Requirement: Model, code contracts, fields, and tests are bidirectionally aligned"
-    claim: Every required obligation has one owner contract, closed field disposition, source/test binding, and required path evidence.
-    required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-  - id: req.assurance.execution-owner
-    source: "specs/khaos-logicguard-assurance/spec.md#Requirement: Validation uses one frozen final execution owner"
-    claim: One frozen aggregate owner runs the complete inventory once and emits immutable terminal child and parent receipts with cleanup-confirmed interruption behavior.
-    required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-  - id: req.assurance.resource-sensitive-lanes
-    source: "specs/khaos-logicguard-assurance/spec.md#Requirement: Resource-sensitive validation owners run on exclusive lanes"
-    claim: LogicGuard performance evidence and real installed scheduled production run sequentially on exclusive aggregate lanes after ordinary children.
-    required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-  - id: req.assurance.surface-parity
-    source: "specs/khaos-logicguard-assurance/spec.md#Requirement: Skills, prompts, UI, installer, and documentation state the same architecture"
-    claim: Source and installed Skills/contracts/prompts plus docs/UI/installer present one current architecture and SkillGuard authority.
-    required: true
-    evidence: [check.khaos-logicguard-native.aggregate]
-  - id: req.assurance.release-gates
-    source: "specs/khaos-logicguard-assurance/spec.md#Requirement: Performance, privacy, migration, and package evidence are release gates"
-    claim: Package, scale, privacy, migration, rollback, UI, and zero-residual children are current terminal passes before broad completion.
-    required: true
-    evidence: [check.openspec.strict, check.khaos-logicguard-native.aggregate]
+    evidence: [check.logicguard.aggregate]
 
 checks:
-  - id: check.openspec.strict
-    kind: command
-    semantic_check_id: semantic.openspec.logicguard-native-contract
-    execution_id: execution.openspec.logicguard-native-contract
-    validation_scope: focused
-    snapshot_policy: live
-    toolchain_identity: openspec-cli
-    input_selectors:
-      - openspec/changes/make-khaos-brain-logicguard-native/proposal.md
-      - openspec/changes/make-khaos-brain-logicguard-native/design.md
-      - openspec/changes/make-khaos-brain-logicguard-native/tasks.md
-      - "openspec/changes/make-khaos-brain-logicguard-native/specs/**/*.md"
-      - openspec/changes/make-khaos-brain-logicguard-native/verification-contract.yaml
-    depends_on_receipts: []
-    command: openspec
-    args: [validate, make-khaos-brain-logicguard-native, --type, change, --strict, --json, --no-interactive]
-    timeout_seconds: 300
-    required: true
-    covers: [req.assurance.release-gates]
-    expected: {exit_code: 0}
-
-  - id: check.khaos-logicguard-native.aggregate
-    kind: command
-    semantic_check_id: semantic.khaos-logicguard-native.readiness.v1
-    execution_id: execution.khaos-logicguard-native.final-full.v1
-    validation_scope: release
-    snapshot_policy: frozen-source-toolchain-inventory
-    toolchain_identity: python-flowguard-logicguard-skillguard
-    input_selectors:
-      - "local_kb/**/*.py"
-      - "scripts/**/*.py"
-      - "tests/**/*.py"
-      - ".flowguard/**/*.py"
-      - ".flowguard/project.toml"
-      - ".agents/skills/**/SKILL.md"
-      - ".agents/skills/**/.skillguard/**/*.json"
-      - ".agents/skills/**/.skillguard/**/*.py"
-      - "templates/**/*.md"
-      - "templates/**/*.json"
-      - openspec/changes/make-khaos-brain-logicguard-native/proposal.md
-      - openspec/changes/make-khaos-brain-logicguard-native/design.md
-      - openspec/changes/make-khaos-brain-logicguard-native/tasks.md
-      - "openspec/changes/make-khaos-brain-logicguard-native/specs/**/*.md"
-      - openspec/changes/make-khaos-brain-logicguard-native/verification-contract.yaml
-      - PROJECT_SPEC.md
-      - README.md
-      - AGENTS.md
-      - "docs/**/*.md"
-      - scripts/install_codex_kb.py
-    depends_on_receipts: []
+  - id: check.logicguard.flowguard
+    owner: flowguard-suite
+    command: python
+    args: [scripts/run_flowguard_suite.py, --json, --no-write-receipt]
+  - id: check.logicguard.install
+    owner: consumer-install-assurance
+    command: python
+    args: [scripts/check_consumer_install_assurance.py, --json]
+  - id: check.logicguard.author
+    owner: author-contract-audit
+    command: python
+    args: [scripts/check_kb_skillguard.py, --source-only, --json]
+  - id: check.logicguard.alignment
+    owner: model-test-alignment
+    command: python
+    args: [scripts/check_kb_model_test_alignment.py, --json]
+  - id: check.logicguard.aggregate
+    owner: logicguard-native-readiness
     command: python
     args: [scripts/check_khaos_logicguard_native_readiness.py, --json]
-    timeout_seconds: 7200
-    required: true
-    covers:
-      - req.authority.exact-projection
-      - req.authority.argument-block
-      - req.authority.projection-only
-      - req.authority.atomic-publication
-      - req.authority.privacy
-      - req.maintenance.sleep-owner
-      - req.maintenance.mesh-consolidation
-      - req.maintenance.gap-review
-      - req.maintenance.dream-read-only
-      - req.maintenance.dream-convergence
-      - req.retrieval.current-index
-      - req.retrieval.neighborhood
-      - req.retrieval.ranking
-      - req.retrieval.desktop
-      - req.retrieval.performance
-      - req.migration.only-legacy-reader
-      - req.migration.complete-conservative
-      - req.migration.transactional
-      - req.migration.install
-      - req.assurance.flowguard
-      - req.assurance.alignment
-      - req.assurance.execution-owner
-      - req.assurance.resource-sensitive-lanes
-      - req.assurance.surface-parity
-      - req.assurance.release-gates
-    expected: {exit_code: 0}
 
-freshness:
-  watch:
-    - openspec/changes/make-khaos-brain-logicguard-native/proposal.md
-    - openspec/changes/make-khaos-brain-logicguard-native/design.md
-    - openspec/changes/make-khaos-brain-logicguard-native/tasks.md
-    - "openspec/changes/make-khaos-brain-logicguard-native/specs/**/*.md"
-    - openspec/changes/make-khaos-brain-logicguard-native/verification-contract.yaml
-    - "local_kb/**/*.py"
-    - "scripts/**/*.py"
-    - "tests/**/*.py"
-    - ".flowguard/**/*.py"
-    - ".flowguard/project.toml"
-    - ".agents/skills/**/SKILL.md"
-    - ".agents/skills/**/.skillguard/**/*.json"
-    - ".agents/skills/**/.skillguard/**/*.py"
-    - "templates/**/*.md"
-    - "templates/**/*.json"
-    - PROJECT_SPEC.md
-    - README.md
-    - AGENTS.md
-    - "docs/**/*.md"
-  exclude:
-    - "**/verification-report.json"
-    - "**/.skillguard/runs/**"
-    - "**/.flowguard/evidence/**"
-    - "**/run-artifacts/**"
-    - "**/run_artifacts/**"
-    - ".local/verification/**"
+claim_boundary: >
+  LogicGuard product assurance and author-side skill maintenance are distinct.
+  Publication and third-party compatibility remain outside this contract.

@@ -1077,8 +1077,6 @@ def _retired_proposal_owner(proposal: Mapping[str, Any]) -> str:
         return "kb-sleep"
     if any(marker in text for marker in ("dream", "experiment", "sandbox evidence")):
         return "kb-dream"
-    if any(marker in text for marker in ("install", "upgrade", "automation", "rollback", "update")):
-        return "khaos-brain-system-update"
     return "future-active-development-task"
 
 

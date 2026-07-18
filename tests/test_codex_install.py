@@ -20,24 +20,20 @@ from local_kb.install import (
     RETIRED_MAINTENANCE_SKILL_IDS,
     automation_rrule_for_spec,
     build_installation_check,
+    compact_upgrade_attempt_projection,
     global_agents_path,
     install_codex_integration,
     latest_upgrade_attempt,
+    _record_upgrade_attempt,
     _automation_spec_payload,
-    _check_repo_skillguard_current_sources,
     _freeze_flowguard_validation_toolchain,
     _freeze_logicguard_validation_toolchain,
-    _freeze_skillguard_validation_toolchain,
     _require_live_flowguard_matches_snapshot,
     _require_live_logicguard_matches_snapshot,
-    _require_live_skillguard_matches_snapshot,
     _restore_exact_file_snapshot,
     _run_pre_restore_upgrade_assurance,
-    _skillguard_compiler_path,
-    _refresh_and_verify_skillguard_global_router,
-    _verify_skillguard_global_router,
 )
-from local_kb.config import install_state_path
+from local_kb.config import INSTALL_STATE_SCHEMA, install_state_path, load_install_state
 from local_kb.transactional_install import tree_manifest
 from scripts.check_retired_kb_architect import build_report as build_architect_retirement_report
 
@@ -52,7 +48,6 @@ SURVIVING_SKILLS = {
 SURVIVING_AUTOMATIONS = {
     "kb-sleep",
     "kb-dream",
-    "khaos-brain-system-update",
     "kb-org-contribute",
     "kb-org-maintenance",
 }
@@ -86,17 +81,84 @@ class CodexInstallTests(unittest.TestCase):
         self._automation_runtime.start()
         self.addCleanup(self._automation_runtime.stop)
         self._update_state_migration = patch(
-            "local_kb.software_update.canonicalize_obsolete_update_state",
+            "local_kb.software_update.migrate_obsolete_update_state",
             return_value={
                 "ok": True,
                 "status": "fixture_skipped",
-                "retired_state_found": False,
-                "retired_schema_found": False,
+                "legacy_state_found": False,
+                "legacy_schema_found": False,
                 "residual_retired_state_count": 0,
             },
         )
         self._update_state_migration.start()
         self.addCleanup(self._update_state_migration.stop)
+
+    def test_upgrade_attempt_current_projection_is_bounded_and_event_backed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            attempt_id = "upgrade-bounded-projection"
+            huge_journal = "J" * 2_000_000
+            huge_checks = [{"check_id": "full", "stdout": "C" * 2_000_000}]
+            first = _record_upgrade_attempt(
+                codex_home,
+                attempt_id,
+                phase="aggregate_assurance_passed",
+                status="in_progress",
+                details={
+                    "history_migration": {
+                        "ok": True,
+                        "status": "committed",
+                        "migration_id": "migration-fixture",
+                        "journal": huge_journal,
+                    },
+                    "upgrade_assurance": {
+                        "ok": True,
+                        "status": "passed",
+                        "checks": huge_checks,
+                        "failed_checks": [],
+                    },
+                    "logicguard_validation_toolchain": {
+                        "ok": True,
+                        "status": "frozen",
+                        "snapshot_root": str(Path(tmp) / "logicguard"),
+                        "manifest": {
+                            "digest": "A" * 64,
+                            "file_count": 2,
+                            "files": [{"path": "large", "content": "M" * 2_000_000}],
+                        },
+                    },
+                },
+            )
+
+            current_path = Path(first["current_path"])
+            self.assertLess(current_path.stat().st_size, 100_000)
+            self.assertEqual(
+                first["projection_schema_version"],
+                "khaos-brain.upgrade-attempt-projection.v1",
+            )
+            self.assertNotIn("journal", first["history_migration"])
+            self.assertEqual(first["upgrade_assurance"]["check_count"], 1)
+            self.assertNotIn("checks", first["upgrade_assurance"])
+            self.assertNotIn(
+                "files",
+                first["logicguard_validation_toolchain"]["manifest"],
+            )
+            event_path = (
+                current_path.parent
+                / first["checkpoint_refs"][0]["relative_path"]
+            )
+            self.assertGreater(event_path.stat().st_size, 6_000_000)
+
+            compacted = compact_upgrade_attempt_projection(codex_home, attempt_id)
+            self.assertTrue(compacted["projection_compacted"])
+            self.assertEqual(compacted["projection_source_sequence"], 1)
+            self.assertEqual(compacted["status"], "in_progress")
+            self.assertEqual(compacted["phase"], "aggregate_assurance_passed")
+            self.assertEqual(len(compacted["checkpoint_refs"]), 2)
+            self.assertEqual(
+                latest_upgrade_attempt(codex_home)["receipt_hash"],
+                compacted["receipt_hash"],
+            )
 
     def test_update_state_rollback_restores_exact_bytes_or_prior_absence(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -140,42 +202,6 @@ class CodexInstallTests(unittest.TestCase):
         self.assertEqual("PAUSED", legacy_paused["status"])
         self.assertTrue(legacy_paused["user_paused"])
 
-    def test_architect_retirement_checks_only_the_active_codex_registry(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            codex_home = root / ".codex"
-            registry = root / "active-global-registry.json"
-            codex_home.mkdir(parents=True)
-            codex_home.joinpath("AGENTS.md").write_text(
-                f"- registry_path: {registry.as_posix()}\n",
-                encoding="utf-8",
-            )
-            registry.write_text(json.dumps({"skills": []}), encoding="utf-8")
-            unrelated_stale = root / "unrelated-old-registry.json"
-            unrelated_stale.write_text(
-                json.dumps({"skills": [{"skill_id": "kb-architect-pass"}]}),
-                encoding="utf-8",
-            )
-
-            clean = build_architect_retirement_report(codex_home)
-            registry.write_text(
-                json.dumps({"skills": [{"skill_id": "kb-architect-pass"}]}),
-                encoding="utf-8",
-            )
-            active_stale = build_architect_retirement_report(codex_home)
-
-        self.assertTrue(clean["ok"], clean)
-        clean_registry_check = {
-            item["id"]: item for item in clean["checks"]
-        }["global_registry_route_absent"]
-        self.assertEqual(clean_registry_check["details"], str(registry))
-        self.assertNotEqual(clean_registry_check["details"], str(unrelated_stale))
-        self.assertFalse(active_stale["ok"])
-        registry_check = {
-            item["id"]: item for item in active_stale["checks"]
-        }["global_registry_route_absent"]
-        self.assertFalse(registry_check["ok"])
-
     def test_real_upgrade_wrapper_keeps_pause_until_final_restore_transaction(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as tmp:
@@ -188,22 +214,12 @@ class CodexInstallTests(unittest.TestCase):
             for path, status in ((sleep, "ACTIVE"), (dream, "PAUSED"), (architect, "ACTIVE")):
                 path.parent.mkdir(parents=True)
                 path.write_text(f'status = "{status}"\n', encoding="utf-8")
-            router_result = {
-                "ok": True,
-                "refresh": {"decision": "pass", "registry_hash": "A" * 64},
-                "live_freshness": {"ok": True},
-                "surface_after_check": {"surface_hash": "B" * 64},
-            }
-
             with patch(
                 "local_kb.maintenance_migration.run_maintenance_migration",
                 return_value={"ok": True, "status": "committed", "migration_id": "fixture"},
             ), patch(
                 "local_kb.install.build_installation_check",
                 return_value={"ok": True, "issues": []},
-            ), patch(
-                "local_kb.install._refresh_and_verify_skillguard_global_router",
-                return_value=router_result,
             ):
                 payload = install_codex_integration(
                     repo_root,
@@ -230,20 +246,10 @@ class CodexInstallTests(unittest.TestCase):
             ]
             self.assertLess(
                 phases.index("final_install_transaction_committed"),
-                phases.index("final_router_current"),
+                phases.index("final_consumer_projection_current"),
             )
-            self.assertTrue(payload["global_router_live_freshness"]["ok"])
-            self.assertIn(
-                payload["skillguard_validation_toolchain"]["status"],
-                {
-                    "isolated_installed_current",
-                    "inherited_isolated_installation",
-                },
-            )
-            self.assertEqual(
-                payload["skillguard_validation_toolchain_cleanup"]["status"],
-                "removed",
-            )
+            self.assertNotIn("skillguard_validation_toolchain", payload)
+            self.assertNotIn("global_router_live_freshness", payload)
             self.assertIn(
                 payload["flowguard_validation_toolchain"]["status"],
                 {"frozen", "inherited_frozen"},
@@ -274,19 +280,6 @@ class CodexInstallTests(unittest.TestCase):
                 "migration_id": "fixture-final",
                 "logical_debt_reconciliation": {"pass_count": 1},
             }
-            router_result = {
-                "ok": True,
-                "refresh": {
-                    "decision": "pass",
-                    "registry_path": str(
-                        codex_home / ".skillguard/global-router/global_registry.json"
-                    ),
-                    "registry_hash": "A" * 64,
-                },
-                "live_freshness": {"ok": True},
-                "surface_after_check": {"surface_hash": "B" * 64},
-            }
-
             with patch(
                 "local_kb.maintenance_migration.run_maintenance_migration",
                 side_effect=[initial, final],
@@ -300,9 +293,6 @@ class CodexInstallTests(unittest.TestCase):
                     "metrics": {"useful_top3_rate": 1.0},
                     "threshold_results": {"active_index_current": True},
                 },
-            ), patch(
-                "local_kb.install._refresh_and_verify_skillguard_global_router",
-                return_value=router_result,
             ), patch(
                 "local_kb.install._run_pre_restore_upgrade_assurance",
                 return_value={"ok": True, "failed_checks": []},
@@ -355,25 +345,9 @@ class CodexInstallTests(unittest.TestCase):
                 "status": "paused_failed",
                 "issues": ["late observation debt kept changing"],
             }
-            router_result = {
-                "ok": True,
-                "refresh": {
-                    "decision": "pass",
-                    "registry_path": str(
-                        codex_home / ".skillguard/global-router/global_registry.json"
-                    ),
-                    "registry_hash": "A" * 64,
-                },
-                "live_freshness": {"ok": True},
-                "surface_after_check": {"surface_hash": "B" * 64},
-            }
-
             with patch(
                 "local_kb.maintenance_migration.run_maintenance_migration",
                 side_effect=[initial, failed, failed, failed, failed],
-            ), patch(
-                "local_kb.install._refresh_and_verify_skillguard_global_router",
-                return_value=router_result,
             ), patch(
                 "local_kb.install._run_pre_restore_upgrade_assurance",
                 return_value={"ok": True, "failed_checks": []},
@@ -439,20 +413,6 @@ class CodexInstallTests(unittest.TestCase):
             def fail_after_current_state(*_args: object, **_kwargs: object) -> dict:
                 self.assertIn('"status":"current"', update_state.read_text(encoding="utf-8"))
                 raise RuntimeError("fixture aggregate failure")
-            router_result = {
-                "ok": True,
-                "refresh": {
-                    "decision": "pass",
-                    "registry_path": str(
-                        codex_home
-                        / ".skillguard/global-router/global_registry.json"
-                    ),
-                    "registry_hash": "A" * 64,
-                },
-                "live_freshness": {"ok": True},
-                "surface_after_check": {"surface_hash": "B" * 64},
-            }
-
             with patch(
                 "local_kb.maintenance_migration.run_maintenance_migration",
                 return_value={
@@ -464,11 +424,8 @@ class CodexInstallTests(unittest.TestCase):
                 "local_kb.software_update.update_state_path",
                 return_value=update_state,
             ), patch(
-                "local_kb.software_update.canonicalize_obsolete_update_state",
+                "local_kb.software_update.migrate_obsolete_update_state",
                 side_effect=migrate_before_assurance,
-            ), patch(
-                "local_kb.install._refresh_and_verify_skillguard_global_router",
-                return_value=router_result,
             ), patch(
                 "local_kb.install._run_pre_restore_upgrade_assurance",
                 side_effect=fail_after_current_state,
@@ -493,7 +450,7 @@ class CodexInstallTests(unittest.TestCase):
             self.assertEqual(attempt["phase"], "failed_paused_recoverable")
             phases = [row["phase"] for row in attempt["checkpoint_refs"]]
             self.assertIn("paused_install_transaction_committed", phases)
-            self.assertIn("pre_assurance_router_current", phases)
+            self.assertIn("pre_assurance_consumer_projection_current", phases)
             for automation_id in SURVIVING_AUTOMATIONS:
                 self.assertEqual(
                     _automation_status(
@@ -501,68 +458,6 @@ class CodexInstallTests(unittest.TestCase):
                     ),
                     "PAUSED",
                 )
-
-    def test_router_refresh_retries_when_active_skillguard_surface_drifts(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            codex_home = Path(tmp) / ".codex"
-            codex_home.mkdir()
-            refresh = {
-                "decision": "pass",
-                "registry_path": str(
-                    codex_home / ".skillguard/global-router/global_registry.json"
-                ),
-            }
-            surfaces = [
-                {"surface_hash": "A" * 64},
-                {"surface_hash": "B" * 64},
-                {"surface_hash": "C" * 64},
-                {"surface_hash": "C" * 64},
-            ]
-            with patch(
-                "local_kb.install._refresh_skillguard_global_router",
-                return_value=refresh,
-            ) as refresh_mock, patch(
-                "local_kb.install._verify_skillguard_global_router",
-                return_value={"ok": True},
-            ), patch(
-                "local_kb.install._skillguard_router_surface",
-                side_effect=surfaces,
-            ):
-                result = _refresh_and_verify_skillguard_global_router(codex_home)
-
-            self.assertTrue(result["ok"])
-            self.assertEqual(result["attempt_number"], 2)
-            self.assertEqual(refresh_mock.call_count, 2)
-
-    def test_router_live_check_uses_canonical_registry_not_display_projection(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            codex_home = Path(tmp) / ".codex"
-            registry = (
-                codex_home
-                / ".skillguard/global-router/global_registry.json"
-            )
-            registry.parent.mkdir(parents=True)
-            registry.write_text("{}", encoding="utf-8")
-            seen: list[Path] = []
-
-            def checked(_home: Path, *, command: str, registry_path: Path) -> dict:
-                seen.append(registry_path)
-                return {"ok": True, "decision": "pass", "command": command}
-
-            with patch(
-                "local_kb.install._run_skillguard_router_check",
-                side_effect=checked,
-            ):
-                result = _verify_skillguard_global_router(
-                    codex_home,
-                    {
-                        "registry_path": "AppData/Local/Temp/redacted/.codex/.skillguard/global-router/global_registry.json",
-                        "registry_hash": "A" * 64,
-                    },
-                )
-
-            self.assertTrue(result["ok"])
-            self.assertEqual(seen, [registry.resolve(), registry.resolve()])
 
     def test_sleep_and_dream_prompts_are_automatic_and_convergent(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -586,171 +481,6 @@ class CodexInstallTests(unittest.TestCase):
                     persist_user_shell_path=False,
                     run_history_migration=False,
                 )
-
-    def test_source_validation_rejects_compiler_identity_change(self) -> None:
-        repo_root = Path(__file__).resolve().parents[1]
-        configured_validation_root = os.environ.get(
-            "KHAOS_BRAIN_SKILLGUARD_VALIDATION_ROOT", ""
-        ).strip()
-        source_skillguard = (
-            Path(configured_validation_root).resolve()
-            if configured_validation_root
-            else Path.home() / ".codex" / "skills" / "skillguard"
-        )
-        self.assertTrue(source_skillguard.is_dir())
-        with tempfile.TemporaryDirectory() as tmp:
-            codex_home = Path(tmp) / ".codex"
-            copied_skillguard = codex_home / "skills" / "skillguard"
-            shutil.copytree(source_skillguard, copied_skillguard)
-            compiler = copied_skillguard / "scripts" / "skillguard_compile.py"
-            real_run = subprocess.run
-            mutated = False
-
-            def run_and_mutate(*args, **kwargs):  # type: ignore[no-untyped-def]
-                nonlocal mutated
-                result = real_run(*args, **kwargs)
-                command = args[0] if args else kwargs.get("args", ())
-                if (
-                    not mutated
-                    and len(command) > 1
-                    and Path(command[1]).resolve() == compiler.resolve()
-                ):
-                    compiler.write_bytes(compiler.read_bytes() + b"\n")
-                    mutated = True
-                return result
-
-            manifest_digest = tree_manifest(copied_skillguard)["digest"]
-            with patch.dict(
-                os.environ,
-                {
-                    "KHAOS_BRAIN_SKILLGUARD_VALIDATION_ROOT": str(copied_skillguard),
-                    "KHAOS_BRAIN_SKILLGUARD_VALIDATION_DIGEST": str(
-                        manifest_digest
-                    ),
-                },
-            ), patch(
-                "local_kb.install.subprocess.run", side_effect=run_and_mutate
-            ):
-                with self.assertRaisesRegex(
-                    RuntimeError, "Validation identity changed during source validation"
-                ):
-                    _check_repo_skillguard_current_sources(repo_root, codex_home)
-            self.assertTrue(mutated)
-
-    def test_skillguard_validation_toolchain_is_a_stable_snapshot(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            codex_home = root / ".codex"
-            live = codex_home / "skills" / "skillguard"
-            scripts = live / "scripts"
-            scripts.mkdir(parents=True)
-            (scripts / "skillguard_compile.py").write_text(
-                "print('compiler')\n", encoding="utf-8"
-            )
-            (scripts / "skillguard.py").write_text(
-                """\
-import json
-from pathlib import Path
-import sys
-
-command = sys.argv[1]
-codex_home = Path(sys.argv[sys.argv.index('--codex-home') + 1])
-if command == 'capture-installation-receipt':
-    receipt_root = codex_home / 'skills' / 'skillguard' / '.sg-runtime' / 'installation'
-    (receipt_root / 'receipts').mkdir(parents=True, exist_ok=True)
-    (receipt_root / 'HEAD.json').write_text('{}\\n', encoding='utf-8')
-    (receipt_root / 'receipts' / 'fixture.json').write_text('{}\\n', encoding='utf-8')
-    print(json.dumps({'status': 'passed', 'receipt_id': 'fixture', 'receipt_hash': 'fixture-hash'}))
-elif command == 'verify-installation-receipt':
-    print(json.dumps({'status': 'passed'}))
-else:
-    raise SystemExit(2)
-""",
-                encoding="utf-8",
-            )
-            (scripts / "skillguard_install.py").write_text(
-                """\
-import argparse
-import json
-from pathlib import Path
-import shutil
-
-parser = argparse.ArgumentParser()
-parser.add_argument('--canonical-skill-root', required=True)
-parser.add_argument('--stage-root', required=True)
-parser.add_argument('--codex-home', required=True)
-parser.add_argument('--prepare', action='store_true')
-parser.add_argument('--activate', action='store_true')
-args = parser.parse_args()
-canonical = Path(args.canonical_skill_root)
-home = Path(args.codex_home)
-active = home / 'skills' / 'skillguard'
-active.parent.mkdir(parents=True, exist_ok=True)
-shutil.copytree(canonical, active)
-shutil.copytree(canonical.parent / 'skillguard-global-router', active.parent / 'skillguard-global-router')
-print(json.dumps({'status': 'passed', 'reports': [{'status': 'passed'}, {'status': 'passed', 'transaction_id': 'fixture-transaction'}]}))
-""",
-                encoding="utf-8",
-            )
-            router = codex_home / "skills" / "skillguard-global-router"
-            router.mkdir(parents=True)
-            (router / "SKILL.md").write_text("router\n", encoding="utf-8")
-            destination = (
-                root
-                / "receipts"
-                / "canonical-repository"
-                / ".agents"
-                / "skills"
-                / "skillguard"
-            )
-            with patch.dict(
-                os.environ,
-                {
-                    "KHAOS_BRAIN_SKILLGUARD_VALIDATION_ROOT": "",
-                    "KHAOS_BRAIN_SKILLGUARD_VALIDATION_DIGEST": "",
-                },
-            ):
-                receipt = _freeze_skillguard_validation_toolchain(
-                    codex_home, destination
-                )
-            self.assertEqual(receipt["status"], "isolated_installed_current")
-            self.assertEqual(
-                receipt["canonical_manifest"]["digest"],
-                tree_manifest(destination)["digest"],
-            )
-            self.assertEqual(
-                receipt["router_canonical_manifest"]["digest"],
-                tree_manifest(destination.parent / "skillguard-global-router")[
-                    "digest"
-                ],
-            )
-            installed = Path(receipt["snapshot_root"])
-            installed_router = Path(receipt["router_snapshot_root"])
-            self.assertEqual(
-                receipt["manifest"]["digest"], tree_manifest(installed)["digest"]
-            )
-            self.assertEqual(
-                receipt["router_manifest"]["digest"],
-                tree_manifest(installed_router)["digest"],
-            )
-            self.assertEqual(Path(receipt["validation_codex_home"]).name, ".codex")
-            self.assertEqual(receipt["installation_python_executable"], sys.executable)
-            self.assertTrue(
-                (installed / ".sg-runtime" / "installation" / "HEAD.json").is_file()
-            )
-            stored_receipt = json.loads(
-                Path(receipt["receipt_path"]).read_text(encoding="utf-8")
-            )
-            self.assertEqual(
-                stored_receipt["receipt_hash"], receipt["receipt_hash"]
-            )
-            shutil.rmtree(live)
-            shutil.rmtree(router)
-            self.assertTrue(
-                _skillguard_compiler_path(codex_home, installed).is_file()
-            )
-            with self.assertRaisesRegex(RuntimeError, "identity changed"):
-                _require_live_skillguard_matches_snapshot(receipt)
 
     def test_flowguard_validation_toolchain_is_a_stable_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -843,11 +573,6 @@ print(json.dumps({'status': 'passed', 'reports': [{'status': 'passed'}, {'status
                 result = _run_pre_restore_upgrade_assurance(
                     root,
                     root / ".codex",
-                    skillguard_validation_toolchain={
-                        "snapshot_root": str(root / "validation" / "skillguard"),
-                        "manifest": {"digest": "S" * 64},
-                        "installation_python_executable": "fixture-python",
-                    },
                     flowguard_validation_toolchain={
                         "snapshot_root": str(flowguard_root),
                         "manifest": {"digest": "F" * 64},
@@ -879,7 +604,7 @@ print(json.dumps({'status': 'passed', 'reports': [{'status': 'passed'}, {'status
                 environment[
                     "KHAOS_BRAIN_INSTALLATION_IDENTITY_PYTHON_EXECUTABLE"
                 ],
-                "fixture-python",
+                sys.executable,
             )
 
     def test_pre_restore_assurance_failure_reports_owner_terminal_details(self) -> None:
@@ -949,10 +674,6 @@ print(json.dumps({'status': 'passed', 'reports': [{'status': 'passed'}, {'status
                     _run_pre_restore_upgrade_assurance(
                         root,
                         root / ".codex",
-                        skillguard_validation_toolchain={
-                            "snapshot_root": str(root / "validation" / "skillguard"),
-                            "manifest": {"digest": "S" * 64},
-                        },
                         flowguard_validation_toolchain={
                             "snapshot_root": str(flowguard_root),
                             "manifest": {"digest": "F" * 64},
@@ -1023,10 +744,6 @@ print(json.dumps({'status': 'passed', 'reports': [{'status': 'passed'}, {'status
                 _run_pre_restore_upgrade_assurance(
                     root,
                     root / ".codex",
-                    skillguard_validation_toolchain={
-                        "snapshot_root": str(root / "validation" / "skillguard"),
-                        "manifest": {"digest": "S" * 64},
-                    },
                     flowguard_validation_toolchain={
                         "snapshot_root": str(flowguard_root),
                         "manifest": {"digest": "F" * 64},
@@ -1041,7 +758,7 @@ print(json.dumps({'status': 'passed', 'reports': [{'status': 'passed'}, {'status
             self.assertIn("req.fixture", message)
             self.assertIn("missing_test_evidence", message)
 
-    def test_install_is_transactional_current_and_retires_exact_architect(self) -> None:
+    def test_install_is_transactional_current_and_retires_exact_managed_surfaces(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1054,8 +771,18 @@ print(json.dumps({'status': 'passed', 'reports': [{'status': 'passed'}, {'status
             (codex_home / "skills/kb-architect-pass/SKILL.md").write_text("legacy", encoding="utf-8")
             (codex_home / "automations/kb-architect").mkdir(parents=True)
             (codex_home / "automations/kb-architect/automation.toml").write_text("id='legacy'", encoding="utf-8")
+            (codex_home / "automations/khaos-brain-system-update").mkdir(parents=True)
+            (codex_home / "automations/khaos-brain-system-update/automation.toml").write_text(
+                "id='retired-update'", encoding="utf-8"
+            )
             (codex_home / "skills/kb-architect-pass-personal").mkdir(parents=True)
             (codex_home / "skills/kb-architect-pass-personal/keep.txt").write_text("user", encoding="utf-8")
+            (codex_home / "automations/khaos-brain-system-update-personal").mkdir(
+                parents=True
+            )
+            (codex_home / "automations/khaos-brain-system-update-personal/keep.txt").write_text(
+                "user", encoding="utf-8"
+            )
 
             payload = install_codex_integration(
                 repo_root,
@@ -1067,12 +794,7 @@ print(json.dumps({'status': 'passed', 'reports': [{'status': 'passed'}, {'status
                 run_history_migration=False,
             )
 
-            validation_cleanup = payload[
-                "skillguard_validation_toolchain_cleanup"
-            ]
-            self.assertTrue(validation_cleanup["ok"])
-            self.assertEqual(validation_cleanup["status"], "removed")
-            self.assertFalse(Path(validation_cleanup["root"]).exists())
+            self.assertNotIn("skillguard_validation_toolchain", payload)
             self.assertEqual(set(payload["maintenance_skill_names"]), SURVIVING_SKILLS)
             self.assertEqual(set(payload["automation_ids"]), SURVIVING_AUTOMATIONS)
             self.assertEqual(set(MAINTENANCE_SKILL_NAMES), SURVIVING_SKILLS)
@@ -1081,52 +803,95 @@ print(json.dumps({'status': 'passed', 'reports': [{'status': 'passed'}, {'status
             self.assertEqual(tuple(payload["retired_automation_ids"]), RETIRED_AUTOMATION_IDS)
             self.assertFalse((codex_home / "skills/kb-architect-pass").exists())
             self.assertFalse((codex_home / "automations/kb-architect").exists())
+            self.assertFalse(
+                (codex_home / "automations/khaos-brain-system-update").exists()
+            )
             self.assertTrue((codex_home / "skills/kb-architect-pass-personal/keep.txt").exists())
+            self.assertTrue(
+                (
+                    codex_home
+                    / "automations/khaos-brain-system-update-personal/keep.txt"
+                ).exists()
+            )
+            for skill_id in SURVIVING_SKILLS:
+                installed = codex_home / "skills" / skill_id
+                self.assertFalse((installed / ".skillguard").exists())
+                for path in installed.rglob("*"):
+                    if path.is_file():
+                        text = path.read_text(encoding="utf-8", errors="replace").lower()
+                        self.assertNotIn("skillguard", text)
+                        self.assertNotIn(".skillguard", text)
+                        self.assertNotIn("skillguard.py", text)
+
+            persisted = load_install_state(codex_home)
+            self.assertEqual(persisted["schema_version"], INSTALL_STATE_SCHEMA)
+            self.assertEqual(set(persisted["automation_ids"]), SURVIVING_AUTOMATIONS)
+            for automation in persisted["automations"]:
+                self.assertIn("user_paused", automation)
+                self.assertIn("schedule_policy", automation)
+                self.assertIn("model_policy", automation)
+                self.assertIn("reasoning_effort_policy", automation)
+            update_skill = next(
+                item
+                for item in persisted["maintenance_skills"]
+                if item["name"] == "khaos-brain-update"
+            )
+            self.assertEqual(update_skill["automation_id"], "")
+            self.assertNotIn("skillguard_validation_toolchain", persisted)
+            self.assertNotIn("post_install_check", persisted)
+            self.assertLess(install_state_path(codex_home).stat().st_size, 1_000_000)
 
             transaction = payload["install_transaction"]
             self.assertTrue(transaction["ok"])
             self.assertTrue(transaction["receipt_hash"])
             self.assertTrue(Path(transaction["journal_path"]).exists())
             self.assertTrue(Path(transaction["backup_root"]).exists())
-            source_checks = {
-                row["skill_id"]: row for row in payload["skillguard_source_checks"]
-            }
-            self.assertEqual(set(source_checks), SURVIVING_SKILLS)
-            authority_receipts = transaction["skillguard_authority_receipts"]
-            self.assertEqual(set(authority_receipts), SURVIVING_SKILLS)
+            projection_receipts = transaction["consumer_projection_receipts"]
+            self.assertTrue(SURVIVING_SKILLS.issubset(projection_receipts))
             for skill in SURVIVING_SKILLS:
-                source_check = source_checks[skill]
-                self.assertEqual(source_check["status"], "current")
-                self.assertTrue(source_check["ok"])
-                self.assertRegex(source_check["compiler_sha256"], r"^[0-9a-f]{64}$")
-                self.assertRegex(source_check["generator_sha256"], r"^[0-9a-f]{64}$")
-                self.assertRegex(source_check["receipt_hash"], r"^[0-9a-f]{64}$")
-                authority = authority_receipts[skill]
                 self.assertEqual(
-                    authority["decision"], "validated-current-replaces-non-current"
+                    projection_receipts[skill]["policy_id"],
+                    "khaos-brain.clean-consumer-projection.v1",
                 )
-                self.assertFalse(authority["semantic_comparison_performed"])
-                self.assertEqual(
-                    authority["incoming_validation"]["receipt_hash"],
-                    source_check["receipt_hash"],
-                )
+                self.assertFalse(projection_receipts[skill]["author_control_present"])
             for skill in SURVIVING_SKILLS:
                 root_path = codex_home / "skills" / skill
                 self.assertTrue((root_path / "SKILL.md").exists())
-                self.assertTrue((root_path / ".skillguard/contract-source.json").exists())
-                self.assertTrue((root_path / ".skillguard/compiled-contract.json").exists())
-                self.assertTrue((root_path / ".skillguard/check-manifest.json").exists())
+                self.assertFalse((root_path / ".skillguard").exists())
             for automation in SURVIVING_AUTOMATIONS:
                 self.assertTrue((codex_home / "automations" / automation / "automation.toml").exists())
             self.assertTrue(global_agents_path(codex_home).exists())
 
+            # Codex may normalize the live automation document to its
+            # supported keys. Khaos-only metadata remains in the manifest.
+            for automation_id in SURVIVING_AUTOMATIONS:
+                automation_path = (
+                    codex_home / "automations" / automation_id / "automation.toml"
+                )
+                normalized_lines = [
+                    line
+                    for line in automation_path.read_text(encoding="utf-8").splitlines()
+                    if not line.startswith(
+                        (
+                            "user_paused = ",
+                            "schedule_policy = ",
+                            "schedule_window = ",
+                            "model_policy = ",
+                            "reasoning_effort_policy = ",
+                        )
+                    )
+                ]
+                automation_path.write_text(
+                    "\n".join(normalized_lines) + "\n",
+                    encoding="utf-8",
+                )
             check = build_installation_check(repo_root, codex_home)
             self.assertTrue(check["ok"], check["issues"])
             checklist = {item["id"]: item for item in check["checklist"]}
-            self.assertTrue(checklist["retired_architect_surfaces"]["ok"])
+            self.assertTrue(checklist["retired_managed_surfaces"]["ok"])
             self.assertTrue(checklist["transactional_install_receipt"]["ok"])
             self.assertTrue(checklist["repo_maintenance_skills"]["ok"])
-            self.assertTrue(checklist["khaos_brain_system_update_automation"]["ok"])
+            self.assertTrue(checklist["khaos_brain_system_update_retired"]["ok"])
 
     def test_reinstall_preserves_pause_state_for_every_surviving_automation(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
@@ -1144,20 +909,23 @@ print(json.dumps({'status': 'passed', 'reports': [{'status': 'passed'}, {'status
                 run_history_migration=False,
             )
             install_codex_integration(**kwargs)
-            for automation in ("kb-sleep", "kb-dream", "khaos-brain-system-update"):
+            for automation in SURVIVING_AUTOMATIONS:
                 path = codex_home / "automations" / automation / "automation.toml"
                 text = path.read_text(encoding="utf-8").replace('status = "ACTIVE"', 'status = "PAUSED"')
                 text = text.replace("user_paused = false", "user_paused = true")
                 path.write_text(text, encoding="utf-8")
 
             install_codex_integration(**kwargs)
-            self.assertEqual(_automation_status(codex_home / "automations/kb-sleep/automation.toml"), "PAUSED")
-            self.assertEqual(_automation_status(codex_home / "automations/kb-dream/automation.toml"), "PAUSED")
-            self.assertEqual(
-                _automation_status(codex_home / "automations/khaos-brain-system-update/automation.toml"),
-                "PAUSED",
+            for automation in SURVIVING_AUTOMATIONS:
+                self.assertEqual(
+                    _automation_status(
+                        codex_home / "automations" / automation / "automation.toml"
+                    ),
+                    "PAUSED",
+                )
+            self.assertFalse(
+                (codex_home / "automations/khaos-brain-system-update").exists()
             )
-            self.assertEqual(_automation_status(codex_home / "automations/kb-org-contribute/automation.toml"), "ACTIVE")
 
     def test_complete_tree_drift_fails_install_check(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
@@ -1174,11 +942,17 @@ print(json.dumps({'status': 'passed', 'reports': [{'status': 'passed'}, {'status
                 persist_user_shell_path=False,
                 run_history_migration=False,
             )
-            target = codex_home / "skills/kb-dream-pass/.skillguard/check-manifest.json"
+            target = codex_home / "skills/kb-dream-pass/SKILL.md"
             target.write_text(target.read_text(encoding="utf-8") + "\n", encoding="utf-8")
             check = build_installation_check(repo_root, codex_home)
             self.assertFalse(check["ok"])
-            self.assertTrue(any("complete tree differs" in item for item in check["issues"]))
+            self.assertTrue(
+                any(
+                    "differs from repository source" in item
+                    or "differs from the clean consumer projection" in item
+                    for item in check["issues"]
+                )
+            )
 
     def test_organization_automation_times_are_stable_and_windowed(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]

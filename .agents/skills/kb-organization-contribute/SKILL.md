@@ -57,33 +57,8 @@ Current user instructions still override repository files.
 
 Report the settings gate result, sync result, preflight entry ids, created/skipped proposal counts, content-hash duplicate decisions, card-bound Skill bundle ids and version hashes, import branch status, push or PR URL, postflight record path, and any errors.
 
-## SkillGuard completion boundary
+## Native completion boundary
 
-For a scheduled run, intake, planning, or proposal-only output is incomplete. Run `python scripts/run_kb_guarded_automation.py --skill kb-organization-contribute --json`; do not call the child entrypoint directly. The guarded runner invokes the native contribution owner once, writes an immutable run receipt, and requires the sole current enforced SkillGuard closure receipt for that exact run. A settings-gated no-op counts only when the native gate receipt proves its terminal. Positive and shallow fixtures remain target-owned checks; SkillGuard supervises their exact receipts without interpreting their domain meaning. Fixture or capability evidence cannot replace the concrete scheduled run. The installed SkillGuard builder—not caller-authored fields—binds the trigger, execution id, current installation receipt id/hash plus portable receipt-root reference, and installed runtime fingerprint. SkillGuard does not create a parallel contribution executor.
+For a scheduled run, intake, planning, or proposal-only output is incomplete. Run `python scripts/run_kb_automation.py --skill kb-organization-contribute --json`. The target-owned wrapper invokes the native contribution owner once and accepts only its immutable terminal receipt for that exact run. A settings-gated no-op counts only when the native gate receipt proves it terminal. Fixture or capability evidence cannot replace the concrete scheduled run.
 
-The current authority is `.skillguard/contract-source.json` plus its declared FlowGuard model. `.skillguard/compiled-contract.json` and `.skillguard/check-manifest.json` are generated projections. No former work contract, underscore manifest, flat run record, compatibility, conversion, renewal, retirement-receipt, alias, or fallback closure route may exist.
-
-<!-- BEGIN SKILLGUARD CONTRACT LAYER -->
-## Purpose
-Bind each kb run to the declared integration mode, evidence, blockers, residual_risk, and claim_boundary.
-## Entrypoint Scope
-Covers kb-organization-contribute plus explicitly routed local materials; no unrelated repos, private files, external services, publication, or release claims unless requested and routed.
-## Local Material Routing
-Use workspace, skill directory, user files, or configured project paths; keep private machine paths local and public instructions portable.
-## Entrypoint Acceptance Map
-Use SkillGuard as the runtime contract executor attached to the native route/check owner: Predictive KB launcher, local KB records, and KB maintenance workflow. It enforces contract gates through that native owner before progress or closure; duplicate SkillGuard-owned execution paths are invalid. Declared gates/routes: recall or maintenance, evidence update, validation, closure.
-## Use When
-Use when the request matches kb-organization-contribute and needs this governed workflow, materials, checks, or handoff behavior.
-## Do Not Use When
-Do not use outside the domain, without required materials, when a more specific skill owns the work, or for tiny direct answers.
-## Required Workflow
-Select the target-owned native route/check surface, run the SkillGuard contract gates around the native workflow, collect evidence, run checks, fix failures, then report.
-## Hard Gates
-Do not skip phases, do not replace required evidence with prose, do not treat stale reports as current, do not weaken validation to pass, and do not claim completion when blockers remain.
-## Output Requirements
-Report evidence, failures, blockers, skipped_checks with reasons, residual_risk, and claim_boundary; distinguish checked, unchecked, blocked, and uncertain.
-If the native owner or any validation child times out, the run is incomplete until the guarded launcher terminates the complete owned process tree, confirms zero remaining descendants, and records that cleanup under the ordered native-to-scheduled-to-aggregate timeout budget.
-
-## SkillGuard Maintenance
-Keep `.skillguard` contract sources and native bindings current. Reuse a current receipt when its execution identity and precise inputs still match; after an entrypoint, route, evidence, or closure change, run only the affected SkillGuard checks. Run full or release validation only for a stable integration snapshot or an explicit release.
-<!-- END SKILLGUARD CONTRACT LAYER -->
+Ordinary use is self-contained and does not read an author-maintenance contract, external receipt, router, or installed maintenance tool. Author-side checks may validate contribution behavior before distribution but never participate in a scheduled contribution run.

@@ -1,9 +1,9 @@
 """FlowGuard route/obligation binding for the Khaos Brain update Skill.
 
 The parent convergence model owns executable update state and side effects.
-This child owns only the target Skill's two-route topology: authorization emits
-a non-terminal declared-check receipt and no closure; legal no-op completion or
-composed finalization emits the sole ``enforced`` closure before native restore.
+This child owns the target Skill's explicit-manual topology: an authorized run
+must proceed through update, validation, exact restoration, final installed
+health, CURRENT state, and cleanup before its own terminal can succeed.
 """
 
 from __future__ import annotations
@@ -26,9 +26,9 @@ FLOWGUARD_MODEL_MARKER = "flowguard-executable-model"
 def export_contract_model():
     return build_contract_model(
         "khaos-brain-update",
-        "Keep all retained automations paused while target-owned update checks are "
-        "reconciled; stage exact restoration, obtain the sole enforced closure, "
-        "then let the native updater apply, read back, install-check, and mark CURRENT.",
+        "Require an explicit current-conversation request, keep all four retained automations paused during mutation, "
+        "then let the native updater apply the exact captured state, read it back, run the final installed-health check, "
+        "mark CURRENT, clean its snapshot, and emit its own terminal receipt.",
     )
 
 

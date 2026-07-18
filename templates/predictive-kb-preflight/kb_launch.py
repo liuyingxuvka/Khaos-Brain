@@ -12,6 +12,7 @@ from typing import Any
 
 KB_ROOT_ENV_VAR = "CODEX_PREDICTIVE_KB_ROOT"
 INSTALL_STATE_SUBPATH = Path("predictive-kb") / "install.json"
+INSTALL_STATE_SCHEMA = "khaos-brain.install-state.v3"
 REPO_MARKERS = (
     Path("AGENTS.md"),
     Path("PROJECT_SPEC.md"),
@@ -63,7 +64,11 @@ def load_install_state() -> dict[str, Any]:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
-    return payload if isinstance(payload, dict) else {}
+    if not isinstance(payload, dict):
+        return {}
+    if payload.get("schema_version") != INSTALL_STATE_SCHEMA:
+        return {}
+    return payload
 
 
 def is_repo_root(path: Path) -> bool:

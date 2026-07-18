@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SkillGuard check for one immutable scheduled automation native receipt."""
+"""Validate one target-owned immutable scheduled-or-manual native receipt."""
 
 from __future__ import annotations
 
@@ -19,7 +19,6 @@ from local_kb.automation_runtime import (  # noqa: E402
     build_native_receipt,
     build_fixture_payload,
     validate_native_receipt,
-    validate_update_finalization_receipt,
 )
 
 
@@ -71,45 +70,9 @@ def main() -> int:
     parser.add_argument("--phase", choices=("intake", "execute", "verify", "all"), default="all")
     parser.add_argument("--receipt", type=Path)
     parser.add_argument("--fixture", choices=("positive", "shallow"))
-    parser.add_argument(
-        "--finalization",
-        action="store_true",
-        help="Validate the post-restoration system-update receipt bound to the native run.",
-    )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
-    if args.finalization:
-        if args.skill != "khaos-brain-update" or args.fixture:
-            report = {
-                "ok": False,
-                "issues": ["finalization-mode-is-update-only-and-cannot-use-a-native-fixture"],
-            }
-        else:
-            raw_path = os.environ.get("KHAOS_BRAIN_UPDATE_FINALIZATION_RECEIPT", "")
-            expected_run_id = os.environ.get("KHAOS_BRAIN_AUTOMATION_RUN_ID", "")
-            expected_native_hash = os.environ.get(
-                "KHAOS_BRAIN_AUTOMATION_RECEIPT_HASH", ""
-            )
-            expected_finalization_hash = os.environ.get(
-                "KHAOS_BRAIN_UPDATE_FINALIZATION_RECEIPT_HASH", ""
-            )
-            report = (
-                validate_update_finalization_receipt(
-                    Path(raw_path),
-                    expected_run_id=expected_run_id,
-                    expected_native_receipt_hash=expected_native_hash,
-                    expected_receipt_hash=expected_finalization_hash,
-                )
-                if raw_path
-                and expected_run_id
-                and expected_native_hash
-                and expected_finalization_hash
-                else {
-                    "ok": False,
-                    "issues": ["finalization-receipt-or-exact-run-binding-missing"],
-                }
-            )
-    elif args.fixture:
+    if args.fixture:
         report = _fixture_report(args.skill, args.fixture, args.phase)
     else:
         raw_path = str(args.receipt or os.environ.get("KHAOS_BRAIN_AUTOMATION_RECEIPT", ""))

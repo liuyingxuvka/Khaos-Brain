@@ -31,18 +31,15 @@ FORBIDDEN_BY_FILE: dict[str, tuple[str, ...]] = {
     "local_kb/org_maintenance.py": ("kb/trusted", "kb/candidates", "legacy_compatibility"),
     "local_kb/org_automation.py": ("kb/trusted", "kb/candidates", "legacy_compatibility"),
     "local_kb/org_checks.py": ("kb/trusted", "kb/candidates", "legacy_compatibility"),
-    "scripts/run_kb_guarded_automation.py": (
-        "recovered_update_identity_failure",
-        "canonicalize_obsolete_update_state",
+    "scripts/run_kb_automation.py": (
+        "SkillGuard",
+        ".skillguard",
+        "skillguard.py",
     ),
-    "scripts/check_kb_skillguard.py": (
-        'surface_kind.startswith("installed")',
-    ),
-    "scripts/run_installed_skillguard_supervision.py": (
-        "skillguard_compile",
-        "compile_skill_contract",
-        "compiled_contract=None",
-        "verified_installation_context=None",
+    "scripts/run_khaos_brain_manual_update.py": (
+        "awaiting-skillguard",
+        "final_skillguard",
+        "staged-restoration-authorization",
     ),
     "templates/predictive-kb-preflight/kb_launch.py": ("--path-hint", "implicit_search"),
     ".agents/skills/local-kb-retrieve/scripts/kb_search.py": ("--path-hint",),
@@ -113,7 +110,7 @@ REQUIRED_BY_FILE: dict[str, tuple[str, ...]] = {
         "Dream authority generation changed during the pinned simulation run",
     ),
     "local_kb/install.py": (
-        "canonicalize_obsolete_update_state",
+        "migrate_obsolete_update_state",
         "resolve_automation_runtime",
     ),
     "local_kb/org_sources.py": (
@@ -176,36 +173,18 @@ REQUIRED_BY_FILE: dict[str, tuple[str, ...]] = {
         "UPDATE_STATE_REQUIRED_FIELDS",
         "UPDATE_STATE_ALLOWED_FIELDS",
         "Update state is not current:",
-        "retired_schema_found",
+        "legacy_schema_found",
     ),
-    "scripts/run_installed_skillguard_supervision.py": (
-        "CURRENT_COMPILED_CONTRACT_PATH",
-        "CURRENT_CHECK_MANIFEST_PATH",
-        "_materialize_installed_control_projection",
-        '"source_kind": "exact-installed-current-bytes"',
-        '"projection_scope": "repository-local-content-addressed"',
-        "_materialize_skillguard_runtime_projection",
-        '"source_kind": "frozen-current-runtime-without-runtime-state"',
-        '"projection_scope": "repository-local-content-addressed"',
-        '"skillguard-global-router"',
-        '".sg-runtime" in relative.parts',
-        '"__pycache__" in relative.parts',
-        "installed_authority",
-        "projection_authority",
-        "load_verified_installation_context",
-        "self.compiled = _load_object(",
-        "self.manifest = _load_object(",
-        "compiled_contract=self.compiled",
-        "check_manifest=self.manifest",
-        "guard_runtime_identity=self.guard_runtime_identity",
-        "verified_installation_context=self.verified_context",
-        "_supervision_dynamic_environment",
-        "dynamic_environment=dynamic_environment",
+    "scripts/run_kb_automation.py": (
+        "run_automation",
+        "build_native_receipt",
+        "validate_native_receipt",
     ),
-    "scripts/check_kb_skillguard.py": (
-        "_supervision_target_authority",
-        'target_authority == "installed"',
-        "must be exactly one current managed root",
+    "scripts/run_khaos_brain_manual_update.py": (
+        "run_manual_update",
+        "apply_repo_automation_restoration_plan",
+        "build_installation_check",
+        '"status": "current-and-restored"',
     ),
     "scripts/check_kb_automation_skillguard_depth.py": (
         "validate_completion_surface(",
@@ -221,11 +200,20 @@ def _digest(rows: list[dict[str, Any]]) -> str:
     return hashlib.sha256(body).hexdigest()
 
 
-def check_current_runtime_only(repo_root: Path = REPO_ROOT) -> dict[str, Any]:
+def check_current_runtime_only(
+    repo_root: Path = REPO_ROOT, *, consumer_install: bool = False
+) -> dict[str, Any]:
     root = Path(repo_root)
     issues: list[str] = []
     rows: list[dict[str, Any]] = []
-    for relative in sorted(set(FORBIDDEN_BY_FILE) | set(REQUIRED_BY_FILE)):
+    governed_paths = sorted(set(FORBIDDEN_BY_FILE) | set(REQUIRED_BY_FILE))
+    if consumer_install:
+        governed_paths = [
+            relative
+            for relative in governed_paths
+            if "skillguard" not in relative.lower()
+        ]
+    for relative in governed_paths:
         path = root / relative
         if not path.is_file():
             issues.append(f"missing-governed-file:{relative}")
@@ -248,12 +236,12 @@ def check_current_runtime_only(repo_root: Path = REPO_ROOT) -> dict[str, Any]:
 
     production_refs: list[str] = []
     for path in sorted((root / "local_kb").rglob("*.py")):
-        if "canonicalize_obsolete_update_state" in path.read_text(encoding="utf-8"):
+        if "migrate_obsolete_update_state" in path.read_text(encoding="utf-8"):
             production_refs.append(path.relative_to(root).as_posix())
     for path in sorted((root / "scripts").rglob("*.py")):
         if path.name == Path(__file__).name:
             continue
-        if "canonicalize_obsolete_update_state" in path.read_text(encoding="utf-8"):
+        if "migrate_obsolete_update_state" in path.read_text(encoding="utf-8"):
             production_refs.append(path.relative_to(root).as_posix())
     expected_refs = ["local_kb/install.py", "local_kb/software_update.py"]
     if production_refs != expected_refs:
@@ -278,6 +266,7 @@ def check_current_runtime_only(repo_root: Path = REPO_ROOT) -> dict[str, Any]:
     return {
         "ok": not issues,
         "policy_id": "chaos-brain.current-runtime-only.v1",
+        "consumer_install": consumer_install,
         "governed_file_count": len(rows),
         "governed_digest": _digest(rows),
         "obsolete_update_state_migrator_refs": production_refs,
@@ -295,8 +284,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", default=str(REPO_ROOT))
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--consumer-install", action="store_true")
     args = parser.parse_args()
-    report = check_current_runtime_only(Path(args.repo_root))
+    report = check_current_runtime_only(
+        Path(args.repo_root), consumer_install=args.consumer_install
+    )
     if args.json:
         print(json.dumps(report, ensure_ascii=True, sort_keys=True))
     else:

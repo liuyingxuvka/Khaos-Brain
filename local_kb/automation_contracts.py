@@ -1,9 +1,10 @@
-"""Target-specific completion contracts for Chaos Brain automations.
+"""Target-specific completion contracts for Chaos Brain maintenance Skills.
 
-The scheduled prompt selects the native Skill; it is not itself completion
-evidence.  These records bind each surviving automation to the important
-target-owned obligations, production entrypoint, native regression evidence,
-and fail-closed SkillGuard depth profile used by release assurance.
+Four scheduled prompts select their native Skills; the update Skill is selected
+only by an explicit user request in the current conversation. Neither entry
+surface is completion evidence. These records bind each route to its
+target-owned obligations, native entrypoint, regression evidence, and
+fail-closed SkillGuard depth profile used by release assurance.
 """
 
 from __future__ import annotations
@@ -16,14 +17,11 @@ from typing import Any, Mapping
 
 STANDARD_NATIVE_TIMEOUT_SECONDS = 900
 UPDATE_NATIVE_TIMEOUT_SECONDS = 10800
-STANDARD_SCHEDULED_PRODUCTION_TIMEOUT_SECONDS = 1200
-UPDATE_SCHEDULED_PRODUCTION_TIMEOUT_SECONDS = 11100
-AGGREGATE_SKILLGUARD_TIMEOUT_SECONDS = 16200
+STANDARD_OWNER_TIMEOUT_SECONDS = 1200
+UPDATE_OWNER_TIMEOUT_SECONDS = 11100
+AGGREGATE_ASSURANCE_TIMEOUT_SECONDS = 16200
 PRE_RESTORE_ASSURANCE_TIMEOUT_SECONDS = 16800
 
-
-SKILLGUARD_COMPLETION_MARKER = "enforced SkillGuard closure receipt"
-SKILLGUARD_PARTIAL_MARKER = "intake, planning, or proposal-only output is incomplete"
 
 # One target-neutral policy surface is shared by contract generation, upgrade
 # cross-surface parity checks, and runtime assurance. Keeping these values here
@@ -65,6 +63,7 @@ def _obligation(
 AUTOMATION_COMPLETION_CONTRACTS: dict[str, dict[str, Any]] = {
     "kb-sleep-maintenance": {
         "automation_id": "kb-sleep",
+        "execution_kind": "scheduled-automation",
         "entrypoint_path": ".agents/skills/local-kb-retrieve/scripts/kb_sleep.py",
         "native_test_files": [
             "tests/test_kb_lifecycle.py",
@@ -74,7 +73,6 @@ AUTOMATION_COMPLETION_CONTRACTS: dict[str, dict[str, Any]] = {
             "tests/test_khaos_model_projection.py",
             "tests/test_khaos_sleep_model_maintenance.py",
             "tests/test_maintenance_lanes.py",
-            "tests/test_process_control.py",
         ],
         "prompt_markers": [
             "committed increment",
@@ -100,17 +98,16 @@ AUTOMATION_COMPLETION_CONTRACTS: dict[str, dict[str, Any]] = {
             _obligation("atomic-model-generation", "verify", "closure", "Publish the complete model, mesh, deterministic projection, active index, generation manifest, and pointer as one rollbackable generation with the pointer last.", "test_empty_library_publishes_a_valid_zero_model_generation", "test_failed_index_publication_restores_prior_generation_and_projection", "test_projection_is_deterministic_and_exactly_validated"),
             _obligation("index-watermark-commit", "verify", "closure", "Publish a validated active index and advance the watermark only after durable success.", "test_second_sleep_is_bounded_noop_without_duplicate_events", "test_active_index_excludes_terminal_states_and_serializes_dates"),
             _obligation("failure-fail-closed", "verify", "recovery", "Keep the watermark unchanged and report failure on any blocker.", "test_failed_history_parse_does_not_advance_watermark"),
-            _obligation("timeout-tree-cleanup", "verify", "recovery", "On timeout terminate the complete owned process tree, prove zero descendants, and preserve parent cleanup margin.", "test_timeout_terminates_the_complete_descendant_tree", "test_timeout_hierarchy_preserves_cleanup_margin"),
-            _obligation("depth-calibration", "verify", "validation", "Reject shallow proposal-only completion and require the full native receipt.", "test_all_automation_contracts_are_deep_and_current", "test_shallow_automation_contract_is_rejected"),
+            _obligation("depth-calibration", "verify", "validation", "Reject shallow proposal-only completion and require the full native receipt.", "test_sleep_contract_is_deep_and_current", "test_sleep_shallow_contract_is_rejected"),
         ],
     },
     "kb-dream-pass": {
         "automation_id": "kb-dream",
+        "execution_kind": "scheduled-automation",
         "entrypoint_path": ".agents/skills/local-kb-retrieve/scripts/kb_dream.py",
         "native_test_files": [
             "tests/test_kb_dream.py",
             "tests/test_khaos_logicguard_models.py",
-            "tests/test_process_control.py",
         ],
         "prompt_markers": [
             "stable fingerprints",
@@ -135,12 +132,12 @@ AUTOMATION_COMPLETION_CONTRACTS: dict[str, dict[str, Any]] = {
             _obligation("no-direct-knowledge-write", "verify", "scope", "Never mutate cards, candidates, confidence, or central predictive history directly.", "test_dream_run_records_history_only_for_taxonomy_gap"),
             _obligation("canonical-generation-unchanged", "verify", "scope", "Prove that Dream did not advance or rewrite canonical model or mesh authority and hand only typed model-gap findings to Sleep.", "test_dream_simulation_is_exact_and_does_not_advance_mesh", "test_dream_hands_single_adjacent_observation_to_sleep"),
             _obligation("terminal-receipt", "verify", "closure", "Return a bounded no-op, handoff, or failure receipt rather than partial progress.", "test_dream_selects_multiple_valuable_experiments_in_plan_order"),
-            _obligation("timeout-tree-cleanup", "verify", "recovery", "On timeout terminate the complete owned process tree, prove zero descendants, and preserve parent cleanup margin.", "test_timeout_terminates_the_complete_descendant_tree", "test_timeout_hierarchy_preserves_cleanup_margin"),
-            _obligation("depth-calibration", "verify", "validation", "Reject shallow selection-only completion and require the full native receipt.", "test_all_automation_contracts_are_deep_and_current", "test_shallow_automation_contract_is_rejected"),
+            _obligation("depth-calibration", "verify", "validation", "Reject shallow selection-only completion and require the full native receipt.", "test_dream_contract_is_deep_and_current", "test_dream_shallow_contract_is_rejected"),
         ],
     },
     "kb-organization-contribute": {
         "automation_id": "kb-org-contribute",
+        "execution_kind": "scheduled-automation",
         "entrypoint_path": "scripts/kb_org_outbox.py",
         "native_test_files": [
             "tests/test_org_automation.py",
@@ -149,7 +146,6 @@ AUTOMATION_COMPLETION_CONTRACTS: dict[str, dict[str, Any]] = {
             "tests/test_e2e_skill_bundle_contribution_flow.py",
             "tests/test_github_repo_config.py",
             "tests/test_org_checks.py",
-            "tests/test_process_control.py",
         ],
         "prompt_markers": [
             "successful no-op",
@@ -169,12 +165,12 @@ AUTOMATION_COMPLETION_CONTRACTS: dict[str, dict[str, Any]] = {
             _obligation("branch-pr-auto-merge", "execute", "side_effect", "Use the import branch, push/PR path, and auto-merge label only when checks allow.", "test_contribution_pr_and_label_are_check_gated", "test_create_pull_request_posts_pr_then_labels"),
             _obligation("postflight-terminal", "verify", "closure", "Record postflight and return a complete created/skipped/error receipt.", "test_contribution_records_postflight_on_non_skipped_success"),
             _obligation("lane-failure-recovery", "verify", "recovery", "Close the lane correctly and surface errors without partial success claims.", "test_contribution_sync_failure_releases_lane_and_returns_failed_terminal"),
-            _obligation("timeout-tree-cleanup", "verify", "recovery", "On timeout terminate the complete owned process tree, prove zero descendants, and preserve parent cleanup margin.", "test_timeout_terminates_the_complete_descendant_tree", "test_timeout_hierarchy_preserves_cleanup_margin"),
-            _obligation("depth-calibration", "verify", "validation", "Reject shallow outbox-only completion and require the full native receipt.", "test_all_automation_contracts_are_deep_and_current", "test_shallow_automation_contract_is_rejected"),
+            _obligation("depth-calibration", "verify", "validation", "Reject shallow outbox-only completion and require the full native receipt.", "test_org_contribute_contract_is_deep_and_current", "test_org_contribute_shallow_contract_is_rejected"),
         ],
     },
     "kb-organization-maintenance": {
         "automation_id": "kb-org-maintenance",
+        "execution_kind": "scheduled-automation",
         "entrypoint_path": "scripts/kb_org_maintainer.py",
         "native_test_files": [
             "tests/test_org_automation.py",
@@ -183,7 +179,6 @@ AUTOMATION_COMPLETION_CONTRACTS: dict[str, dict[str, Any]] = {
             "tests/test_skill_sharing.py",
             "tests/test_org_checks.py",
             "tests/test_github_repo_config.py",
-            "tests/test_process_control.py",
         ],
         "prompt_markers": [
             "successful no-op",
@@ -205,13 +200,13 @@ AUTOMATION_COMPLETION_CONTRACTS: dict[str, dict[str, Any]] = {
             _obligation("exact-selected-apply", "execute", "side_effect", "Apply only exact selected action ids and preserve local adoption authority.", "test_maintenance_applies_exact_selected_ids"),
             _obligation("postapply-merge-readiness", "verify", "validation", "Run post-apply organization checks and use their decision to gate the GitHub label.", "tests/test_org_maintenance.py::OrganizationMaintenanceTests::test_maintenance_postapply_readiness_controls_pr_and_label"),
             _obligation("postflight-terminal", "verify", "closure", "Record a complete no-op, applied, blocked, or failure receipt.", "test_maintenance_records_postflight_on_non_skipped_success"),
-            _obligation("timeout-tree-cleanup", "verify", "recovery", "On timeout terminate the complete owned process tree, prove zero descendants, and preserve parent cleanup margin.", "test_timeout_terminates_the_complete_descendant_tree", "test_timeout_hierarchy_preserves_cleanup_margin"),
-            _obligation("depth-calibration", "verify", "recovery", "Reject inspection-only completion and require the full native receipt.", "test_all_automation_contracts_are_deep_and_current", "test_shallow_automation_contract_is_rejected"),
+            _obligation("depth-calibration", "verify", "recovery", "Reject inspection-only completion and require the full native receipt.", "test_org_maintenance_contract_is_deep_and_current", "test_org_maintenance_shallow_contract_is_rejected"),
         ],
     },
     "khaos-brain-update": {
-        "automation_id": "khaos-brain-system-update",
-        "entrypoint_path": "scripts/run_khaos_brain_system_update.py",
+        "automation_id": "",
+        "execution_kind": "explicit-user-request",
+        "entrypoint_path": "scripts/run_khaos_brain_manual_update.py",
         "native_test_files": [
             "tests/test_software_update.py",
             "tests/test_kb_automation_native_receipts.py",
@@ -219,47 +214,32 @@ AUTOMATION_COMPLETION_CONTRACTS: dict[str, dict[str, Any]] = {
             "tests/test_khaos_logicguard_migration.py",
             "tests/test_kb_upgrade_migration.py",
             "tests/test_kb_automation_activation.py",
-            "tests/test_process_control.py",
         ],
         "prompt_markers": [
             "successful terminal no-op",
-            "explicitly prepared update",
+            "explicit user request in the current conversation",
+            "no scheduled automation",
+            "no persisted authorization",
             "Git fast-forward only",
             "transactional installer",
             "versioned maintenance migration",
             "direct-to-current LogicGuard authority",
             "zero retired authority residuals",
-            "every hard gate passes",
+            "every target-owned hard gate passes",
             "keep surviving automations paused",
         ],
         "obligations": [
-            _obligation("authorization-system-check", "intake", "input", "Require an explicit prepared update and a safe system-check result.", "test_system_check_marks_upgrading_when_prepared_and_ui_closed", "test_system_check_waits_when_ui_is_running", "test_all_legal_update_noops_perform_only_system_gate", "test_native_update_runner_keeps_operational_blockers_unfinished"),
-            _obligation("preserve-state-rollback", "intake", "recovery", "Snapshot local knowledge, settings, automation state, and rollback authority.", "test_update_snapshot_is_not_reused_for_a_different_target_revision", "test_update_guarded_runner_preserves_status_and_user_pause_independently"),
-            _obligation("fast-forward-only", "execute", "scope", "Update only through the authorized Git fast-forward path.", "test_prepared_update_uses_only_ff_only_and_waits_for_skillguard_before_current"),
+            _obligation("authorization-system-check", "intake", "input", "Require an explicit user request in the current invocation and a safe manual check result before mutation.", "test_manual_check_without_explicit_request_does_not_mutate_or_probe", "test_manual_check_marks_upgrading_only_with_explicit_request_and_closed_ui", "test_all_legal_update_noops_perform_only_manual_gate", "test_native_update_runner_keeps_operational_blockers_unfinished"),
+            _obligation("preserve-state-rollback", "intake", "recovery", "Snapshot local knowledge, settings, automation state, and rollback authority.", "test_update_snapshot_is_not_reused_for_a_different_target_revision", "test_manual_update_restores_status_and_user_pause_independently"),
+            _obligation("fast-forward-only", "execute", "scope", "Update only through the authorized Git fast-forward path.", "test_manual_update_uses_ff_only_and_closes_natively"),
             _obligation("migration-debt-settlement", "execute", "workflow", "Run the versioned resumable history and maintenance-debt migration.", "test_repeat_upgrade_converges_and_keeps_similarly_named_user_assets"),
             _obligation("logicguard-authority-cutover", "execute", "workflow", "Use the versioned upgrade owner to convert every valid legacy card directly into current LogicGuard models, scoped meshes, deterministic projections, the exact active index, and the generation pointer with no normal-runtime legacy reader.", "test_direct_migration_publishes_scoped_exact_authority_and_zero_legacy_semantics", "test_second_run_is_an_exact_no_delta"),
-            _obligation("transaction-retirement", "execute", "side_effect", "Install complete trees transactionally and retire exact Architect surfaces.", "test_install_is_transactional_current_and_retires_exact_architect"),
-            _obligation("zero-retired-authority", "verify", "validation", "Reject activation when legacy semantic authority, an incomplete exact binding, or any incompatible residual survives; migration failure restores the complete pre-upgrade surface.", "test_failures_after_each_publication_boundary_restore_the_pre_migration_surface", "test_malformed_legacy_card_blocks_before_any_authority_write", "test_incomplete_current_authority_is_rejected_before_activation"),
-            _obligation("aggregate-hard-gates", "verify", "validation", "Require current migration, parity, FlowGuard, SkillGuard, retrieval, and regression evidence before restoration is authorized.", "test_prepared_update_uses_only_ff_only_and_waits_for_skillguard_before_current", "test_update_skillguard_failure_keeps_survivors_paused_and_marks_failed"),
-            _obligation("restore-or-stay-paused", "verify", "branch", "Authorize restoration only after the native hard gates pass; until then, and on authorization failure, every survivor remains paused.", "test_prepared_update_uses_only_ff_only_and_waits_for_skillguard_before_current", "test_update_skillguard_failure_keeps_survivors_paused_and_marks_failed"),
-            _obligation("final-machine-receipt", "verify", "closure", "End the native route at awaiting-skillguard without marking CURRENT; only no-update, waiting-for-user, and ui-running may be successful native no-op terminals.", "test_prepared_update_uses_only_ff_only_and_waits_for_skillguard_before_current", "test_all_legal_update_noops_perform_only_system_gate", "test_update_operational_blockers_cannot_close_as_successful_noops", "test_native_update_runner_keeps_operational_blockers_unfinished"),
-            _obligation("timeout-tree-cleanup", "verify", "recovery", "On timeout terminate the complete owned process tree, prove zero descendants, and preserve parent cleanup margin.", "test_timeout_terminates_the_complete_descendant_tree", "test_timeout_hierarchy_preserves_cleanup_margin"),
-            _obligation(
-                "staged-restoration-authorization",
-                "finalize",
-                "closure",
-                "Consume an immutable staged-restoration authorization receipt binding the snapshot statuses and user-pause bits, every planned automation.toml hash, the native receipt, the non-terminal declared-check authorization receipt, and the deferred installation check before any live restoration.",
-                "test_update_guarded_runner_restores_only_after_skillguard_closure",
-                "test_update_guarded_runner_preserves_status_and_user_pause_independently",
-                "test_update_final_skillguard_failure_repauses_every_survivor_and_marks_failed",
-                "test_update_restoration_failure_stops_before_final_skillguard_and_repauses",
-                "test_restoration_plan_does_not_activate_live_automations",
-                "test_restoration_apply_rejects_any_post_authorization_source_change",
-                "test_finalization_receipt_rejects_a_live_active_source",
-                "test_activation_receipt_is_immutable_and_bound_to_both_prior_receipts",
-                evidence_source="update-finalization-receipt",
-            ),
-            _obligation("depth-calibration", "verify", "reuse", "Reject check-only or install-only completion and require the full native receipt.", "test_all_automation_contracts_are_deep_and_current", "test_shallow_automation_contract_is_rejected"),
+            _obligation("transaction-retirement", "execute", "side_effect", "Install complete trees transactionally and retire the exact Architect and system-update automation surfaces.", "test_install_is_transactional_current_and_retires_exact_managed_surfaces"),
+            _obligation("zero-retired-authority", "verify", "validation", "Reject activation when legacy semantic authority, consumer-side author-control contamination, or any incompatible residual survives; migration failure restores the complete pre-upgrade surface.", "test_failures_after_each_publication_boundary_restore_the_pre_migration_surface", "test_malformed_legacy_card_blocks_before_any_authority_write", "test_consumer_runtime_contamination_is_rejected_before_activation"),
+            _obligation("aggregate-hard-gates", "verify", "validation", "Require current target-owned migration, projection, FlowGuard, LogicGuard, retrieval, and installed-health evidence before restoration is authorized.", "test_manual_update_uses_ff_only_and_closes_natively", "test_consumer_assurance_failure_keeps_survivors_paused_and_marks_failed"),
+            _obligation("restore-or-stay-paused", "verify", "branch", "Restore the exact captured automation state only after every target-owned hard gate passes; otherwise keep every survivor paused.", "test_manual_update_uses_ff_only_and_closes_natively", "test_consumer_assurance_failure_keeps_survivors_paused_and_marks_failed", "test_manual_update_restores_status_and_user_pause_independently"),
+            _obligation("final-machine-receipt", "verify", "closure", "End an applicable manual route only after exact restoration readback, a final installed-health check, CURRENT state, and snapshot cleanup; only declared no-update may close earlier.", "test_manual_update_uses_ff_only_and_closes_natively", "test_all_legal_update_noops_perform_only_manual_gate", "test_update_operational_blockers_cannot_close_as_successful_noops", "test_native_update_runner_keeps_operational_blockers_unfinished"),
+            _obligation("depth-calibration", "verify", "reuse", "Reject check-only or install-only completion and require the full native receipt.", "test_update_contract_is_deep_and_current", "test_update_shallow_contract_is_rejected"),
         ],
     },
 }
@@ -279,10 +259,6 @@ def check_id(skill_id: str, kind: str) -> str:
 
 def native_receipt_artifact_id(skill_id: str) -> str:
     return f"artifact:{skill_id}:native-receipt"
-
-
-def update_finalization_artifact_id() -> str:
-    return "artifact:khaos-brain-update:finalization-receipt"
 
 
 def expected_obligation_ids(skill_id: str) -> tuple[str, ...]:
@@ -445,20 +421,22 @@ def validate_completion_surface(
     def fail(code: str, detail: str) -> None:
         findings.append({"code": code, "detail": detail})
 
-    for marker in (
-        SKILLGUARD_COMPLETION_MARKER,
-        SKILLGUARD_PARTIAL_MARKER,
-        *spec["prompt_markers"],
-    ):
-        if str(marker).lower() not in automation_prompt.lower():
-            fail("automation_prompt_marker_missing", str(marker))
-    for marker in (
-        SKILLGUARD_COMPLETION_MARKER,
-        SKILLGUARD_PARTIAL_MARKER,
-        str(spec["entrypoint_path"]),
-    ):
+    entry_prompt = (
+        skill_text
+        if spec.get("execution_kind") == "explicit-user-request"
+        else automation_prompt
+    )
+    for marker in spec["prompt_markers"]:
+        if str(marker).lower() not in entry_prompt.lower():
+            fail("entry_prompt_marker_missing", str(marker))
+    for marker in (str(spec["entrypoint_path"]),):
         if marker.lower() not in skill_text.lower():
             fail("skill_completion_marker_missing", marker)
+    for forbidden in ("SkillGuard", ".skillguard", "skillguard.py"):
+        if forbidden.lower() in entry_prompt.lower():
+            fail("consumer_prompt_author_control_leak", forbidden)
+        if forbidden.lower() in skill_text.lower():
+            fail("consumer_skill_author_control_leak", forbidden)
     entrypoint = Path(repo_root) / str(spec["entrypoint_path"])
     if not entrypoint.is_file():
         fail("native_entrypoint_missing", str(spec["entrypoint_path"]))
@@ -494,7 +472,6 @@ def validate_completion_surface(
             f"missing={sorted(expected - enforced_ids)};extra={sorted(enforced_ids - expected)}",
         )
 
-    finalize_ids = set(obligation_ids_by_phase(skill_id).get("finalize", ()))
     expected_native_checks = {
         check_id(skill_id, "intake-runtime"),
         check_id(skill_id, "native-runtime"),
@@ -503,14 +480,6 @@ def validate_completion_surface(
         check_id(skill_id, "depth-shallow"),
     }
     expected_checks = set(expected_native_checks)
-    if finalize_ids:
-        expected_native_checks.add(check_id(skill_id, "branch-terminal-runtime"))
-        expected_checks.update(
-            {
-                check_id(skill_id, "branch-terminal-runtime"),
-                check_id(skill_id, "finalization-runtime"),
-            }
-        )
 
     depth = compiled_contract.get("depth_profile", {})
     if not isinstance(depth, Mapping):
@@ -535,9 +504,7 @@ def validate_completion_surface(
             "declared_check_profile_fields_invalid",
             f"missing={sorted(expected_depth_fields - set(depth))};extra={sorted(set(depth) - expected_depth_fields)}",
         )
-    expected_route = (
-        f"route:{skill_id}:authorize" if finalize_ids else f"route:{skill_id}:run"
-    )
+    expected_route = f"route:{skill_id}:run"
     if (
         depth.get("schema_version") != "skillguard.depth_profile.v2"
         or depth.get("profile_id")
@@ -631,50 +598,6 @@ def validate_completion_surface(
         ):
             fail("target_fixture_check_invalid", f"{skill_id}:{case_kind}")
 
-    if finalize_ids:
-        if compiled_contract.get("route_branch_closure_required") is not True:
-            fail("update_route_branch_closure_missing", skill_id)
-        rows = [
-            row
-            for row in enforced.get("route_branch_requirements", [])
-            if isinstance(row, Mapping)
-        ]
-        observed = {
-            (str(row.get("native_route_id") or ""), str(branch))
-            for row in rows
-            for branch in row.get("branch_ids", [])
-        }
-        expected_pairs = {
-            (expected_route, branch)
-            for branch in (
-                "no-update",
-                "waiting-for-user",
-                "ui-running",
-                "prepared-update",
-            )
-        }
-        if observed != expected_pairs:
-            fail("update_route_branch_contract_invalid", skill_id)
-        noop_rows = [
-            row
-            for row in rows
-            if set(row.get("branch_ids", []))
-            == {"no-update", "waiting-for-user", "ui-running"}
-        ]
-        expected_rule = [
-            {
-                "obligation_id": next(iter(finalize_ids)),
-                "allowed_disposition": "not_applicable",
-                "verifier_check_id": check_id(
-                    skill_id, "branch-terminal-runtime"
-                ),
-            }
-        ]
-        if len(noop_rows) != 1 or noop_rows[0].get("applicability_rules") != expected_rule:
-            fail("update_noop_applicability_contract_invalid", skill_id)
-        if check_id(skill_id, "finalization-runtime") in expected_native_checks:
-            fail("conditional_finalization_claimed_as_required_declared_check", skill_id)
-
     artifact_index = {
         str(row.get("artifact_id") or ""): row
         for row in compiled_contract.get("artifacts", [])
@@ -698,8 +621,6 @@ def validate_completion_surface(
         check_id(skill_id, kind)
         for kind in ("intake-runtime", "native-runtime", "terminal-runtime")
     }
-    if finalize_ids:
-        native_validator_ids.add(check_id(skill_id, "branch-terminal-runtime"))
     execute_binding = step_index.get(step_id(skill_id, "execute"), {}).get(
         "binding", {}
     )
@@ -717,27 +638,6 @@ def validate_completion_surface(
         != native_obligation_ids
     ):
         fail("native_receipt_artifact_binding_invalid", native_artifact_id)
-
-    if finalize_ids:
-        final_artifact_id = update_finalization_artifact_id()
-        final_artifact = artifact_index.get(final_artifact_id, {})
-        finalize_binding = step_index.get(step_id(skill_id, "finalize"), {}).get(
-            "binding", {}
-        )
-        if not isinstance(finalize_binding, Mapping):
-            finalize_binding = {}
-        if (
-            set(finalize_binding.get("output_artifact_ids", []))
-            != {final_artifact_id}
-            or final_artifact.get("kind") != "native_output"
-            or final_artifact.get("producer_step_id")
-            != step_id(skill_id, "finalize")
-            or set(final_artifact.get("validator_check_ids", []))
-            != {check_id(skill_id, "finalization-runtime")}
-            or set(final_artifact.get("covers_obligation_ids", []))
-            != finalize_ids
-        ):
-            fail("finalization_receipt_artifact_binding_invalid", final_artifact_id)
 
     try:
         resolved_test_nodes = evidence_test_node_ids(skill_id, repo_root=repo_root)

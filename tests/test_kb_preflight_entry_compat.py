@@ -5,8 +5,10 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
+
 
 class KbPreflightEntryCurrentGrammarTests(unittest.TestCase):
     def _launcher(self) -> tuple[Path, Path]:
@@ -85,6 +87,24 @@ class KbPreflightEntryCurrentGrammarTests(unittest.TestCase):
         )
         self.assertEqual(completed.returncode, 2)
         self.assertIn("unrecognized arguments: --path-hint", completed.stderr)
+
+    def test_feedback_help_does_not_boot_the_kb_runtime(self) -> None:
+        repo_root, launcher_path = self._launcher()
+        env = os.environ.copy()
+        env["CODEX_PREDICTIVE_KB_ROOT"] = str(repo_root)
+        started = time.perf_counter()
+        completed = subprocess.run(
+            [sys.executable, str(launcher_path), "feedback", "--help"],
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        elapsed = time.perf_counter() - started
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("--task-summary", completed.stdout)
+        self.assertLess(elapsed, 5)
 
 
 if __name__ == "__main__":

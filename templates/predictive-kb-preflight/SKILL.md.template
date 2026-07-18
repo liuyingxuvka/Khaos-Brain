@@ -21,7 +21,7 @@ If the repository is moved or re-cloned to a different path, rerun:
 python scripts/install_codex_kb.py --json
 ```
 
-That installer refreshes the global preflight skill plus the repository-managed `KB Sleep`, `KB Dream`, system-update, and organization automations under `$CODEX_HOME/automations`. It also removes the exact retired `KB Architect` Skill and automation on older machines and runs the versioned history-debt migration before reporting the upgrade healthy. Automation specs should use the strongest available model and deepest supported reasoning policy rather than pinning a fixed model slug.
+That installer refreshes the global preflight skill, the explicit manual software-update Skill, and the four repository-managed `KB Sleep`, `KB Dream`, and organization automations under `$CODEX_HOME/automations`. It removes the exact retired `KB Architect` and `Khaos Brain System Update` automations on older machines and runs the versioned history-debt migration before reporting the upgrade healthy. Automation specs should use the strongest available model and deepest supported reasoning policy rather than pinning a fixed model slug.
 
 If the user asks to install, enable, deploy, bootstrap, or set up this predictive KB system on a machine from within this repository, the default first actions are:
 

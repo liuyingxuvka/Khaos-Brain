@@ -2,7 +2,7 @@
   "artifact_type": "flowguard_behavior_commitment_ledger",
   "format_version": "1",
   "ledger": {
-    "change_mode": "model_miss_check",
+    "change_mode": "remove_or_replace_behavior",
     "claim_scope": "routine",
     "commitments": [
       {
@@ -592,11 +592,11 @@
         "supporting_model_ids": [],
         "surface_delegation_only": false,
         "trigger": "installs or refreshes a retained automation",
-        "validation_boundary": "runtime resolution tests, install check, and SkillGuard provider readiness",
+        "validation_boundary": "runtime resolution tests, target-owned install checks, and clean consumer projection",
         "variant_of_business_intent_id": ""
       },
       {
-        "actor": "Chaos Brain guarded scheduler",
+        "actor": "Chaos Brain target-owned scheduler",
         "actor_kind": "automation",
         "behavior_plane": "product_runtime",
         "business_intent_id": "intent:prove-complete-scheduled-automation",
@@ -626,36 +626,33 @@
         "excluded_behavior_ids": [
           "generic-all-obligation-noop-pass",
           "missing-branch-field-projection",
-          "conditional-finalization-depth-cycle",
+          "cross-unit-receipt-reuse",
+          "author-control-runtime-dependency",
           "background-full-validation-retry",
-          "post-native-live-skillguard-reload",
-          "missing-post-native-dynamic-evidence",
-          "unbounded-supervision-environment"
+          "missing-target-native-receipt"
         ],
-        "expected_result": "performed obligations project exact existing source fields; not-applicable obligations bind an evaluated false gate, exact run, reason, terminal status, canonical facts hash, matching proof ids, and proven non-mutation; the native receipt crosses into the retained frozen supervisor only through the exact declared dynamic evidence key set with stale inherited values cleared; phase producers feed one aggregate production depth receipt",
-        "expected_terminal": "exact_enforced_closure_or_explicit_block",
+        "expected_result": "each maintenance unit validates its own performed or not-applicable obligations from exact target-native fields and writes one immutable receipt for its own run",
+        "expected_terminal": "target_native_terminal_or_explicit_block",
         "external_differences": [],
-        "failure_boundary": "missing or forged disposition proof, nonexistent branch fields, generic shared no-op evidence, missing or stale post-native dynamic evidence, an undeclared supervision environment key, or a conditional-finalization depth cycle blocks closure without rerunning an already current validation owner",
+        "failure_boundary": "missing or forged target-native evidence, nonexistent branch fields, generic shared no-op evidence, cross-unit receipt reuse, or author-control runtime dependence blocks completion",
         "in_scope": true,
-        "label": "Close a scheduled automation only from proof-bound native dispositions and aggregate production depth",
+        "label": "Close each scheduled automation only from its own proof-bound native receipt",
         "lookup_binding": {
           "error_signatures": [],
           "metadata": {},
           "path_patterns": [
             "local_kb/automation_runtime.py",
-            "scripts/check_kb_automation_skillguard_depth.py",
-            "scripts/build_kb_automation_skillguard_contracts.py",
-            "scripts/check_kb_skillguard.py",
-            "scripts/run_kb_guarded_automation.py",
-            "scripts/run_installed_skillguard_supervision.py"
+            "scripts/run_kb_automation.py",
+            "scripts/check_kb_automation_run_receipt.py",
+            "scripts/check_kb_model_test_alignment.py"
           ],
           "task_terms": [
             "scheduled automation depth",
             "not applicable proof",
             "production receipt",
-            "conditional finalization",
-            "start-frozen supervision",
-            "dynamic receipt environment"
+            "independent maintenance unit",
+            "native receipt",
+            "cross-unit evidence ownership"
           ],
           "tool_ids": [],
           "workflow_families": [
@@ -690,11 +687,11 @@
           "scoped_out_reason": ""
         },
         "preconditions": [
-          "the exact installed SkillGuard runtime and installation receipt are current",
-          "one official persistent supervision session and exact six-field identity are frozen before native execution"
+          "the selected target skill and its native entrypoint are current",
+          "the exact target-owned run id and command identity are frozen before native execution"
         ],
         "primary_owner_model_id": "kb_convergence_upgrade_model.AutomationRuntimeAssuranceBlock",
-        "rationale": "Static supervision authority, post-native dynamic evidence, depth, branch disposition, and conditional finalization are separate boundaries; conflating them either admits stale or shallow work, loses the current receipt, or creates a self-blocking retry loop.",
+        "rationale": "A skill proves its own work. Author-side depth certification remains separate and no other skill may reuse this run as completion evidence.",
         "relations": [],
         "replacement_state": "active",
         "scoped_out_reason": "",
@@ -713,7 +710,7 @@
         "supporting_model_ids": [],
         "surface_delegation_only": false,
         "trigger": "receives one immutable native automation receipt",
-        "validation_boundary": "FlowGuard known-bad cases, focused native-receipt and contract-generation tests, official SkillGuard compile, exact scheduled-production receipts, and aggregate readiness",
+        "validation_boundary": "FlowGuard known-bad cases, distinct target-native receipt tests, source-only author contract audit, and aggregate readiness",
         "variant_of_business_intent_id": ""
       },
       {
@@ -770,9 +767,8 @@
             "local_kb/maintenance_migration.py",
             "local_kb/transactional_install.py",
             "local_kb/install.py",
-            "scripts/run_kb_guarded_automation.py",
-            "scripts/check_kb_skillguard.py",
-            "scripts/run_installed_skillguard_supervision.py",
+            "scripts/run_khaos_brain_manual_update.py",
+            "scripts/check_consumer_install_assurance.py",
             "templates/predictive-kb-preflight/kb_launch.py",
             "scripts/open_khaos_brain_ui.py",
             "scripts/install_desktop_shortcut.py",
@@ -824,7 +820,7 @@
           "scoped_out_reason": ""
         },
         "preconditions": [
-          "all five retained automations are transaction-paused"
+          "all four retained background automations are transaction-paused"
         ],
         "primary_owner_model_id": "kb_convergence_upgrade_model.UpgradeMigrationBlock",
         "rationale": "Old shapes are bounded migration input; successful normal operation has exactly one current path.",
@@ -845,7 +841,7 @@
           "surface:maintenance-migration",
           "surface:update-state-canonicalization",
           "surface:update-state-pre-assurance-migration",
-          "surface:installed-skillguard-current-supervision",
+          "surface:consumer-skill-currentness",
           "surface:preflight-launcher-canonicalization",
           "surface:desktop-launcher-current-runtime",
           "surface:desktop-settings-canonicalization",
@@ -867,9 +863,586 @@
         "trigger": "finds an older managed schema, state, route, or installation surface",
         "validation_boundary": "versioned migration fixtures, semantic anti-downgrade positive/negative regressions, residual scan, FlowGuard known-bad cases, and aggregate readiness",
         "variant_of_business_intent_id": ""
+      },
+      {
+        "actor": "Khaos Brain desktop application",
+        "actor_kind": "application",
+        "behavior_plane": "product_runtime",
+        "business_intent_id": "intent:observe-khaos-brain-update-status",
+        "child_model_ids": [],
+        "commitment_id": "commitment:ui-readonly-upstream-status",
+        "commitment_kind": "ui",
+        "evidence": {
+          "code_contract_ids": [
+            "contract:desktop.update_status_read_only"
+          ],
+          "coverage_case_ids": [],
+          "coverage_receipt_ids": [],
+          "coverage_shard_ids": [],
+          "current": false,
+          "evidence_state": "missing",
+          "metadata": {},
+          "model_obligation_ids": [
+            "obligation:ui-readonly-upstream-status"
+          ],
+          "proof_artifact_ids": [],
+          "risk_gate_ids": [],
+          "test_evidence_ids": [
+            "test:ui-readonly-upstream-status"
+          ],
+          "test_mesh_state": "shard_current"
+        },
+        "excluded_behavior_ids": [
+          "ui-update-prepare",
+          "ui-update-install",
+          "ui-update-authorization"
+        ],
+        "expected_result": "the visible status distinguishes current, fast-forward available, local ahead, diverged, and unavailable for the exact configured upstream",
+        "expected_terminal": "status_visible_without_execution_authority",
+        "external_differences": [],
+        "failure_boundary": "a missing upstream or failed comparison is shown as unavailable and never as current or actionable",
+        "in_scope": true,
+        "label": "Show configured-upstream update status without an update action",
+        "lookup_binding": {
+          "error_signatures": [],
+          "metadata": {},
+          "path_patterns": [
+            "local_kb/software_update.py",
+            "local_kb/desktop_app.py"
+          ],
+          "task_terms": [
+            "update status",
+            "configured upstream",
+            "read only",
+            "desktop badge"
+          ],
+          "tool_ids": [],
+          "workflow_families": [
+            "desktop_update_status"
+          ]
+        },
+        "metadata": {},
+        "miss_origin_state": "no_miss",
+        "model_sync_state": "owner_model_current",
+        "owner": "SoftwareUpdateBlock",
+        "path_authority": {
+          "behavior_commitment_id": "",
+          "business_intent": "",
+          "business_intent_id": "",
+          "evidence_current": false,
+          "evidence_refs": [],
+          "fallback_candidate_ids": [],
+          "legacy_plural_migrated": false,
+          "metadata": {},
+          "path_sensitive": false,
+          "ppa_confidence": "",
+          "ppa_coverage_receipt_ids": [],
+          "ppa_coverage_shard_ids": [],
+          "ppa_decision": "",
+          "ppa_ok": null,
+          "ppa_report_id": "",
+          "ppa_risk_gate_ids": [],
+          "primary_path_id": "",
+          "primary_path_migration_ambiguous": false,
+          "proof_artifact_ids": [],
+          "runtime_observation_ids": [],
+          "scoped_out_reason": ""
+        },
+        "preconditions": [],
+        "primary_owner_model_id": "khaos_brain_function_flow.SoftwareUpdateBlock",
+        "rationale": "Visibility is a product behavior but must not carry software-mutation authority.",
+        "relations": [],
+        "replacement_state": "active",
+        "scoped_out_reason": "",
+        "side_effects": [
+          "one launch-time background fetch",
+          "status cache write",
+          "desktop repaint"
+        ],
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_refs": [],
+        "source_surface_ids": [
+          "surface:update-status-inspector",
+          "surface:update-status-desktop"
+        ],
+        "state_writes": [
+          "status-only update cache"
+        ],
+        "supporting_model_ids": [
+          "khaos_brain_update_field_lifecycle"
+        ],
+        "surface_delegation_only": false,
+        "trigger": "opens the Khaos Brain desktop application",
+        "validation_boundary": "topology unit tests, desktop thread/interaction tests, conformance replay, and live UI click-through",
+        "variant_of_business_intent_id": ""
+      },
+      {
+        "actor": "Khaos Brain manual update runtime",
+        "actor_kind": "application",
+        "behavior_plane": "product_runtime",
+        "business_intent_id": "intent:apply-explicit-khaos-brain-update",
+        "child_model_ids": [],
+        "commitment_id": "commitment:manual-conversation-authorized-update",
+        "commitment_kind": "workflow",
+        "evidence": {
+          "code_contract_ids": [
+            "contract:manual_update.explicit_current_request"
+          ],
+          "coverage_case_ids": [],
+          "coverage_receipt_ids": [],
+          "coverage_shard_ids": [],
+          "current": false,
+          "evidence_state": "missing",
+          "metadata": {},
+          "model_obligation_ids": [
+            "obligation:manual-conversation-authorized-update"
+          ],
+          "proof_artifact_ids": [],
+          "risk_gate_ids": [],
+          "test_evidence_ids": [
+            "test:manual-conversation-authorized-update"
+          ],
+          "test_mesh_state": "shard_current"
+        },
+        "excluded_behavior_ids": [
+          "scheduled-update-trigger",
+          "persisted-ui-authorization",
+          "non-fast-forward-update"
+        ],
+        "expected_result": "one explicit invocation may enter the existing transactional fast-forward update route after every safety gate passes",
+        "expected_terminal": "manual_update_completed_noop_or_blocked",
+        "external_differences": [],
+        "failure_boundary": "missing invocation authorization, UI-open, dirty, ahead, diverged, missing-upstream, or failed validation blocks before unsafe mutation",
+        "in_scope": true,
+        "label": "Apply software updates only through the explicit manual route",
+        "lookup_binding": {
+          "error_signatures": [],
+          "metadata": {},
+          "path_patterns": [
+            "scripts/run_khaos_brain_manual_update.py",
+            "scripts/run_khaos_brain_manual_update.py"
+          ],
+          "task_terms": [
+            "manual update",
+            "explicit user request",
+            "fast forward",
+            "transactional installer"
+          ],
+          "tool_ids": [],
+          "workflow_families": [
+            "manual_software_update"
+          ]
+        },
+        "metadata": {},
+        "miss_origin_state": "no_miss",
+        "model_sync_state": "owner_model_current",
+        "owner": "SoftwareUpdateBlock",
+        "path_authority": {
+          "behavior_commitment_id": "commitment:manual-conversation-authorized-update",
+          "business_intent": "Apply one explicitly requested Khaos Brain software update",
+          "business_intent_id": "intent:apply-explicit-khaos-brain-update",
+          "evidence_current": true,
+          "evidence_refs": [
+            ".flowguard/khaos_brain_function_flow.py"
+          ],
+          "fallback_candidate_ids": [],
+          "legacy_plural_migrated": false,
+          "metadata": {},
+          "path_sensitive": true,
+          "ppa_confidence": "full",
+          "ppa_coverage_receipt_ids": [],
+          "ppa_coverage_shard_ids": [],
+          "ppa_decision": "primary_path_authority_green",
+          "ppa_ok": true,
+          "ppa_report_id": "ppa:khaos-brain-manual-update-v1",
+          "ppa_risk_gate_ids": [
+            "primary_path_authority"
+          ],
+          "primary_path_id": "path:khaos-brain-manual-update",
+          "primary_path_migration_ambiguous": false,
+          "proof_artifact_ids": [
+            "proof:khaos-brain-function-flow:manual-update"
+          ],
+          "runtime_observation_ids": [
+            "observation:khaos-brain-function-flow:manual-update-pass"
+          ],
+          "scoped_out_reason": ""
+        },
+        "preconditions": [
+          "explicit user request is present in the current invocation",
+          "configured upstream is a clean fast-forward target",
+          "Khaos Brain UI is closed"
+        ],
+        "primary_owner_model_id": "khaos_brain_function_flow.SoftwareUpdateBlock",
+        "rationale": "A single invocation-scoped route replaces persisted or scheduled authorization without weakening update safety.",
+        "relations": [],
+        "replacement_state": "active",
+        "scoped_out_reason": "",
+        "side_effects": [
+          "fast-forward source",
+          "run direct migration",
+          "transactionally install managed surfaces",
+          "restore four surviving automations after closure"
+        ],
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_refs": [],
+        "source_surface_ids": [
+          "surface:manual-update-native",
+          "surface:manual-update-native-receipt"
+        ],
+        "state_writes": [
+          "software revision",
+          "current update status",
+          "installed managed runtime"
+        ],
+        "supporting_model_ids": [
+          "kb_convergence_upgrade_model.UpgradeMigrationBlock",
+          "khaos_brain_update_field_lifecycle"
+        ],
+        "surface_delegation_only": false,
+        "trigger": "receives an invocation-scoped explicit user-request flag",
+        "validation_boundary": "FlowGuard update gate, native receipt tests, clean installer checks, and fast-forward/rollback/restoration evidence",
+        "variant_of_business_intent_id": ""
+      },
+      {
+        "actor": "Codex AI",
+        "actor_kind": "ai_agent",
+        "behavior_plane": "agent_operation",
+        "business_intent_id": "intent:invoke-explicit-khaos-brain-update",
+        "child_model_ids": [],
+        "commitment_id": "commitment:ai-manual-update-on-explicit-request",
+        "commitment_kind": "skill",
+        "evidence": {
+          "code_contract_ids": [
+            "contract:khaos-brain-update.activation"
+          ],
+          "coverage_case_ids": [],
+          "coverage_receipt_ids": [],
+          "coverage_shard_ids": [],
+          "current": false,
+          "evidence_state": "missing",
+          "metadata": {},
+          "model_obligation_ids": [
+            "obligation:ai-manual-update-on-explicit-request"
+          ],
+          "proof_artifact_ids": [],
+          "risk_gate_ids": [],
+          "test_evidence_ids": [
+            "test:ai-manual-update-on-explicit-request"
+          ],
+          "test_mesh_state": "shard_current"
+        },
+        "excluded_behavior_ids": [
+          "implicit-skill-invocation",
+          "scheduled-skill-invocation",
+          "ui-state-as-authorization"
+        ],
+        "expected_result": "AI invokes the one manual product path only after the user explicitly asks for an update in the current conversation",
+        "expected_terminal": "manual_product_path_invoked_or_request_refused",
+        "external_differences": [],
+        "failure_boundary": "unclear, inferred, historical, persisted, or scheduled intent cannot be promoted into current invocation authority",
+        "in_scope": true,
+        "label": "Invoke the manual updater only for an explicit current user request",
+        "lookup_binding": {
+          "error_signatures": [],
+          "metadata": {},
+          "path_patterns": [
+            ".agents/skills/khaos-brain-update/SKILL.md"
+          ],
+          "task_terms": [
+            "update Khaos Brain",
+            "manual software update",
+            "explicit request"
+          ],
+          "tool_ids": [],
+          "workflow_families": [
+            "agent_manual_update"
+          ]
+        },
+        "metadata": {},
+        "miss_origin_state": "no_miss",
+        "model_sync_state": "owner_model_current",
+        "owner": "khaos-brain-update Skill",
+        "path_authority": {
+          "behavior_commitment_id": "commitment:ai-manual-update-on-explicit-request",
+          "business_intent": "Invoke the manual updater for the user's explicit current request",
+          "business_intent_id": "intent:invoke-explicit-khaos-brain-update",
+          "evidence_current": true,
+          "evidence_refs": [
+            ".flowguard/khaos_brain_function_flow.py"
+          ],
+          "fallback_candidate_ids": [],
+          "legacy_plural_migrated": false,
+          "metadata": {},
+          "path_sensitive": true,
+          "ppa_confidence": "full",
+          "ppa_coverage_receipt_ids": [],
+          "ppa_coverage_shard_ids": [],
+          "ppa_decision": "primary_path_authority_green",
+          "ppa_ok": true,
+          "ppa_report_id": "ppa:khaos-brain-ai-manual-update-v1",
+          "ppa_risk_gate_ids": [
+            "primary_path_authority"
+          ],
+          "primary_path_id": "path:khaos-brain-ai-manual-update",
+          "primary_path_migration_ambiguous": false,
+          "proof_artifact_ids": [
+            "proof:khaos-brain-update-skill:explicit-activation"
+          ],
+          "runtime_observation_ids": [
+            "observation:khaos-brain-function-flow:missing-request-blocked"
+          ],
+          "scoped_out_reason": ""
+        },
+        "preconditions": [
+          "the user explicitly requests the update in the current conversation"
+        ],
+        "primary_owner_model_id": "khaos_brain_update_skill_contract_model",
+        "rationale": "Agent intent is distinct from product execution and may only invoke, not absorb, the product runtime contract.",
+        "relations": [
+          {
+            "metadata": {},
+            "rationale": "The agent route supplies invocation-scoped intent to the separately owned product runtime path.",
+            "relation_type": "invokes",
+            "target_commitment_id": "commitment:manual-conversation-authorized-update"
+          }
+        ],
+        "replacement_state": "active",
+        "scoped_out_reason": "",
+        "side_effects": [
+          "invoke the guarded manual updater"
+        ],
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_refs": [],
+        "source_surface_ids": [
+          "surface:manual-update-skill"
+        ],
+        "state_writes": [],
+        "supporting_model_ids": [
+          "khaos_brain_function_flow.SoftwareUpdateBlock"
+        ],
+        "surface_delegation_only": false,
+        "trigger": "the current user message explicitly asks AI to update Khaos Brain",
+        "validation_boundary": "Skill activation wording, target contract inventory, missing-request negative test, and guarded invocation test",
+        "variant_of_business_intent_id": ""
+      },
+      {
+        "actor": "Khaos Brain installer",
+        "actor_kind": "application",
+        "behavior_plane": "development_process",
+        "business_intent_id": "intent:keep-automatic-update-retired",
+        "child_model_ids": [],
+        "commitment_id": "commitment:installer-keeps-system-update-automation-absent",
+        "commitment_kind": "process",
+        "evidence": {
+          "code_contract_ids": [
+            "contract:installer.exact_update_automation_retirement"
+          ],
+          "coverage_case_ids": [],
+          "coverage_receipt_ids": [],
+          "coverage_shard_ids": [],
+          "current": false,
+          "evidence_state": "missing",
+          "metadata": {},
+          "model_obligation_ids": [
+            "obligation:installer-keeps-system-update-automation-absent"
+          ],
+          "proof_artifact_ids": [],
+          "risk_gate_ids": [],
+          "test_evidence_ids": [
+            "test:installer-keeps-system-update-automation-absent"
+          ],
+          "test_mesh_state": "shard_current"
+        },
+        "excluded_behavior_ids": [
+          "recreate-system-update-automation",
+          "delete-similarly-named-user-automation",
+          "retire-manual-update-skill"
+        ],
+        "expected_result": "fresh install, upgrade, repair, and repeat install retain four background automations, keep the manual skill, and keep the exact old task absent",
+        "expected_terminal": "exact_retired_task_absent_and_four_survivors_preserved",
+        "external_differences": [],
+        "failure_boundary": "any exact retired-task residual, recreation, survivor-state loss, or similarly named user-asset mutation blocks installation confidence",
+        "in_scope": true,
+        "label": "Keep the automatic system-update task exactly retired",
+        "lookup_binding": {
+          "error_signatures": [],
+          "metadata": {},
+          "path_patterns": [
+            "local_kb/install.py",
+            "local_kb/transactional_install.py"
+          ],
+          "task_terms": [
+            "retire system update automation",
+            "four surviving automations",
+            "repeat install",
+            "manual update skill"
+          ],
+          "tool_ids": [],
+          "workflow_families": [
+            "managed_installation",
+            "upgrade_migration"
+          ]
+        },
+        "metadata": {},
+        "miss_origin_state": "no_miss",
+        "model_sync_state": "owner_model_current",
+        "owner": "UpgradeMigrationBlock",
+        "path_authority": {
+          "behavior_commitment_id": "",
+          "business_intent": "",
+          "business_intent_id": "",
+          "evidence_current": false,
+          "evidence_refs": [],
+          "fallback_candidate_ids": [],
+          "legacy_plural_migrated": false,
+          "metadata": {},
+          "path_sensitive": false,
+          "ppa_confidence": "",
+          "ppa_coverage_receipt_ids": [],
+          "ppa_coverage_shard_ids": [],
+          "ppa_decision": "",
+          "ppa_ok": null,
+          "ppa_report_id": "",
+          "ppa_risk_gate_ids": [],
+          "primary_path_id": "",
+          "primary_path_migration_ambiguous": false,
+          "proof_artifact_ids": [],
+          "runtime_observation_ids": [],
+          "scoped_out_reason": ""
+        },
+        "preconditions": [],
+        "primary_owner_model_id": "kb_convergence_upgrade_model.UpgradeMigrationBlock",
+        "rationale": "Task retirement is an installer/upgrade responsibility and cannot be delegated to UI or the manual update skill.",
+        "relations": [
+          {
+            "metadata": {},
+            "rationale": "The development process validates that the product update path remains manual after installation.",
+            "relation_type": "validates",
+            "target_commitment_id": "commitment:manual-conversation-authorized-update"
+          }
+        ],
+        "replacement_state": "active",
+        "scoped_out_reason": "",
+        "side_effects": [
+          "remove exact managed automation directory",
+          "preserve four survivor states",
+          "install manual update skill"
+        ],
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_refs": [],
+        "source_surface_ids": [
+          "surface:update-automation-retirement",
+          "surface:update-retirement-openspec"
+        ],
+        "state_writes": [
+          "managed automation inventory",
+          "managed skill inventory",
+          "installation receipt"
+        ],
+        "supporting_model_ids": [
+          "khaos_brain_update_field_lifecycle"
+        ],
+        "surface_delegation_only": false,
+        "trigger": "installs, upgrades, repairs, or checks the managed Khaos Brain runtime",
+        "validation_boundary": "fresh/upgrade/repeat installer tests, exact-name negative tests, convergence model, real install, and independent install check",
+        "variant_of_business_intent_id": ""
+      },
+      {
+        "actor": "retired Khaos Brain system update automation",
+        "actor_kind": "automation",
+        "behavior_plane": "product_runtime",
+        "business_intent_id": "intent:automatically-update-khaos-brain",
+        "child_model_ids": [],
+        "commitment_id": "commitment:automatic-system-update-retired",
+        "commitment_kind": "workflow",
+        "evidence": {
+          "code_contract_ids": [],
+          "coverage_case_ids": [],
+          "coverage_receipt_ids": [],
+          "coverage_shard_ids": [],
+          "current": false,
+          "evidence_state": "missing",
+          "metadata": {},
+          "model_obligation_ids": [],
+          "proof_artifact_ids": [],
+          "risk_gate_ids": [],
+          "test_evidence_ids": [],
+          "test_mesh_state": "shard_current"
+        },
+        "excluded_behavior_ids": [],
+        "expected_result": "no automatic software update is performed",
+        "expected_terminal": "removed",
+        "external_differences": [],
+        "failure_boundary": "any scheduler, UI-prepared authorization, or automatic retry residual is a failed retirement",
+        "in_scope": false,
+        "label": "Automatically update Khaos Brain",
+        "lookup_binding": {
+          "error_signatures": [],
+          "metadata": {},
+          "path_patterns": [
+            "automations/khaos-brain-system-update"
+          ],
+          "task_terms": [
+            "automatic update",
+            "scheduled update"
+          ],
+          "tool_ids": [],
+          "workflow_families": [
+            "retired_automatic_update"
+          ]
+        },
+        "metadata": {},
+        "miss_origin_state": "no_miss",
+        "model_sync_state": "owner_model_current",
+        "owner": "UpgradeMigrationBlock retirement owner",
+        "path_authority": {
+          "behavior_commitment_id": "",
+          "business_intent": "",
+          "business_intent_id": "",
+          "evidence_current": false,
+          "evidence_refs": [],
+          "fallback_candidate_ids": [],
+          "legacy_plural_migrated": false,
+          "metadata": {},
+          "path_sensitive": false,
+          "ppa_confidence": "",
+          "ppa_coverage_receipt_ids": [],
+          "ppa_coverage_shard_ids": [],
+          "ppa_decision": "",
+          "ppa_ok": null,
+          "ppa_report_id": "",
+          "ppa_risk_gate_ids": [],
+          "primary_path_id": "",
+          "primary_path_migration_ambiguous": false,
+          "proof_artifact_ids": [],
+          "runtime_observation_ids": [],
+          "scoped_out_reason": "removed by user requirement"
+        },
+        "preconditions": [],
+        "primary_owner_model_id": "",
+        "rationale": "The user explicitly removed delegated automatic software-update authority and retained only visibility plus a manual AI route.",
+        "relations": [],
+        "replacement_state": "removed_scoped_out",
+        "scoped_out_reason": "Automatic software update behavior is intentionally removed; read-only status and explicit manual update are separate commitments.",
+        "side_effects": [],
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_refs": [],
+        "source_surface_ids": [],
+        "state_writes": [],
+        "supporting_model_ids": [],
+        "surface_delegation_only": false,
+        "trigger": "formerly ran on a schedule",
+        "validation_boundary": "exact scheduler absence, no UI authorization, and no automatic update entrypoint",
+        "variant_of_business_intent_id": ""
       }
     ],
-    "current_revision": "logicguard-runtime-scale-model-miss-20260716",
+    "current_revision": "status-only-manual-update-20260716",
     "expected_business_intent_ids": [
       "intent:serve-predictive-retrieval",
       "intent:serialize-lifecycle-mutation",
@@ -877,7 +1450,11 @@
       "intent:consume-organization-knowledge",
       "intent:run-strongest-current-automation-runtime",
       "intent:prove-complete-scheduled-automation",
-      "intent:upgrade-chaos-brain-to-current"
+      "intent:upgrade-chaos-brain-to-current",
+      "intent:observe-khaos-brain-update-status",
+      "intent:apply-explicit-khaos-brain-update",
+      "intent:invoke-explicit-khaos-brain-update",
+      "intent:keep-automatic-update-retired"
     ],
     "expected_commitment_ids": [
       "commitment:kb-retrieval-current-index",
@@ -886,7 +1463,11 @@
       "commitment:organization-current-layout",
       "commitment:automation-current-runtime-policy",
       "commitment:automation-proof-bound-depth-terminal",
-      "commitment:upgrade-direct-canonicalization"
+      "commitment:upgrade-direct-canonicalization",
+      "commitment:ui-readonly-upstream-status",
+      "commitment:manual-conversation-authorized-update",
+      "commitment:ai-manual-update-on-explicit-request",
+      "commitment:installer-keeps-system-update-automation-absent"
     ],
     "ledger_id": "ledger:chaos-brain-current-runtime",
     "metadata": {},
@@ -1368,7 +1949,7 @@
         "in_scope": true,
         "label": "",
         "metadata": {},
-        "owner": "AutomationRuntimeAssuranceBlock",
+        "owner": "UpgradeMigrationBlock",
         "primary_path_id": "",
         "rationale": "Sole runtime policy resolver.",
         "scoped_out_reason": "",
@@ -1439,14 +2020,14 @@
         "metadata": {},
         "owner": "AutomationRuntimeAssuranceBlock",
         "primary_path_id": "",
-        "rationale": "The depth adapter verifies native facts and never expands catalog entries into synthetic success.",
+        "rationale": "The target-native receipt validator verifies exact facts and never expands catalog entries into synthetic success.",
         "scoped_out_reason": "",
         "similarity_obligation_ids": [],
         "similarity_relation_ids": [],
-        "source_ref": "scripts/check_kb_automation_skillguard_depth.py",
+        "source_ref": "scripts/check_kb_automation_run_receipt.py",
         "surface_id": "surface:automation-depth-projection",
         "surface_kind": "process",
-        "validation_boundary": "exact source projection, applicability proof, phase universe, and aggregate production receipt tests"
+        "validation_boundary": "exact target payload projection, applicability proof, phase universe, and immutable receipt tests"
       },
       {
         "business_intent_ids": [
@@ -1462,14 +2043,14 @@
         "metadata": {},
         "owner": "AutomationRuntimeAssuranceBlock",
         "primary_path_id": "",
-        "rationale": "The generator separates phase owners, aggregate production depth, calibration, and independent conditional finalization.",
+        "rationale": "The author-side generator binds one skill to one maintenance unit, unique obligations, and its own depth calibration.",
         "scoped_out_reason": "",
         "similarity_obligation_ids": [],
         "similarity_relation_ids": [],
         "source_ref": "scripts/build_kb_automation_skillguard_contracts.py",
         "surface_id": "surface:automation-contract-generation",
         "surface_kind": "process",
-        "validation_boundary": "deterministic generation, official SkillGuard compilation, and current-authority validation"
+        "validation_boundary": "deterministic source-only generation, author compiler parity, unique evidence ownership, and clean consumer projection"
       },
       {
         "business_intent_ids": [
@@ -1485,14 +2066,14 @@
         "metadata": {},
         "owner": "AutomationRuntimeAssuranceBlock",
         "primary_path_id": "",
-        "rationale": "Terminal construction consumes the exact aggregate production depth receipt; finalization cannot be its own prerequisite.",
+        "rationale": "Terminal construction consumes only the exact target-owned native result and cannot depend on another skill or author-side runtime.",
         "scoped_out_reason": "",
         "similarity_obligation_ids": [],
         "similarity_relation_ids": [],
-        "source_ref": "scripts/check_kb_skillguard.py#_build_and_write_target_native_terminal",
+        "source_ref": "scripts/run_kb_automation.py#run_automation",
         "surface_id": "surface:automation-terminal-builder",
         "surface_kind": "process",
-        "validation_boundary": "same-run stage-depth/close receipt reuse and no target-check rerun tests"
+        "validation_boundary": "same-run command, payload, obligation evidence, immutable hash, and no cross-unit receipt reuse"
       },
       {
         "business_intent_ids": [
@@ -1508,14 +2089,14 @@
         "metadata": {},
         "owner": "AutomationRuntimeAssuranceBlock",
         "primary_path_id": "",
-        "rationale": "The long-running supervisor freezes static authority before native work, reuses the exact Python launch path captured by the isolated official installation while requiring it to resolve to the same interpreter identity, then admits only the exact current run evidence produced after native completion; it never reloads global SkillGuard or inherits stale receipt authority.",
+        "rationale": "The consumer projection excludes author-control files and the scheduler launches only the selected target's native runner with one exact run identity.",
         "scoped_out_reason": "",
         "similarity_obligation_ids": [],
         "similarity_relation_ids": [],
-        "source_ref": "scripts/check_kb_skillguard.py#_InstalledSupervisionSession",
+        "source_ref": "scripts/check_consumer_install_assurance.py",
         "surface_id": "surface:automation-frozen-supervision-session",
         "surface_kind": "process",
-        "validation_boundary": "start-frozen identity reuse, cross-platform equivalent Python launch-alias acceptance with different-interpreter rejection, exact seven-key dynamic evidence projection, inherited-value clearing, undeclared-key rejection, real scheduled Dream receipt replay, and FlowGuard same-class known-bad proofs"
+        "validation_boundary": "clean consumer manifest, no author-control tokens, target-native entrypoint, and FlowGuard consumer-independence known-bad proofs"
       },
       {
         "business_intent_ids": [
@@ -1646,14 +2227,14 @@
         "metadata": {},
         "owner": "AutomationRuntimeAssuranceBlock",
         "primary_path_id": "",
-        "rationale": "Execution authority comes only from the exact canonical source root or exact active installed root; display surface labels are diagnostic only and unknown or ambiguous roots block. An installed Skill is then consumed through its verified V2 pair, exact installed-byte control projection, and short behavior-only SkillGuard/global-router projection without recompilation or source substitution.",
+        "rationale": "Each managed source skill is compiled into a clean consumer projection; the installed tree must equal that projection and contain no author-control files or runtime dependency.",
         "scoped_out_reason": "",
         "similarity_obligation_ids": [],
         "similarity_relation_ids": [],
-        "source_ref": "scripts/check_kb_skillguard.py#_execute_supervision",
-        "surface_id": "surface:installed-skillguard-current-supervision",
+        "source_ref": "scripts/check_consumer_install_assurance.py",
+        "surface_id": "surface:consumer-skill-currentness",
         "surface_kind": "process",
-        "validation_boundary": "exact managed-root authority classification, installed source-parity, installation-currentness, control/runtime projection byte and path tests, dual calibration check-id validation, and scheduled execution-depth receipts"
+        "validation_boundary": "clean consumer manifest, source-to-installed projection parity, no author-control token leakage, and target-native currentness checks"
       },
       {
         "business_intent_ids": [
@@ -1746,9 +2327,170 @@
         "surface_id": "surface:card-skill-guidance-canonicalization",
         "surface_kind": "process",
         "validation_boundary": "card guidance direct-migration and current-reader tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:observe-khaos-brain-update-status"
+        ],
+        "commitment_ids": [
+          "commitment:ui-readonly-upstream-status"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "SoftwareUpdateBlock",
+        "primary_path_id": "",
+        "rationale": "Strict configured-upstream topology inspector and status-only cache owner.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/software_update.py",
+        "surface_id": "surface:update-status-inspector",
+        "surface_kind": "api",
+        "validation_boundary": "topology, missing-upstream, fetch-failure, and schema-v2 tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:observe-khaos-brain-update-status"
+        ],
+        "commitment_ids": [
+          "commitment:ui-readonly-upstream-status"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "SoftwareUpdateBlock",
+        "primary_path_id": "",
+        "rationale": "Read-only launch-time background status projection with no hitbox or mutation callback.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/desktop_app.py",
+        "surface_id": "surface:update-status-desktop",
+        "surface_kind": "ui",
+        "validation_boundary": "desktop background-worker tests and live pointer click-through"
+      },
+      {
+        "business_intent_ids": [
+          "intent:apply-explicit-khaos-brain-update"
+        ],
+        "commitment_ids": [
+          "commitment:manual-conversation-authorized-update"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "SoftwareUpdateBlock",
+        "primary_path_id": "path:khaos-brain-manual-update",
+        "rationale": "Sole native product-runtime entrypoint for one invocation-scoped manual update.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "scripts/run_khaos_brain_manual_update.py",
+        "surface_id": "surface:manual-update-native",
+        "surface_kind": "cli",
+        "validation_boundary": "explicit-request, UI-open, fast-forward, dirty-tree, rollback, and terminal native-receipt tests"
+      },
+      {
+        "business_intent_ids": [
+          "intent:apply-explicit-khaos-brain-update"
+        ],
+        "commitment_ids": [
+          "commitment:manual-conversation-authorized-update"
+        ],
+        "delegates_to_primary_path": true,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "SoftwareUpdateBlock",
+        "primary_path_id": "path:khaos-brain-manual-update",
+        "rationale": "The native receipt is written by the same manual product path and cannot create a second updater.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "scripts/run_khaos_brain_manual_update.py#main",
+        "surface_id": "surface:manual-update-native-receipt",
+        "surface_kind": "process",
+        "validation_boundary": "manual trigger identity, target-native checks, exact restoration, final installed-health readback, CURRENT, cleanup, and receipt integrity"
+      },
+      {
+        "business_intent_ids": [
+          "intent:invoke-explicit-khaos-brain-update"
+        ],
+        "commitment_ids": [
+          "commitment:ai-manual-update-on-explicit-request"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "khaos-brain-update Skill",
+        "primary_path_id": "path:khaos-brain-ai-manual-update",
+        "rationale": "Agent-operation activation boundary supplies intent to the product path only for an explicit current request.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": ".agents/skills/khaos-brain-update/SKILL.md",
+        "surface_id": "surface:manual-update-skill",
+        "surface_kind": "skill",
+        "validation_boundary": "activation-boundary review, source-only author contract integrity, and missing-request rejection"
+      },
+      {
+        "business_intent_ids": [
+          "intent:keep-automatic-update-retired"
+        ],
+        "commitment_ids": [
+          "commitment:installer-keeps-system-update-automation-absent"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "UpgradeMigrationBlock",
+        "primary_path_id": "",
+        "rationale": "Installer-owned exact retirement, four-survivor state preservation, and manual-skill retention.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "local_kb/install.py",
+        "surface_id": "surface:update-automation-retirement",
+        "surface_kind": "process",
+        "validation_boundary": "fresh, upgrade, missing-manifest, similar-name, repeat-install, and real install-check evidence"
+      },
+      {
+        "business_intent_ids": [
+          "intent:keep-automatic-update-retired"
+        ],
+        "commitment_ids": [
+          "commitment:installer-keeps-system-update-automation-absent"
+        ],
+        "delegates_to_primary_path": false,
+        "freshness_state": "current",
+        "in_scope": true,
+        "label": "",
+        "metadata": {},
+        "owner": "OpenSpec change",
+        "primary_path_id": "",
+        "rationale": "Normative retirement, manual-skill retention, and repeated-install behavior.",
+        "scoped_out_reason": "",
+        "similarity_obligation_ids": [],
+        "similarity_relation_ids": [],
+        "source_ref": "openspec/changes/replace-automatic-updates-with-status-only-ui/specs/user-controlled-software-update/spec.md",
+        "surface_id": "surface:update-retirement-openspec",
+        "surface_kind": "openspec",
+        "validation_boundary": "OpenSpec 1.6.0 strict validation"
       }
     ],
-    "validation_boundary": "OpenSpec, FlowGuard, focused tests, SkillGuard, and aggregate readiness"
+    "validation_boundary": "Official OpenSpec, FlowGuard, target-native focused tests, separate source-only author contract audit, clean installation, and aggregate readiness"
   },
   "schema_version": "1.0"
 }

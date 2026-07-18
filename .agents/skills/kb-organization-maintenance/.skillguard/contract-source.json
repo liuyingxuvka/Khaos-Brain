@@ -1,6 +1,68 @@
 {
   "schema_version": "skillguard.contract_source.v2",
   "skill_id": "kb-organization-maintenance",
+  "repository_role": "skill_maintainer_source",
+  "maintenance_unit_id": "unit:kb-organization-maintenance",
+  "member_skill_ids": [
+    "kb-organization-maintenance"
+  ],
+  "consumer_projection": {
+    "prohibited_path_prefixes": [
+      ".skillguard/"
+    ],
+    "prohibited_prompt_tokens": [
+      "SkillGuard",
+      ".skillguard",
+      "skillguard.py"
+    ],
+    "projection_id": "projection:consumer-distribution",
+    "release_manifest_path": "consumer-release.json"
+  },
+  "integration_mode": "native-integrated",
+  "native_route_owner": "kb-organization-maintenance",
+  "native_route_bindings": [
+    {
+      "binding_id": "native:kb-organization-maintenance:run",
+      "native_route_id": "route:kb-organization-maintenance:run",
+      "required_before_closure": true,
+      "source": ".agents/skills/kb-organization-maintenance/SKILL.md"
+    }
+  ],
+  "native_check_bindings": [
+    {
+      "binding_id": "native-check:kb-organization-maintenance:intake-runtime",
+      "native_check_id": "check:kb-organization-maintenance:intake-runtime",
+      "evidence_source": "scripts/check_kb_automation_run_receipt.py",
+      "required": true
+    },
+    {
+      "binding_id": "native-check:kb-organization-maintenance:native-runtime",
+      "native_check_id": "check:kb-organization-maintenance:native-runtime",
+      "evidence_source": "scripts/check_kb_automation_run_receipt.py",
+      "required": true
+    },
+    {
+      "binding_id": "native-check:kb-organization-maintenance:terminal-runtime",
+      "native_check_id": "check:kb-organization-maintenance:terminal-runtime",
+      "evidence_source": "scripts/check_kb_automation_run_receipt.py",
+      "required": true
+    },
+    {
+      "binding_id": "native-check:kb-organization-maintenance:depth-positive",
+      "native_check_id": "check:kb-organization-maintenance:depth-positive",
+      "evidence_source": "scripts/check_kb_automation_run_receipt.py",
+      "required": true
+    },
+    {
+      "binding_id": "native-check:kb-organization-maintenance:depth-shallow",
+      "native_check_id": "check:kb-organization-maintenance:depth-shallow",
+      "evidence_source": "scripts/check_kb_automation_run_receipt.py",
+      "required": true
+    }
+  ],
+  "default_route_id": "route:kb-organization-maintenance:run",
+  "may_define_parallel_execution_route": false,
+  "may_define_skillguard_runtime_route": false,
   "model_id": "khaos-brain.kb-organization-maintenance.executable-contract.v2",
   "model_path": ".flowguard/kb_org_maintenance_skill_contract_model.py",
   "confirmed": true,
@@ -17,7 +79,6 @@
     "tests/test_skill_sharing.py",
     "tests/test_org_checks.py",
     "tests/test_github_repo_config.py",
-    "tests/test_process_control.py",
     "local_kb/automation_contracts.py",
     "local_kb/automation_runtime.py",
     "local_kb/process_control.py",
@@ -25,7 +86,7 @@
     "scripts/build_kb_automation_skillguard_contracts.py",
     "scripts/check_kb_automation_run_receipt.py",
     "scripts/check_kb_skillguard.py",
-    "scripts/run_kb_guarded_automation.py",
+    "scripts/run_kb_automation.py",
     "tests/test_kb_automation_skillguard.py"
   ],
   "projection_consumers": [
@@ -66,7 +127,7 @@
       "step_id": "step:kb-organization-maintenance:execute",
       "action": {
         "kind": "native",
-        "summary": "Run the native automation owner through every declared execution branch."
+        "summary": "Run the native maintenance owner through every declared execution branch."
       },
       "check_ids": [
         "check:kb-organization-maintenance:native-runtime"
@@ -99,6 +160,11 @@
         "obligation:kb-organization-maintenance:manifest-git-preflight"
       ],
       "timeout_seconds": 120,
+      "execution_owner_id": "owner:kb-organization-maintenance:intake-runtime",
+      "semantic_check_id": "semantic:kb-organization-maintenance:intake-runtime",
+      "maintenance_unit_id": "unit:kb-organization-maintenance",
+      "member_skill_id": "kb-organization-maintenance",
+      "evidence_subject_id": "subject:check:kb-organization-maintenance:intake-runtime",
       "command": "python",
       "args": [
         "scripts/check_kb_automation_run_receipt.py",
@@ -125,6 +191,11 @@
         "obligation:kb-organization-maintenance:exact-selected-apply"
       ],
       "timeout_seconds": 120,
+      "execution_owner_id": "owner:kb-organization-maintenance:native-runtime",
+      "semantic_check_id": "semantic:kb-organization-maintenance:native-runtime",
+      "maintenance_unit_id": "unit:kb-organization-maintenance",
+      "member_skill_id": "kb-organization-maintenance",
+      "evidence_subject_id": "subject:check:kb-organization-maintenance:native-runtime",
       "command": "python",
       "args": [
         "scripts/check_kb_automation_run_receipt.py",
@@ -145,10 +216,14 @@
       "evidence_class": "hard",
       "covers_obligation_ids": [
         "obligation:kb-organization-maintenance:postapply-merge-readiness",
-        "obligation:kb-organization-maintenance:postflight-terminal",
-        "obligation:kb-organization-maintenance:timeout-tree-cleanup"
+        "obligation:kb-organization-maintenance:postflight-terminal"
       ],
       "timeout_seconds": 120,
+      "execution_owner_id": "owner:kb-organization-maintenance:terminal-runtime",
+      "semantic_check_id": "semantic:kb-organization-maintenance:terminal-runtime",
+      "maintenance_unit_id": "unit:kb-organization-maintenance",
+      "member_skill_id": "kb-organization-maintenance",
+      "evidence_subject_id": "subject:check:kb-organization-maintenance:terminal-runtime",
       "command": "python",
       "args": [
         "scripts/check_kb_automation_run_receipt.py",
@@ -171,6 +246,11 @@
         "obligation:kb-organization-maintenance:depth-calibration"
       ],
       "timeout_seconds": 300,
+      "execution_owner_id": "owner:kb-organization-maintenance:depth-positive",
+      "semantic_check_id": "semantic:kb-organization-maintenance:depth-positive",
+      "maintenance_unit_id": "unit:kb-organization-maintenance",
+      "member_skill_id": "kb-organization-maintenance",
+      "evidence_subject_id": "subject:check:kb-organization-maintenance:depth-positive",
       "command": "python",
       "args": [
         "scripts/check_kb_automation_run_receipt.py",
@@ -197,6 +277,11 @@
         "obligation:kb-organization-maintenance:depth-calibration"
       ],
       "timeout_seconds": 300,
+      "execution_owner_id": "owner:kb-organization-maintenance:depth-shallow",
+      "semantic_check_id": "semantic:kb-organization-maintenance:depth-shallow",
+      "maintenance_unit_id": "unit:kb-organization-maintenance",
+      "member_skill_id": "kb-organization-maintenance",
+      "evidence_subject_id": "subject:check:kb-organization-maintenance:depth-shallow",
       "command": "python",
       "args": [
         "scripts/check_kb_automation_run_receipt.py",
@@ -241,10 +326,9 @@
         "obligation:kb-organization-maintenance:skill-safety-version",
         "obligation:kb-organization-maintenance:exact-selected-apply",
         "obligation:kb-organization-maintenance:postapply-merge-readiness",
-        "obligation:kb-organization-maintenance:postflight-terminal",
-        "obligation:kb-organization-maintenance:timeout-tree-cleanup"
+        "obligation:kb-organization-maintenance:postflight-terminal"
       ],
-      "claim_boundary": "This witness binds the immutable target-owned native receipt to its exact run, checks, and non-calibration native obligations; it does not prove post-run finalization."
+      "claim_boundary": "This witness binds the immutable target-owned native receipt to its exact run, checks, and non-calibration native obligations."
     }
   ],
   "closure_profiles": [
@@ -260,7 +344,6 @@
         "obligation:kb-organization-maintenance:exact-selected-apply",
         "obligation:kb-organization-maintenance:postapply-merge-readiness",
         "obligation:kb-organization-maintenance:postflight-terminal",
-        "obligation:kb-organization-maintenance:timeout-tree-cleanup",
         "obligation:kb-organization-maintenance:depth-calibration"
       ]
     }
@@ -307,7 +390,7 @@
         "check:kb-organization-maintenance:depth-shallow"
       ]
     },
-    "claim_boundary": "Only exact current receipts for the target skill's declared checks are supervised. The target skill retains all domain judgment, including positive/shallow behavior and conditional update finalization."
+    "claim_boundary": "Only exact current receipts for the target skill's declared checks are supervised. The target skill retains all domain judgment, including positive/shallow behavior and direct native completion."
   },
-  "claim_boundary": "SkillGuard supervises the complete native kb-organization-maintenance route, all target-specific obligations, and the sole current enforced closure. It cannot create a parallel executor or certify future runs."
+  "claim_boundary": "SkillGuard supervises the complete native kb-organization-maintenance maintenance unit, its target-specific obligations, and the sole current enforced closure. It does not ship with or execute on the consumer machine."
 }

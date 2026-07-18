@@ -1,4 +1,4 @@
-"""Build the five target-specific current SkillGuard automation bindings.
+"""Build four automation bindings and one explicit-manual update binding.
 
 The target obligation catalog lives in ``local_kb.automation_contracts`` and
 the executable topology lives in the declared FlowGuard child model.  This
@@ -30,7 +30,6 @@ from local_kb.automation_contracts import (  # noqa: E402
     obligation_id,
     obligation_ids_by_phase,
     step_id,
-    update_finalization_artifact_id,
 )
 
 
@@ -82,7 +81,7 @@ NATIVE_IMPLEMENTATION_PATHS = {
         "local_kb/settings_migration.py",
         "local_kb/card_schema_migration.py",
         "local_kb/org_migration.py",
-        "scripts/run_khaos_brain_system_update.py",
+        "scripts/run_khaos_brain_manual_update.py",
     ),
 }
 
@@ -92,12 +91,7 @@ SKILLGUARD_RUNTIME_CAPABILITY_IDS = SKILLGUARD_AUTOMATION_RUNTIME_CAPABILITY_IDS
 
 
 def _native_route_id(skill_id: str, *, phase: str = "") -> str:
-    if skill_id == "khaos-brain-update":
-        return (
-            f"route:{skill_id}:finalize"
-            if phase == "finalize"
-            else f"route:{skill_id}:authorize"
-        )
+    del phase
     return f"route:{skill_id}:run"
 
 
@@ -143,6 +137,11 @@ def _check(
         "evidence_class": "hard",
         "covers_obligation_ids": covers,
         "timeout_seconds": timeout_seconds,
+        "execution_owner_id": f"owner:{skill_id}:{kind}",
+        "semantic_check_id": f"semantic:{skill_id}:{kind}",
+        "maintenance_unit_id": f"unit:{skill_id}",
+        "member_skill_id": skill_id,
+        "evidence_subject_id": f"subject:{check_id(skill_id, kind)}",
     }
     if command is not None:
         row.update(
@@ -161,16 +160,7 @@ def build_contract_source(skill_id: str) -> dict[str, Any]:
     phases = obligation_ids_by_phase(skill_id)
     all_ids = list(expected_obligation_ids(skill_id))
     depth_id = obligation_id(skill_id, "depth-calibration")
-    calibration_important_ids = [
-        obligation_id(skill_id, str(row["suffix"]))
-        for row in spec["obligations"]
-        if row.get("important") is True
-        and str(row.get("evidence_source") or "native-receipt")
-        == "native-receipt"
-        and str(row.get("suffix") or "") != "depth-calibration"
-    ]
     verify_ids = [item for item in phases.get("verify", ()) if item != depth_id]
-    finalize_ids = list(phases.get("finalize", ()))
     shared_paths = (
         "local_kb/automation_contracts.py",
         "local_kb/automation_runtime.py",
@@ -179,9 +169,8 @@ def build_contract_source(skill_id: str) -> dict[str, Any]:
         "scripts/build_kb_automation_skillguard_contracts.py",
         "scripts/check_kb_automation_run_receipt.py",
         "scripts/check_kb_skillguard.py",
-        "scripts/run_kb_guarded_automation.py",
+        "scripts/run_kb_automation.py",
         "tests/test_kb_automation_skillguard.py",
-        "tests/test_process_control.py",
     )
     implementation_paths = list(
         dict.fromkeys(
@@ -242,55 +231,13 @@ def build_contract_source(skill_id: str) -> dict[str, Any]:
         ],
         timeout_seconds=120,
     )
-    branch_terminal_check = (
-        _check(
-            skill_id,
-            "branch-terminal-runtime",
-            calibration_important_ids,
-            command="python",
-            args=[
-                "scripts/check_kb_automation_run_receipt.py",
-                "--skill",
-                skill_id,
-                "--phase",
-                "all",
-                "--json",
-            ],
-            timeout_seconds=120,
-        )
-        if finalize_ids
-        else None
-    )
     checks = [
         intake_check,
         native_check,
         terminal_check,
-        *([branch_terminal_check] if branch_terminal_check is not None else []),
         positive_check,
         shallow_check,
     ]
-    if finalize_ids:
-        finalization_check = _check(
-            skill_id,
-            "finalization-runtime",
-            finalize_ids,
-            command="python",
-            args=[
-                "scripts/check_kb_automation_run_receipt.py",
-                "--skill",
-                skill_id,
-                "--finalization",
-                "--json",
-            ],
-            timeout_seconds=120,
-        )
-        finalization_check["native_route_id"] = _native_route_id(
-            skill_id, phase="finalize"
-        )
-        finalization_check["evidence_domain_id"] = (
-            f"target:{skill_id}:finalization-receipt"
-        )
-        checks.append(finalization_check)
     native_obligation_ids = [
         obligation_id(skill_id, str(row["suffix"]))
         for row in spec["obligations"]
@@ -306,8 +253,6 @@ def build_contract_source(skill_id: str) -> dict[str, Any]:
         )
         if phases.get(phase)
     ]
-    if branch_terminal_check is not None:
-        native_validator_check_ids.append(str(branch_terminal_check["check_id"]))
     native_artifact_id = native_receipt_artifact_id(skill_id)
     artifacts: list[dict[str, Any]] = [
         {
@@ -324,99 +269,63 @@ def build_contract_source(skill_id: str) -> dict[str, Any]:
             "covers_obligation_ids": native_obligation_ids,
             "claim_boundary": (
                 "This witness binds the immutable target-owned native receipt to its exact run, "
-                "checks, and non-calibration native obligations; it does not prove post-run finalization."
+                "checks, and non-calibration native obligations."
             ),
         }
     ]
-    if finalize_ids:
-        artifacts.append(
-            {
-                "artifact_id": update_finalization_artifact_id(),
-                "kind": "native_output",
-                "producer_step_id": step_id(skill_id, "finalize"),
-                "validators": [
-                    "immutable-staged-restoration-authorization",
-                    "snapshot-status-and-user-pause-bound",
-                    "planned-automation-toml-hashes-bound",
-                    "native-receipt-hash-bound",
-                    "first-authorization-closure-bound",
-                    "deferred-install-check-bound",
-                ],
-                "validator_check_ids": [
-                    check_id(skill_id, "finalization-runtime")
-                ],
-                "covers_obligation_ids": finalize_ids,
-                "claim_boundary": (
-                    "This witness authorizes only an exact immutable staged restoration plan. "
-                    "It does not prove that live automation state was restored or CURRENT was marked; "
-                    "those target-native actions occur only after this SkillGuard closure passes."
-                ),
-            }
-        )
     native_route_ids = [
-        f"route:{skill_id}:authorize" if finalize_ids else f"route:{skill_id}:run"
+        f"route:{skill_id}:run"
     ]
     claim_boundary = (
-        (
-            "SkillGuard supervises the update authorization route and, in a fresh composed run, "
-            "authorizes one exact staged restoration plan through the sole enforced closure. That "
-            "closure does not claim that live automation files were already restored or CURRENT "
-            "was already marked; the target-native executor must apply the authorized hashes, "
-            "read them back, run the normal installation check, and fail closed before marking CURRENT."
-        )
-        if finalize_ids
-        else (
-            f"SkillGuard supervises the complete native {skill_id} route, all target-specific obligations, "
-            "and the sole current enforced closure. It cannot create a parallel executor or certify future runs."
-        )
+        f"SkillGuard supervises the complete native {skill_id} maintenance unit, "
+        "its target-specific obligations, and the sole current enforced closure. "
+        "It does not ship with or execute on the consumer machine."
     )
     closure_profiles = [
         {"profile_id": "enforced", "required_obligation_ids": all_ids},
     ]
-    if finalize_ids:
-        if branch_terminal_check is None or len(finalize_ids) != 1:
-            raise ValueError("system update branch terminal contract is incomplete")
-        applicability_rules = [
-            {
-                "obligation_id": finalize_ids[0],
-                "allowed_disposition": "not_applicable",
-                "verifier_check_id": str(branch_terminal_check["check_id"]),
-            }
-        ]
-        for profile in closure_profiles:
-            branch_requirements = [
-                {
-                    "native_route_id": _native_route_id(skill_id),
-                    "branch_ids": [
-                        "no-update",
-                        "waiting-for-user",
-                        "ui-running",
-                    ],
-                    "required_obligation_ids": list(calibration_important_ids),
-                    "applicability_rules": applicability_rules,
-                }
-            ]
-            branch_requirements.append(
-                {
-                    "native_route_id": _native_route_id(skill_id),
-                    "branch_ids": ["prepared-update"],
-                    "required_obligation_ids": list(calibration_important_ids),
-                    "applicability_rules": [],
-                }
-            )
-            profile["route_branch_requirements"] = branch_requirements
     source = {
         "schema_version": "skillguard.contract_source.v2",
         "skill_id": skill_id,
+        "repository_role": "skill_maintainer_source",
+        "maintenance_unit_id": f"unit:{skill_id}",
+        "member_skill_ids": [skill_id],
+        "consumer_projection": {
+            "prohibited_path_prefixes": [".skillguard/"],
+            "prohibited_prompt_tokens": [
+                "SkillGuard",
+                ".skillguard",
+                "skillguard.py",
+            ],
+            "projection_id": "projection:consumer-distribution",
+            "release_manifest_path": "consumer-release.json",
+        },
+        "integration_mode": "native-integrated",
+        "native_route_owner": skill_id,
+        "native_route_bindings": [
+            {
+                "binding_id": f"native:{skill_id}:run",
+                "native_route_id": f"route:{skill_id}:run",
+                "required_before_closure": True,
+                "source": f".agents/skills/{skill_id}/SKILL.md",
+            }
+        ],
+        "native_check_bindings": [
+            {
+                "binding_id": f"native-check:{row['check_id'].removeprefix('check:')}",
+                "native_check_id": row["check_id"],
+                "evidence_source": "scripts/check_kb_automation_run_receipt.py",
+                "required": True,
+            }
+            for row in checks
+        ],
+        "default_route_id": f"route:{skill_id}:run",
+        "may_define_parallel_execution_route": False,
+        "may_define_skillguard_runtime_route": False,
         "model_id": f"khaos-brain.{skill_id}.executable-contract.v2",
         "model_path": MODEL_PATHS[skill_id],
         "confirmed": True,
         "release_eligible": False,
-        **(
-            {"route_branch_closure_required": True}
-            if finalize_ids
-            else {}
-        ),
         "implementation_paths": implementation_paths,
         "projection_consumers": [
             {
@@ -446,7 +355,7 @@ def build_contract_source(skill_id: str) -> dict[str, Any]:
                 "step_id": step_id(skill_id, "execute"),
                 "action": {
                     "kind": "native",
-                    "summary": "Run the native automation owner through every declared execution branch.",
+                    "summary": "Run the native maintenance owner through every declared execution branch.",
                 },
                 "check_ids": [
                     check_id(skill_id, "native-runtime"),
@@ -461,38 +370,11 @@ def build_contract_source(skill_id: str) -> dict[str, Any]:
                 },
                 "check_ids": [
                     check_id(skill_id, "terminal-runtime"),
-                    *(
-                        [check_id(skill_id, "branch-terminal-runtime")]
-                        if finalize_ids
-                        else []
-                    ),
                     check_id(skill_id, "depth-positive"),
                     check_id(skill_id, "depth-shallow"),
                 ],
                 "output_artifact_ids": [],
             },
-            *(
-                [
-                    {
-                        "step_id": step_id(skill_id, "finalize"),
-                        "action": {
-                            "kind": "validator",
-                            "summary": (
-                                "Validate and consume the immutable staged-restoration authorization receipt; "
-                                "this step is selected only by the finalization route."
-                            ),
-                        },
-                        "check_ids": [
-                            check_id(skill_id, "finalization-runtime"),
-                        ],
-                        "output_artifact_ids": [
-                            update_finalization_artifact_id()
-                        ],
-                    }
-                ]
-                if finalize_ids
-                else []
-            ),
         ],
         "checks": checks,
         "artifacts": artifacts,
@@ -509,11 +391,6 @@ def build_contract_source(skill_id: str) -> dict[str, Any]:
                 check_id(skill_id, "intake-runtime"),
                 check_id(skill_id, "native-runtime"),
                 check_id(skill_id, "terminal-runtime"),
-                *(
-                    [check_id(skill_id, "branch-terminal-runtime")]
-                    if finalize_ids
-                    else []
-                ),
                 check_id(skill_id, "depth-positive"),
                 check_id(skill_id, "depth-shallow"),
             ],
@@ -536,7 +413,7 @@ def build_contract_source(skill_id: str) -> dict[str, Any]:
             "claim_boundary": (
                 "Only exact current receipts for the target skill's declared checks are supervised. "
                 "The target skill retains all domain judgment, including positive/shallow behavior "
-                "and conditional update finalization."
+                "and direct native completion."
             ),
         },
         "claim_boundary": claim_boundary,
@@ -576,7 +453,7 @@ def main() -> int:
         "ok": all(row["matches"] for row in rows),
         "mode": "check" if args.check else "write",
         "skills": rows,
-        "claim_boundary": "Deterministic current SkillGuard automation binding generation only; official compilation and executed supervision remain separate gates.",
+        "claim_boundary": "Deterministic current SkillGuard maintenance binding generation only; official compilation and executed supervision remain separate gates.",
     }
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))

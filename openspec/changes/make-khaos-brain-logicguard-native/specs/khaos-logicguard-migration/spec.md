@@ -35,7 +35,7 @@ Migration SHALL acquire the declared managed-writer boundary, preserve unrelated
 
 #### Scenario: Projection or privacy validation fails
 - **WHEN** any migrated projection, exact binding, scope audit, zero-residual check, or active-index rebuild fails
-- **THEN** migration SHALL restore the prior complete generation, record the blocker, and keep all five retained automations paused
+- **THEN** migration SHALL restore the prior complete generation, record the blocker, and keep all four retained automations paused
 
 ### Requirement: Installer and install check enforce current model authority
 Every fresh install and upgrade SHALL run the current model-authority migration before readiness checks. The install check SHALL expose structured signals for LogicGuard package identity, scoped store readiness, model-bound card coverage, projection parity, mesh/index validity, zero legacy authority residuals, skill/install parity, and final strong-session readiness.
@@ -50,4 +50,4 @@ Every fresh install and upgrade SHALL run the current model-authority migration 
 
 #### Scenario: LogicGuard package identity changes during a long upgrade
 - **WHEN** the current LogicGuard package passes preflight and is then replaced, redirected, or edited after its immutable snapshot is committed
-- **THEN** every migration and readiness child SHALL consume only the frozen package digest, final live mismatch SHALL keep all five automations paused, and no compatibility or fallback reader SHALL be introduced
+- **THEN** every migration and readiness child SHALL consume only the frozen package digest, final live mismatch SHALL keep all four automations paused, and no compatibility or fallback reader SHALL be introduced

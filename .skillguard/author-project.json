@@ -1,0 +1,56 @@
+{
+  "schema_version": "skillguard.author_project.v1",
+  "project_id": "Khaos-Brain",
+  "repository_role": "skill_maintainer_source",
+  "consumer_runtime_dependency": false,
+  "ordinary_project_writes": false,
+  "official_openspec_covered": false,
+  "maintenance_units": [
+    {
+      "maintenance_unit_id": "unit:kb-dream-pass",
+      "member_skill_ids": [
+        "kb-dream-pass"
+      ],
+      "skill_path": ".agents/skills/kb-dream-pass"
+    },
+    {
+      "maintenance_unit_id": "unit:kb-organization-contribute",
+      "member_skill_ids": [
+        "kb-organization-contribute"
+      ],
+      "skill_path": ".agents/skills/kb-organization-contribute"
+    },
+    {
+      "maintenance_unit_id": "unit:kb-organization-maintenance",
+      "member_skill_ids": [
+        "kb-organization-maintenance"
+      ],
+      "skill_path": ".agents/skills/kb-organization-maintenance"
+    },
+    {
+      "maintenance_unit_id": "unit:kb-sleep-maintenance",
+      "member_skill_ids": [
+        "kb-sleep-maintenance"
+      ],
+      "skill_path": ".agents/skills/kb-sleep-maintenance"
+    },
+    {
+      "maintenance_unit_id": "unit:khaos-brain-update",
+      "member_skill_ids": [
+        "khaos-brain-update"
+      ],
+      "skill_path": ".agents/skills/khaos-brain-update"
+    }
+  ],
+  "consumer_projection": {
+    "prohibited_path_prefixes": [
+      ".skillguard/"
+    ],
+    "prohibited_tokens": [
+      "SkillGuard",
+      ".skillguard",
+      "skillguard.py"
+    ]
+  },
+  "claim_boundary": "Author-side maintenance registry only. It is never installed with a consumer skill and never writes into an ordinary project."
+}

@@ -1,9 +1,9 @@
-"""Immutable per-run receipts for SkillGuard-governed KB automations.
+"""Immutable per-run receipts for target-owned KB maintenance routes.
 
 Regression tests prove that a software version can perform the work.  This
-module proves a different fact: one concrete scheduled native run reached a
-declared terminal and produced enough target-owned evidence for SkillGuard to
-close that exact run.
+module proves a different fact: one concrete native maintenance run reached a
+declared terminal and produced enough target-owned evidence to close that
+exact run independently.
 """
 
 from __future__ import annotations
@@ -15,21 +15,20 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from local_kb.automation_contracts import (
-    AGGREGATE_SKILLGUARD_TIMEOUT_SECONDS,
+    AGGREGATE_ASSURANCE_TIMEOUT_SECONDS,
     AUTOMATION_COMPLETION_CONTRACTS,
     PRE_RESTORE_ASSURANCE_TIMEOUT_SECONDS,
     STANDARD_NATIVE_TIMEOUT_SECONDS,
-    STANDARD_SCHEDULED_PRODUCTION_TIMEOUT_SECONDS,
+    STANDARD_OWNER_TIMEOUT_SECONDS,
     UPDATE_NATIVE_TIMEOUT_SECONDS,
-    UPDATE_SCHEDULED_PRODUCTION_TIMEOUT_SECONDS,
+    UPDATE_OWNER_TIMEOUT_SECONDS,
     obligation_id,
 )
-from local_kb.software_update import LEGAL_SYSTEM_UPDATE_NOOP_REASONS
+from local_kb.software_update import LEGAL_MANUAL_UPDATE_NOOP_REASONS
 
 
 RUNTIME_RECEIPT_SCHEMA = "khaos-brain.automation-native-receipt.v1"
-RUNTIME_WRAPPER_SCHEMA = "khaos-brain.guarded-automation-result.v1"
-UPDATE_FINALIZATION_RECEIPT_SCHEMA = "khaos-brain.update-finalization-receipt.v1"
+RUNTIME_WRAPPER_SCHEMA = "khaos-brain.automation-execution-result.v1"
 
 
 def _utc_now() -> str:
@@ -83,6 +82,13 @@ def _command_identity_issues(
     if skill_id in {"kb-organization-contribute", "kb-organization-maintenance"}:
         if parts.count("--automation") != 1:
             issues.append("native-command-automation-mode-missing")
+    elif skill_id == "khaos-brain-update":
+        if parts.count("--explicit-user-request") != 1:
+            issues.append("manual-update-explicit-request-flag-count-mismatch")
+        if "--automation" in parts:
+            issues.append("manual-update-automation-mode-forbidden")
+        if "--json" not in parts:
+            issues.append("native-command-json-mode-missing")
     elif "--json" not in parts:
         issues.append("native-command-json-mode-missing")
     return issues
@@ -102,7 +108,7 @@ def _real_artifact_issues(
     *,
     receipt_path: Path,
 ) -> list[str]:
-    """Validate target-owned durable artifacts for non-fixture scheduled runs."""
+    """Validate target-owned durable artifacts for non-fixture maintenance runs."""
 
     issues: list[str] = []
 
@@ -136,7 +142,7 @@ def _real_artifact_issues(
             recorded = _read_json_mapping(native)
             for key, value in payload.items():
                 if (
-                    key not in {"receipt_path", "_guarded_timeout_policy"}
+                    key not in {"receipt_path", "_owner_timeout_policy"}
                     and recorded.get(key) != value
                 ):
                     issues.append(f"sleep-native-receipt-content-mismatch:{key}")
@@ -156,12 +162,25 @@ def _real_artifact_issues(
         if postflight is not None and postflight.stat().st_size <= 0:
             issues.append("organization-postflight-empty")
     elif skill_id == "khaos-brain-update":
-        snapshot = _mapping(payload.get("automation_state_snapshot"))
-        snapshot_path = require_file(snapshot.get("path"), "update-automation-snapshot")
-        if snapshot_path is not None:
-            recorded = _read_json_mapping(snapshot_path)
-            if _mapping(recorded.get("states")) != _mapping(snapshot.get("states")):
-                issues.append("update-automation-snapshot-content-mismatch")
+        if terminal_status == "current-and-restored":
+            finalization = _mapping(payload.get("update_finalization"))
+            if _mapping(finalization.get("restoration")).get("ok") is not True:
+                issues.append("update-restoration-receipt-missing")
+            if _mapping(finalization.get("final_install_check")).get("ok") is not True:
+                issues.append("update-final-install-check-missing")
+            if _mapping(payload.get("snapshot_cleanup")).get("ok") is not True:
+                issues.append("update-snapshot-cleanup-missing")
+        else:
+            snapshot = _mapping(payload.get("automation_state_snapshot"))
+            snapshot_path = require_file(
+                snapshot.get("path"), "update-automation-snapshot"
+            )
+            if snapshot_path is not None:
+                recorded = _read_json_mapping(snapshot_path)
+                if _mapping(recorded.get("states")) != _mapping(
+                    snapshot.get("states")
+                ):
+                    issues.append("update-automation-snapshot-content-mismatch")
     return issues
 
 
@@ -391,16 +410,16 @@ def _timeout_tree_cleanup_evidence(
     payload: Mapping[str, Any],
     exit_code: int,
 ) -> dict[str, Any]:
-    policy = _mapping(payload.get("_guarded_timeout_policy"))
+    policy = _mapping(payload.get("_owner_timeout_policy"))
     expected_native = (
         UPDATE_NATIVE_TIMEOUT_SECONDS
         if skill_id == "khaos-brain-update"
         else STANDARD_NATIVE_TIMEOUT_SECONDS
     )
-    expected_scheduled = (
-        UPDATE_SCHEDULED_PRODUCTION_TIMEOUT_SECONDS
+    expected_guarded = (
+        UPDATE_OWNER_TIMEOUT_SECONDS
         if skill_id == "khaos-brain-update"
-        else STANDARD_SCHEDULED_PRODUCTION_TIMEOUT_SECONDS
+        else STANDARD_OWNER_TIMEOUT_SECONDS
     )
     timed_out = policy.get("timed_out") is True or int(exit_code) == 124
     cleanup_ok = bool(
@@ -412,8 +431,8 @@ def _timeout_tree_cleanup_evidence(
     )
     configured_hierarchy_ok = bool(
         expected_native
-        < expected_scheduled
-        < AGGREGATE_SKILLGUARD_TIMEOUT_SECONDS
+        < expected_guarded
+        < AGGREGATE_ASSURANCE_TIMEOUT_SECONDS
         < PRE_RESTORE_ASSURANCE_TIMEOUT_SECONDS
     )
     hierarchy_ok = bool(
@@ -424,10 +443,10 @@ def _timeout_tree_cleanup_evidence(
             or (
                 _nonnegative_int(policy.get("native_timeout_seconds"))
                 == expected_native
-                and _nonnegative_int(policy.get("scheduled_timeout_seconds"))
-                == expected_scheduled
+                and _nonnegative_int(policy.get("owner_timeout_seconds"))
+                == expected_guarded
                 and _nonnegative_int(policy.get("aggregate_timeout_seconds"))
-                == AGGREGATE_SKILLGUARD_TIMEOUT_SECONDS
+                == AGGREGATE_ASSURANCE_TIMEOUT_SECONDS
                 and _nonnegative_int(policy.get("installer_timeout_seconds"))
                 == PRE_RESTORE_ASSURANCE_TIMEOUT_SECONDS
             )
@@ -446,7 +465,7 @@ def _timeout_tree_cleanup_evidence(
             "timeout-tree-cleanup",
             "No timeout occurred; the ordered timeout hierarchy proves that process-tree cleanup was not applicable to this run.",
             "timeout-not-observed",
-            "_guarded_timeout_policy",
+            "_owner_timeout_policy",
             gate_facts={
                 "run_id": payload.get("run_id"),
                 "gate_id": "owned-process-tree-timeout",
@@ -460,7 +479,7 @@ def _timeout_tree_cleanup_evidence(
     return _evidence(
         hierarchy_ok and cleanup_ok,
         "The guarded native owner is bound to an ordered timeout hierarchy and any observed timeout has zero remaining descendants.",
-        "_guarded_timeout_policy",
+        "_owner_timeout_policy",
         branch_id="timeout-cleanup",
     )
 
@@ -1089,9 +1108,6 @@ def _org_contribution_evidence(
                     "native_payload.settings_gate.available",
                     "native_payload.terminal_gate.applicable",
                 ),
-                "timeout-tree-cleanup": (
-                    "native_payload._guarded_timeout_policy",
-                ),
             },
             gate_facts={
                 "run_id": payload.get("run_id"),
@@ -1347,9 +1363,6 @@ def _org_maintenance_evidence(
                     "native_payload.skipped",
                     "native_payload.terminal_gate",
                 ),
-                "timeout-tree-cleanup": (
-                    "native_payload._guarded_timeout_policy",
-                ),
             },
             gate_facts={
                 "run_id": payload.get("run_id"),
@@ -1581,18 +1594,18 @@ def _org_maintenance_evidence(
 def _update_evidence(payload: Mapping[str, Any], exit_code: int) -> dict[str, dict[str, Any]]:
     skill_id = "khaos-brain-update"
     status = str(payload.get("status") or "")
-    system_check = _mapping(payload.get("system_check"))
+    manual_check = _mapping(payload.get("manual_check"))
     reason = str(payload.get("reason") or "")
     terminal_gate = _mapping(payload.get("terminal_gate"))
     if (
         exit_code == 0
         and status == "no-op"
-        and reason in LEGAL_SYSTEM_UPDATE_NOOP_REASONS
-        and system_check.get("ok") is True
-        and system_check.get("apply_ready") is False
-        and system_check.get("reason") == reason
+        and reason in LEGAL_MANUAL_UPDATE_NOOP_REASONS
+        and manual_check.get("ok") is True
+        and manual_check.get("apply_ready") is False
+        and manual_check.get("reason") == reason
         and str(payload.get("run_id") or "")
-        and terminal_gate.get("gate_id") == "system-update-check"
+        and terminal_gate.get("gate_id") == "manual-update-check"
         and terminal_gate.get("evaluated") is True
         and terminal_gate.get("applicable") is False
         and terminal_gate.get("reason") == reason
@@ -1600,53 +1613,50 @@ def _update_evidence(payload: Mapping[str, Any], exit_code: int) -> dict[str, di
         return _gated_noop_evidence(
             skill_id,
             reason,
-            "system-update-check-only",
+            "manual-update-check-only",
             {
                 "authorization-system-check": (
                     "native_payload.run_id",
-                    "native_payload.system_check",
+                    "native_payload.manual_check",
                     "native_payload.terminal_gate",
                 ),
                 "preserve-state-rollback": (
-                    "native_payload.system_check.apply_ready",
+                    "native_payload.manual_check.apply_ready",
                     "native_payload.terminal_gate.applicable",
                 ),
                 "fast-forward-only": (
-                    "native_payload.system_check",
+                    "native_payload.manual_check",
                     "native_payload.terminal_gate",
                 ),
                 "migration-debt-settlement": (
-                    "native_payload.system_check",
+                    "native_payload.manual_check",
                     "native_payload.terminal_gate",
                 ),
                 "logicguard-authority-cutover": (
-                    "native_payload.system_check.apply_ready",
+                    "native_payload.manual_check.apply_ready",
                     "native_payload.terminal_gate.applicable",
                 ),
                 "transaction-retirement": (
-                    "native_payload.system_check",
+                    "native_payload.manual_check",
                     "native_payload.terminal_gate",
                 ),
                 "zero-retired-authority": (
-                    "native_payload.system_check.apply_ready",
+                    "native_payload.manual_check.apply_ready",
                     "native_payload.terminal_gate.applicable",
                 ),
                 "aggregate-hard-gates": (
-                    "native_payload.system_check",
+                    "native_payload.manual_check",
                     "native_payload.terminal_gate",
                 ),
                 "restore-or-stay-paused": (
-                    "native_payload.system_check.apply_ready",
+                    "native_payload.manual_check.apply_ready",
                     "native_payload.terminal_gate.applicable",
                 ),
                 "final-machine-receipt": (
                     "native_payload.status",
                     "native_payload.reason",
-                    "native_payload.system_check",
+                    "native_payload.manual_check",
                     "native_payload.terminal_gate",
-                ),
-                "timeout-tree-cleanup": (
-                    "native_payload._guarded_timeout_policy",
                 ),
             },
             gate_facts={
@@ -1678,31 +1688,36 @@ def _update_evidence(payload: Mapping[str, Any], exit_code: int) -> dict[str, di
     checked_transaction = _mapping(install_check.get("install_transaction"))
     automation_snapshot = _mapping(payload.get("automation_state_snapshot"))
     snapshot_states = _mapping(automation_snapshot.get("states"))
+    snapshot_user_paused = _mapping(automation_snapshot.get("user_paused"))
     pause_before_mutation = _mapping(payload.get("pause_before_mutation"))
-    pause_after_native = _mapping(payload.get("pause_after_native"))
+    update_finalization = _mapping(payload.get("update_finalization"))
+    restoration_plan = _mapping(update_finalization.get("restoration_plan"))
+    deferred_install_check = _mapping(
+        update_finalization.get("deferred_install_check")
+    )
+    restoration = _mapping(update_finalization.get("restoration"))
+    final_install_check = _mapping(
+        update_finalization.get("final_install_check")
+    )
+    update_state = _mapping(payload.get("update_state"))
+    snapshot_cleanup = _mapping(payload.get("snapshot_cleanup"))
     retired_skill_ids = {str(item) for item in _list(install.get("retired_skill_ids"))}
     retired_automation_ids = {str(item) for item in _list(install.get("retired_automation_ids"))}
     automations = [
         _mapping(item) for item in _list(install.get("automations"))
     ]
-    installed_automation_states = {
-        str(item.get("id") or ""): str(item.get("status") or "")
-        for item in automations
-        if str(item.get("id") or "")
-    }
     survivor_ids = {
         "kb-sleep",
         "kb-dream",
         "kb-org-contribute",
         "kb-org-maintenance",
-        "khaos-brain-system-update",
     }
     return {
         obligation_id(skill_id, "authorization-system-check"): _evidence(
-            system_check.get("apply_ready") is True
-            and system_check.get("reason") == "prepared-and-ui-closed",
-            "The native system gate proves an explicitly prepared update with the UI closed.",
-            "system_check",
+            manual_check.get("apply_ready") is True
+            and manual_check.get("reason") == "explicit-request-and-ui-closed",
+            "The native manual gate proves an explicit current user request with the UI closed.",
+            "manual_check",
         ),
         obligation_id(skill_id, "preserve-state-rollback"): _evidence(
             paused_transaction.get("ok") is True
@@ -1744,8 +1759,9 @@ def _update_evidence(payload: Mapping[str, Any], exit_code: int) -> dict[str, di
         obligation_id(skill_id, "transaction-retirement"): _evidence(
             install_transaction.get("ok") is True
             and retired_skill_ids == {"kb-architect-pass"}
-            and retired_automation_ids == {"kb-architect"},
-            "The native update used a committed transaction whose explicit retirement set contains only the exact legacy Architect surfaces.",
+            and retired_automation_ids
+            == {"kb-architect", "khaos-brain-system-update"},
+            "The native update used a committed transaction whose retirement set contains the exact Architect and system-update automation surfaces.",
             "install.install_transaction",
             "install.retired_skill_ids",
             "install.retired_automation_ids",
@@ -1772,30 +1788,44 @@ def _update_evidence(payload: Mapping[str, Any], exit_code: int) -> dict[str, di
         ),
         obligation_id(skill_id, "restore-or-stay-paused"): _evidence(
             install_transaction.get("ok") is True
-            and set(installed_automation_states) == survivor_ids
-            and installed_automation_states == {
+            and restoration_plan.get("ok") is True
+            and restoration.get("ok") is True
+            and restoration.get("plan_hash") == restoration_plan.get("plan_hash")
+            and _mapping(restoration.get("restored")) == {
                 str(key): str(value) for key, value in snapshot_states.items()
             }
-            and all(str(item.get("id") or "") != "kb-architect" for item in automations)
-            and pause_after_native.get("ok") is True
-            and set(_list(pause_after_native.get("expected_ids"))) == survivor_ids
-            and set(_list(pause_after_native.get("paused_ids"))) == survivor_ids,
-            "The native terminal preserves the complete restoration snapshot while keeping all survivors paused until SkillGuard closes.",
+            and _mapping(restoration.get("restored_user_paused"))
+            == {
+                str(key): bool(value)
+                for key, value in snapshot_user_paused.items()
+            }
+            and deferred_install_check.get("ok") is True
+            and final_install_check.get("ok") is True
+            and set(snapshot_states) == survivor_ids
+            and all(
+                str(item.get("id") or "") != "kb-architect"
+                for item in automations
+            ),
+            "The native route restored the exact captured status and user-pause state only after every target-owned gate passed.",
             "automation_state_snapshot",
-            "pause_after_native",
-            "install.automations",
-            "install.install_transaction",
+            "update_finalization.restoration_plan",
+            "update_finalization.restoration",
+            "update_finalization.final_install_check",
         ),
         obligation_id(skill_id, "final-machine-receipt"): _evidence(
             exit_code == 0
-            and status == "awaiting-skillguard"
+            and status == "current-and-restored"
             and install_check.get("ok") is True
-            and pause_after_native.get("ok") is True
+            and final_install_check.get("ok") is True
+            and update_state.get("status") == "current"
+            and snapshot_cleanup.get("ok") is True
             and _mapping(payload.get("lock_release")).get("ok") is True,
-            "The native update reached the guarded pre-final terminal only after machine checks passed and survivors were re-paused.",
+            "The native update reached its final terminal only after exact restoration, final installed-health readback, CURRENT state, snapshot cleanup, and lock release.",
             "status",
             "install_check",
-            "pause_after_native",
+            "update_finalization.final_install_check",
+            "update_state",
+            "snapshot_cleanup",
             "lock_release",
         ),
     }
@@ -1818,10 +1848,6 @@ def evaluate_native_payload(
     if skill_id not in evaluators:
         return {"ok": False, "terminal_status": "failed", "evidence": {}, "issues": ["unknown skill"]}
     evidence = evaluators[skill_id](payload, int(exit_code))
-    evidence.setdefault(
-        obligation_id(skill_id, "timeout-tree-cleanup"),
-        _timeout_tree_cleanup_evidence(skill_id, payload, int(exit_code)),
-    )
     expected = {
         obligation_id(skill_id, suffix) for suffix in _all_domain_suffixes(skill_id)
     }
@@ -1885,6 +1911,9 @@ def build_native_receipt(
         "schema_version": RUNTIME_RECEIPT_SCHEMA,
         "skill_id": skill_id,
         "automation_id": AUTOMATION_COMPLETION_CONTRACTS[skill_id]["automation_id"],
+        "execution_kind": AUTOMATION_COMPLETION_CONTRACTS[skill_id][
+            "execution_kind"
+        ],
         "run_id": run_id,
         "started_at": started_at,
         "finished_at": finished_at or _utc_now(),
@@ -1899,7 +1928,7 @@ def build_native_receipt(
         "fixture": fixture,
         "claim_boundary": (
             "This immutable record proves only the captured native process output and target-specific "
-            "terminal validation for this run. SkillGuard closure and version capability regression are separate."
+            "terminal validation for this run. Author-side maintenance certification and version capability regression are separate."
         ),
     }
     receipt["receipt_hash"] = content_hash(receipt)
@@ -1913,293 +1942,6 @@ def write_native_receipt(path: Path, receipt: Mapping[str, Any]) -> Path:
         json.dump(receipt, handle, ensure_ascii=False, indent=2, sort_keys=True)
         handle.write("\n")
     return path
-
-
-def build_update_finalization_receipt(
-    *,
-    run_id: str,
-    native_receipt_hash: str,
-    authorization_declared_check_receipt: Mapping[str, Any],
-    snapshot: Mapping[str, Any],
-    restoration_plan: Mapping[str, Any],
-    deferred_install_check: Mapping[str, Any],
-    started_at: str,
-    finished_at: str | None = None,
-) -> dict[str, Any]:
-    states = _mapping(snapshot.get("states"))
-    user_paused = _mapping(snapshot.get("user_paused"))
-    planned = _mapping(restoration_plan.get("states"))
-    planned_user_paused = _mapping(restoration_plan.get("user_paused"))
-    source_states = _mapping(restoration_plan.get("source_states"))
-    source_user_paused = _mapping(restoration_plan.get("source_user_paused"))
-    source_hashes = _mapping(restoration_plan.get("source_hashes"))
-    target_hashes = _mapping(restoration_plan.get("target_hashes"))
-    survivor_ids = {
-        "kb-sleep",
-        "kb-dream",
-        "kb-org-contribute",
-        "kb-org-maintenance",
-        "khaos-brain-system-update",
-    }
-    issues: list[str] = []
-    if not run_id or not native_receipt_hash:
-        issues.append("native-run-binding-missing")
-    authorization_validation = _mapping(
-        authorization_declared_check_receipt.get("validation")
-    )
-    if not (
-        authorization_declared_check_receipt.get("ok") is True
-        and authorization_validation.get("non_terminal_authorization") is True
-        and authorization_validation.get("overall_complete") is False
-        and authorization_validation.get("closure_emitted") is False
-        and authorization_validation.get("declared_checks_current") is True
-        and str(authorization_validation.get("depth_receipt_id") or "")
-        and str(authorization_validation.get("depth_receipt_hash") or "")
-    ):
-        issues.append("authorization-declared-check-receipt-missing")
-    if set(states) != survivor_ids or set(user_paused) != survivor_ids:
-        issues.append("snapshot-survivor-set-mismatch")
-    if restoration_plan.get("ok") is not True:
-        issues.append("automation-restoration-plan-failed")
-    if planned != states:
-        issues.append("planned-statuses-do-not-match-snapshot")
-    if planned_user_paused != user_paused:
-        issues.append("planned-user-pause-metadata-does-not-match-snapshot")
-    if set(source_hashes) != survivor_ids or set(target_hashes) != survivor_ids:
-        issues.append("restoration-plan-hash-set-mismatch")
-    if set(source_states) != survivor_ids or set(source_user_paused) != survivor_ids:
-        issues.append("restoration-plan-source-state-set-mismatch")
-    if any(str(value).upper() != "PAUSED" for value in source_states.values()):
-        issues.append("live-automation-active-before-final-skillguard")
-    if not str(restoration_plan.get("plan_hash") or ""):
-        issues.append("restoration-plan-hash-missing")
-    if deferred_install_check.get("ok") is not True:
-        issues.append("deferred-install-check-failed")
-    receipt: dict[str, Any] = {
-        "schema_version": UPDATE_FINALIZATION_RECEIPT_SCHEMA,
-        "run_id": run_id,
-        "native_receipt_hash": native_receipt_hash,
-        "authorization_declared_check_receipt_hash": content_hash(
-            authorization_declared_check_receipt
-        ),
-        "snapshot_hash": str(snapshot.get("snapshot_hash") or content_hash({"states": states, "user_paused": user_paused})),
-        "snapshot_states": dict(states),
-        "snapshot_user_paused": dict(user_paused),
-        "planned_states": dict(planned),
-        "planned_user_paused": dict(planned_user_paused),
-        "source_states_before_finalization": dict(source_states),
-        "source_user_paused_before_finalization": dict(source_user_paused),
-        "restoration_source_hashes": dict(source_hashes),
-        "restoration_target_hashes": dict(target_hashes),
-        "restoration_plan_hash": str(restoration_plan.get("plan_hash") or ""),
-        "restoration_plan_receipt_hash": content_hash(restoration_plan),
-        "deferred_install_check_hash": content_hash(deferred_install_check),
-        "started_at": started_at,
-        "finished_at": finished_at or _utc_now(),
-        "status": "staged-restoration-awaiting-final-skillguard" if not issues else "failed",
-        "issues": issues,
-        "claim_boundary": (
-            "This receipt binds an exact, hash-addressed restoration plan while all live automations remain "
-            "paused. The sole current enforced SkillGuard closure must authorize it before native "
-            "apply, readback, the normal installed-state check, and CURRENT."
-        ),
-    }
-    receipt["receipt_hash"] = content_hash(receipt)
-    return receipt
-
-
-def validate_update_finalization_receipt(
-    path: Path,
-    *,
-    expected_run_id: str,
-    expected_native_receipt_hash: str,
-    expected_receipt_hash: str = "",
-) -> dict[str, Any]:
-    path = Path(path)
-    try:
-        receipt = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        return {"ok": False, "issues": [f"finalization-receipt-unreadable:{type(exc).__name__}"]}
-    if not isinstance(receipt, dict):
-        return {"ok": False, "issues": ["finalization-receipt-not-object"]}
-    issues: list[str] = []
-    supplied_hash = str(receipt.get("receipt_hash") or "")
-    unsigned = dict(receipt)
-    unsigned.pop("receipt_hash", None)
-    if supplied_hash != content_hash(unsigned):
-        issues.append("finalization-receipt-hash-mismatch")
-    if expected_receipt_hash and supplied_hash != expected_receipt_hash:
-        issues.append("finalization-receipt-not-current")
-    if receipt.get("schema_version") != UPDATE_FINALIZATION_RECEIPT_SCHEMA:
-        issues.append("finalization-receipt-schema-mismatch")
-    if receipt.get("run_id") != expected_run_id:
-        issues.append("finalization-run-id-mismatch")
-    if receipt.get("native_receipt_hash") != expected_native_receipt_hash:
-        issues.append("finalization-native-receipt-hash-mismatch")
-    if receipt.get("status") != "staged-restoration-awaiting-final-skillguard":
-        issues.append("finalization-terminal-not-staged")
-    snapshot_states = _mapping(receipt.get("snapshot_states"))
-    planned_states = _mapping(receipt.get("planned_states"))
-    snapshot_user_paused = _mapping(receipt.get("snapshot_user_paused"))
-    planned_user_paused = _mapping(receipt.get("planned_user_paused"))
-    source_hashes = _mapping(receipt.get("restoration_source_hashes"))
-    target_hashes = _mapping(receipt.get("restoration_target_hashes"))
-    source_states = _mapping(receipt.get("source_states_before_finalization"))
-    source_user_paused = _mapping(
-        receipt.get("source_user_paused_before_finalization")
-    )
-    survivor_ids = {
-        "kb-sleep",
-        "kb-dream",
-        "kb-org-contribute",
-        "kb-org-maintenance",
-        "khaos-brain-system-update",
-    }
-    if snapshot_states != planned_states or set(planned_states) != survivor_ids:
-        issues.append("finalization-planned-status-mismatch")
-    if snapshot_user_paused != planned_user_paused or set(planned_user_paused) != survivor_ids:
-        issues.append("finalization-planned-user-pause-mismatch")
-    if set(source_hashes) != survivor_ids or set(target_hashes) != survivor_ids:
-        issues.append("finalization-restoration-hash-set-mismatch")
-    if (
-        set(source_states) != survivor_ids
-        or set(source_user_paused) != survivor_ids
-        or any(str(value).upper() != "PAUSED" for value in source_states.values())
-    ):
-        issues.append("finalization-live-not-fully-paused")
-    plan_body = {
-        "schema_version": "khaos-brain.automation-restoration-plan.v1",
-        "states": dict(planned_states),
-        "user_paused": dict(planned_user_paused),
-        "source_states": dict(source_states),
-        "source_user_paused": dict(source_user_paused),
-        "source_hashes": dict(source_hashes),
-        "target_hashes": dict(target_hashes),
-    }
-    if str(receipt.get("restoration_plan_hash") or "") != content_hash(plan_body):
-        issues.append("finalization-restoration-plan-hash-mismatch")
-    if _list(receipt.get("issues")):
-        issues.append("finalization-receipt-has-blockers")
-    return {
-        "ok": not issues,
-        "run_id": str(receipt.get("run_id") or ""),
-        "receipt_hash": supplied_hash,
-        "issues": issues,
-        "path": str(path),
-        "claim_boundary": "Exact staged restoration authorization input only; live apply and CURRENT are later.",
-    }
-
-
-def build_update_activation_receipt(
-    *,
-    run_id: str,
-    native_receipt_hash: str,
-    finalization_receipt_hash: str,
-    final_skillguard: Mapping[str, Any],
-    restoration_plan: Mapping[str, Any],
-    restoration: Mapping[str, Any],
-    final_install_check: Mapping[str, Any],
-    update_state: Mapping[str, Any],
-    created_at: str,
-) -> dict[str, Any]:
-    planned_states = _mapping(restoration_plan.get("states"))
-    planned_user_paused = _mapping(restoration_plan.get("user_paused"))
-    target_hashes = _mapping(restoration_plan.get("target_hashes"))
-    restored_states = _mapping(restoration.get("restored"))
-    restored_user_paused = _mapping(restoration.get("restored_user_paused"))
-    applied_hashes = _mapping(restoration.get("applied_hashes"))
-    issues: list[str] = []
-    if not run_id or not native_receipt_hash or not finalization_receipt_hash:
-        issues.append("activation-run-binding-missing")
-    if final_skillguard.get("ok") is not True:
-        issues.append("activation-final-skillguard-missing")
-    if restoration_plan.get("ok") is not True or restoration.get("ok") is not True:
-        issues.append("activation-restoration-failed")
-    if restoration.get("plan_hash") != restoration_plan.get("plan_hash"):
-        issues.append("activation-plan-hash-mismatch")
-    if restored_states != planned_states or restored_user_paused != planned_user_paused:
-        issues.append("activation-state-readback-mismatch")
-    if applied_hashes != target_hashes:
-        issues.append("activation-file-hash-readback-mismatch")
-    if final_install_check.get("ok") is not True:
-        issues.append("activation-final-install-check-failed")
-    normalized_update_status = str(update_state.get("status") or "").upper()
-    if normalized_update_status != "CURRENT":
-        issues.append("activation-update-status-not-current")
-    receipt: dict[str, Any] = {
-        "schema_version": "khaos-brain.update-activation-receipt.v1",
-        "run_id": run_id,
-        "native_receipt_hash": native_receipt_hash,
-        "finalization_receipt_hash": finalization_receipt_hash,
-        "final_skillguard_hash": content_hash(final_skillguard),
-        "restoration_plan_hash": str(restoration_plan.get("plan_hash") or ""),
-        "restoration_receipt_hash": content_hash(restoration),
-        "final_install_check_hash": content_hash(final_install_check),
-        "update_state_hash": content_hash(update_state),
-        "update_status": normalized_update_status,
-        "status": "current-and-restored" if not issues else "failed",
-        "issues": issues,
-        "created_at": created_at,
-        "claim_boundary": (
-            "Exact SkillGuard-authorized restoration apply/readback, normal installed-state check, and CURRENT for this run only."
-        ),
-    }
-    receipt["receipt_hash"] = content_hash(receipt)
-    return receipt
-
-
-def validate_update_activation_receipt(
-    path: Path,
-    *,
-    expected_run_id: str,
-    expected_native_receipt_hash: str,
-    expected_finalization_receipt_hash: str,
-    expected_receipt_hash: str = "",
-) -> dict[str, Any]:
-    path = Path(path)
-    try:
-        receipt = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        return {"ok": False, "issues": [f"activation-receipt-unreadable:{type(exc).__name__}"]}
-    if not isinstance(receipt, dict):
-        return {"ok": False, "issues": ["activation-receipt-not-object"]}
-    issues: list[str] = []
-    supplied_hash = str(receipt.get("receipt_hash") or "")
-    unsigned = dict(receipt)
-    unsigned.pop("receipt_hash", None)
-    if supplied_hash != content_hash(unsigned):
-        issues.append("activation-receipt-hash-mismatch")
-    if expected_receipt_hash and supplied_hash != expected_receipt_hash:
-        issues.append("activation-receipt-not-current")
-    if receipt.get("schema_version") != "khaos-brain.update-activation-receipt.v1":
-        issues.append("activation-receipt-schema-mismatch")
-    if receipt.get("run_id") != expected_run_id:
-        issues.append("activation-run-id-mismatch")
-    if receipt.get("native_receipt_hash") != expected_native_receipt_hash:
-        issues.append("activation-native-receipt-hash-mismatch")
-    if receipt.get("finalization_receipt_hash") != expected_finalization_receipt_hash:
-        issues.append("activation-finalization-receipt-hash-mismatch")
-    if receipt.get("status") != "current-and-restored" or receipt.get("update_status") != "CURRENT":
-        issues.append("activation-terminal-not-current")
-    if _list(receipt.get("issues")):
-        issues.append("activation-receipt-has-blockers")
-    for key in (
-        "final_skillguard_hash",
-        "restoration_plan_hash",
-        "restoration_receipt_hash",
-        "final_install_check_hash",
-        "update_state_hash",
-    ):
-        if not str(receipt.get(key) or ""):
-            issues.append(f"activation-binding-missing:{key}")
-    return {
-        "ok": not issues,
-        "run_id": str(receipt.get("run_id") or ""),
-        "receipt_hash": supplied_hash,
-        "issues": issues,
-        "path": str(path),
-        "claim_boundary": "Immutable final activation receipt integrity and exact upstream run binding only.",
-    }
 
 
 def validate_native_receipt(
@@ -2230,6 +1972,11 @@ def validate_native_receipt(
         issues.append("receipt-schema-mismatch")
     if receipt.get("skill_id") != skill_id:
         issues.append("receipt-skill-mismatch")
+    spec = AUTOMATION_COMPLETION_CONTRACTS[skill_id]
+    if receipt.get("automation_id") != spec["automation_id"]:
+        issues.append("receipt-automation-binding-mismatch")
+    if receipt.get("execution_kind") != spec["execution_kind"]:
+        issues.append("receipt-execution-kind-mismatch")
     if expected_run_id and receipt.get("run_id") != expected_run_id:
         issues.append("receipt-run-id-mismatch")
     command = _list(receipt.get("command"))
@@ -2237,7 +1984,7 @@ def validate_native_receipt(
         issues.append("command-fingerprint-mismatch")
     fixture = str(receipt.get("fixture") or "")
     if fixture and not allow_fixture:
-        issues.append("fixture-receipt-not-allowed-for-scheduled-run")
+        issues.append("fixture-receipt-not-allowed-for-live-run")
     issues.extend(
         _command_identity_issues(
             skill_id,
@@ -2637,8 +2384,12 @@ def build_fixture_payload(
     elif skill_id == "khaos-brain-update":
         payload = {
             "ok": True,
-            "status": "awaiting-skillguard",
-            "system_check": {"ok": True, "apply_ready": True, "reason": "prepared-and-ui-closed"},
+            "status": "current-and-restored",
+            "manual_check": {
+                "ok": True,
+                "apply_ready": True,
+                "reason": "explicit-request-and-ui-closed",
+            },
             "git_update": {"ok": True, "mode": "ff-only"},
             "automation_state_snapshot": {
                 "states": {
@@ -2646,27 +2397,15 @@ def build_fixture_payload(
                     "kb-dream": "ACTIVE",
                     "kb-org-contribute": "ACTIVE",
                     "kb-org-maintenance": "PAUSED",
-                    "khaos-brain-system-update": "ACTIVE",
-                }
+                },
+                "user_paused": {
+                    "kb-sleep": False,
+                    "kb-dream": False,
+                    "kb-org-contribute": False,
+                    "kb-org-maintenance": True,
+                },
             },
             "pause_before_mutation": {"ok": True},
-            "pause_after_native": {
-                "ok": True,
-                "expected_ids": [
-                    "kb-sleep",
-                    "kb-dream",
-                    "kb-org-contribute",
-                    "kb-org-maintenance",
-                    "khaos-brain-system-update",
-                ],
-                "paused_ids": [
-                    "kb-sleep",
-                    "kb-dream",
-                    "kb-org-contribute",
-                    "kb-org-maintenance",
-                    "khaos-brain-system-update",
-                ],
-            },
             "lock_release": {"ok": True},
             "install": {
                 "paused_install_transaction": {
@@ -2696,13 +2435,15 @@ def build_fixture_payload(
                 "upgrade_assurance": {"ok": True},
                 "automation_restore_deferred": True,
                 "retired_skill_ids": ["kb-architect-pass"],
-                "retired_automation_ids": ["kb-architect"],
+                "retired_automation_ids": [
+                    "kb-architect",
+                    "khaos-brain-system-update",
+                ],
                 "automations": [
                     {"id": "kb-sleep", "status": "ACTIVE"},
                     {"id": "kb-dream", "status": "ACTIVE"},
                     {"id": "kb-org-contribute", "status": "ACTIVE"},
                     {"id": "kb-org-maintenance", "status": "PAUSED"},
-                    {"id": "khaos-brain-system-update", "status": "ACTIVE"},
                 ],
             },
             "install_check": {
@@ -2716,22 +2457,48 @@ def build_fixture_payload(
                     "receipt_hash": "fixture-restore-hash",
                 },
             },
+            "update_finalization": {
+                "restoration_plan": {
+                    "ok": True,
+                    "plan_hash": "fixture-restoration-plan",
+                },
+                "deferred_install_check": {"ok": True},
+                "restoration": {
+                    "ok": True,
+                    "plan_hash": "fixture-restoration-plan",
+                    "restored": {
+                        "kb-sleep": "ACTIVE",
+                        "kb-dream": "ACTIVE",
+                        "kb-org-contribute": "ACTIVE",
+                        "kb-org-maintenance": "PAUSED",
+                    },
+                    "restored_user_paused": {
+                        "kb-sleep": False,
+                        "kb-dream": False,
+                        "kb-org-contribute": False,
+                        "kb-org-maintenance": True,
+                    },
+                },
+                "final_install_check": {"ok": True},
+            },
+            "update_state": {"status": "current"},
+            "snapshot_cleanup": {"ok": True, "deleted": True},
         }
     else:
         raise KeyError(skill_id)
     payload["run_id"] = run_id or str(payload.get("run_id") or f"fixture-{skill_id}")
-    payload["_guarded_timeout_policy"] = {
+    payload["_owner_timeout_policy"] = {
         "native_timeout_seconds": (
             UPDATE_NATIVE_TIMEOUT_SECONDS
             if skill_id == "khaos-brain-update"
             else STANDARD_NATIVE_TIMEOUT_SECONDS
         ),
-        "scheduled_timeout_seconds": (
-            UPDATE_SCHEDULED_PRODUCTION_TIMEOUT_SECONDS
+        "owner_timeout_seconds": (
+            UPDATE_OWNER_TIMEOUT_SECONDS
             if skill_id == "khaos-brain-update"
-            else STANDARD_SCHEDULED_PRODUCTION_TIMEOUT_SECONDS
+            else STANDARD_OWNER_TIMEOUT_SECONDS
         ),
-        "aggregate_timeout_seconds": AGGREGATE_SKILLGUARD_TIMEOUT_SECONDS,
+        "aggregate_timeout_seconds": AGGREGATE_ASSURANCE_TIMEOUT_SECONDS,
         "installer_timeout_seconds": PRE_RESTORE_ASSURANCE_TIMEOUT_SECONDS,
         "timed_out": False,
         "cleanup_confirmed": True,

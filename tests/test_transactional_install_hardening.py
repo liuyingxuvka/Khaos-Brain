@@ -257,7 +257,6 @@ def _install(
     source: Path,
     *,
     fail_after_activation: int | None = None,
-    validation_receipt: dict[str, object] | None = None,
 ) -> dict[str, object]:
     return install_managed_runtime(
         repo_root=repo_root,
@@ -265,13 +264,6 @@ def _install(
         global_skill_name="predictive-kb-preflight",
         global_skill_files={"SKILL.md": "# global\n"},
         skill_sources={SKILL_ID: source},
-        skillguard_validation_receipts={
-            SKILL_ID: (
-                validation_receipt
-                if validation_receipt is not None
-                else _validation_receipt(source)
-            )
-        },
         automation_payloads={"kb-sleep": {"id": "kb-sleep"}},
         automation_renderer=_renderer,
         retired_skill_ids=("kb-architect-pass",),
@@ -314,20 +306,17 @@ class TransactionalInstallHardeningTests(unittest.TestCase):
 
             self.assertEqual(journal["receipt_payload"], result["receipt_payload"])
             self.assertEqual(_canonical_hash(journal["receipt_payload"]), journal["receipt_hash"])
-            authority_receipt = journal["skillguard_authority_receipts"][SKILL_ID]
+            projection_receipt = journal["consumer_projection_receipts"][SKILL_ID]
             self.assertEqual(
-                "validated-current-replaces-non-current",
-                authority_receipt["decision"],
-            )
-            self.assertEqual(
-                "skillguard.managed-whole-tree-currentness.v1",
-                authority_receipt["policy_id"],
+                "khaos-brain.clean-consumer-projection.v1",
+                projection_receipt["policy_id"],
             )
             self.assertEqual(
                 source_manifests[f"skill:{SKILL_ID}"]["digest"],
-                authority_receipt["incoming_validation"]["source_tree_digest"],
+                projection_receipt["manifest_digest"],
             )
-            self.assertEqual([], authority_receipt["downgrade_reasons"])
+            self.assertFalse(projection_receipt["author_control_present"])
+            self.assertEqual(0, projection_receipt["forbidden_token_count"])
             self.assertTrue(replay_install_receipt(journal)["ok"])
 
             tampered = copy.deepcopy(journal)
@@ -338,302 +327,19 @@ class TransactionalInstallHardeningTests(unittest.TestCase):
             self.assertIn("receipt-hash-mismatch", replay["issues"])
             self.assertIn(f"manifest-parity-mismatch:{key}", replay["issues"])
 
-            decision_tampered = copy.deepcopy(journal)
-            decision_tampered["receipt_payload"]["skillguard_authority_receipts"][
+            projection_tampered = copy.deepcopy(journal)
+            projection_tampered["receipt_payload"]["consumer_projection_receipts"][
                 SKILL_ID
-            ]["decision"] = "caller-authored-current"
-            decision_tampered["receipt_hash"] = _canonical_hash(
-                decision_tampered["receipt_payload"]
+            ]["author_control_present"] = True
+            projection_tampered["receipt_hash"] = _canonical_hash(
+                projection_tampered["receipt_payload"]
             )
-            replay = replay_install_receipt(decision_tampered)
+            replay = replay_install_receipt(projection_tampered)
             self.assertFalse(replay["ok"])
             self.assertIn(
-                f"skillguard-authority-decision-mismatch:{SKILL_ID}",
+                f"consumer-projection-author-control-present:{SKILL_ID}",
                 replay["issues"],
             )
-
-    def test_same_check_count_cannot_hide_obligation_or_check_loss(self) -> None:
-        cases = (
-            (
-                "obligation",
-                {"obligations": (OBLIGATION_B,)},
-                "obligation:",
-            ),
-            (
-                "check",
-                {"check_args": ("scripts/check.py", "--shallow")},
-                "changed-args",
-            ),
-        )
-        for label, incoming_kwargs, expected_reason in cases:
-            with self.subTest(label=label), tempfile.TemporaryDirectory() as tmp:
-                root = Path(tmp)
-                repo_root = root / "repo"
-                codex_home = root / ".codex"
-                repo_root.mkdir()
-                baseline = _write_contract_skill(
-                    root / "baseline",
-                    marker="baseline",
-                )
-                _install(repo_root, codex_home, baseline)
-                active = codex_home / "skills" / SKILL_ID
-                source = _write_contract_skill(
-                    root / "source",
-                    marker="incoming",
-                    **incoming_kwargs,
-                )
-
-                with self.assertRaisesRegex(RuntimeError, "SkillGuard downgrade blocked") as caught:
-                    _install(repo_root, codex_home, source)
-
-                self.assertIn(expected_reason, str(caught.exception))
-                self.assertIn("baseline", (active / "SKILL.md").read_text(encoding="utf-8"))
-                self.assertFalse(any((codex_home / CONTROL_ROOT_NAME / "staging").iterdir()))
-
-    def test_non_current_enforced_closure_or_profile_is_blocked_before_install(self) -> None:
-        for label in ("closure", "profile"):
-            with self.subTest(label=label), tempfile.TemporaryDirectory() as tmp:
-                root = Path(tmp)
-                repo_root = root / "repo"
-                codex_home = root / ".codex"
-                repo_root.mkdir()
-                source = _write_contract_skill(
-                    root / "source",
-                    obligations=(OBLIGATION_A, OBLIGATION_B),
-                    closure_obligations=(
-                        (OBLIGATION_A,)
-                        if label == "closure"
-                        else (OBLIGATION_A, OBLIGATION_B)
-                    ),
-                )
-                if label == "profile":
-                    for filename in (
-                        "contract-source.json",
-                        "compiled-contract.json",
-                    ):
-                        path = source / ".skillguard" / filename
-                        payload = json.loads(path.read_text(encoding="utf-8"))
-                        payload["depth_profile"]["enforcement_level"] = "advisory"
-                        path.write_text(
-                            json.dumps(payload, indent=2, sort_keys=True),
-                            encoding="utf-8",
-                        )
-                with self.assertRaisesRegex(
-                    RuntimeError, "lacks current validated SkillGuard authority"
-                ):
-                    _install(repo_root, codex_home, source)
-
-    def test_native_check_reorganization_is_allowed_when_semantic_coverage_is_preserved(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            repo_root = root / "repo"
-            codex_home = root / ".codex"
-            repo_root.mkdir()
-            baseline = _write_contract_skill(
-                root / "baseline",
-                marker="baseline",
-                obligations=(OBLIGATION_A, OBLIGATION_B),
-                check_count=2,
-            )
-            _install(repo_root, codex_home, baseline)
-            source = _write_contract_skill(
-                root / "source",
-                marker="incoming",
-                obligations=(OBLIGATION_A, OBLIGATION_B),
-                check_count=2,
-            )
-            _set_native_check_ids(source, (CHECK_ID,))
-
-            result = _install(repo_root, codex_home, source)
-
-            authority = result["skillguard_authority_receipts"][SKILL_ID]
-            self.assertEqual("validated-current-replaces-current", authority["decision"])
-            self.assertTrue(authority["semantic_comparison_performed"])
-            self.assertEqual([], authority["downgrade_reasons"])
-            self.assertIn(
-                "incoming",
-                (codex_home / "skills" / SKILL_ID / "SKILL.md").read_text(
-                    encoding="utf-8"
-                ),
-            )
-
-    def test_native_check_reorganization_is_blocked_when_obligation_coverage_is_lost(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            repo_root = root / "repo"
-            codex_home = root / ".codex"
-            repo_root.mkdir()
-            baseline = _write_contract_skill(
-                root / "baseline",
-                marker="baseline",
-                obligations=(OBLIGATION_A, OBLIGATION_B),
-                check_count=2,
-            )
-            source = _write_contract_skill(
-                root / "source",
-                marker="incoming",
-                obligations=(OBLIGATION_A, OBLIGATION_B),
-                check_count=2,
-            )
-            _split_native_check_coverage(baseline)
-            _split_native_check_coverage(source)
-            _install(repo_root, codex_home, baseline)
-            _set_native_check_ids(source, (CHECK_ID,))
-
-            with self.assertRaisesRegex(
-                RuntimeError, "lost-native-obligation-coverage"
-            ):
-                _install(repo_root, codex_home, source)
-
-            self.assertIn(
-                "baseline",
-                (codex_home / "skills" / SKILL_ID / "SKILL.md").read_text(
-                    encoding="utf-8"
-                ),
-            )
-
-    def test_declared_check_removal_is_blocked_even_with_overlapping_coverage(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            repo_root = root / "repo"
-            codex_home = root / ".codex"
-            repo_root.mkdir()
-            baseline = _write_contract_skill(
-                root / "baseline", marker="baseline", check_count=2
-            )
-            source = _write_contract_skill(
-                root / "source", marker="incoming", check_count=2
-            )
-            _configure_declared_check_removal(baseline, incoming=False)
-            _configure_declared_check_removal(source, incoming=True)
-            _install(repo_root, codex_home, baseline)
-
-            with self.assertRaisesRegex(
-                RuntimeError, "SkillGuard downgrade blocked"
-            ):
-                _install(repo_root, codex_home, source)
-
-    def test_declared_check_removal_and_owner_change_is_blocked(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            repo_root = root / "repo"
-            codex_home = root / ".codex"
-            repo_root.mkdir()
-            baseline = _write_contract_skill(
-                root / "baseline", marker="baseline", check_count=2
-            )
-            source = _write_contract_skill(
-                root / "source", marker="incoming", check_count=2
-            )
-            _configure_declared_check_removal(baseline, incoming=False)
-            _configure_declared_check_removal(source, incoming=True)
-            manifest_path = source / ".skillguard" / "check-manifest.json"
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            manifest["checks"][0]["args"] = ["scripts/check.py", "--shallow"]
-            manifest_path.write_text(
-                json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8"
-            )
-            _install(repo_root, codex_home, baseline)
-
-            with self.assertRaisesRegex(RuntimeError, "SkillGuard downgrade blocked"):
-                _install(repo_root, codex_home, source)
-
-    def test_validated_current_automations_replace_non_current_managed_trees_whole(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            repo_root = root / "repo"
-            codex_home = root / ".codex"
-            repo_root.mkdir()
-            skill_sources: dict[str, Path] = {}
-            validations: dict[str, dict[str, object]] = {}
-            for skill_id in AUTOMATION_SKILL_IDS:
-                source = REPO_ROOT / ".agents" / "skills" / skill_id
-                skill_sources[skill_id] = source
-                validations[skill_id] = _validation_receipt(source, skill_id)
-                active = codex_home / "skills" / skill_id
-                active.mkdir(parents=True)
-                (active / "SKILL.md").write_text("# opaque old managed tree\n", encoding="utf-8")
-                (active / "FORMER_RUNTIME_SENTINEL.txt").write_text(
-                    "old-only", encoding="utf-8"
-                )
-
-            result = install_managed_runtime(
-                repo_root=repo_root,
-                codex_home=codex_home,
-                global_skill_name="predictive-kb-preflight",
-                global_skill_files={"SKILL.md": "# global\n"},
-                skill_sources=skill_sources,
-                skillguard_validation_receipts=validations,
-                automation_payloads={"kb-sleep": {"id": "kb-sleep"}},
-                automation_renderer=_renderer,
-                retired_skill_ids=("kb-architect-pass",),
-                retired_automation_ids=("kb-architect",),
-            )
-
-            for skill_id in AUTOMATION_SKILL_IDS:
-                authority = result["skillguard_authority_receipts"][skill_id]
-                self.assertEqual(
-                    "validated-current-replaces-non-current", authority["decision"]
-                )
-                self.assertFalse(authority["semantic_comparison_performed"])
-                self.assertFalse(
-                    authority["active_confirmation"]["confirmed_current"]
-                )
-                self.assertEqual([], authority["downgrade_reasons"])
-                self.assertNotIn("migration_policy_id", authority)
-                self.assertNotIn("migration_proof", authority)
-                installed = codex_home / "skills" / skill_id
-                self.assertFalse((installed / "FORMER_RUNTIME_SENTINEL.txt").exists())
-                self.assertEqual(
-                    tree_manifest(skill_sources[skill_id])["digest"],
-                    tree_manifest(installed)["digest"],
-                )
-            journal = json.loads(Path(result["journal_path"]).read_text(encoding="utf-8"))
-            self.assertTrue(replay_install_receipt(journal)["ok"])
-
-    def test_unvalidated_or_validation_stale_incoming_is_blocked_before_activation(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            repo_root = root / "repo"
-            codex_home = root / ".codex"
-            repo_root.mkdir()
-            source = _write_contract_skill(root / "source")
-            with self.assertRaisesRegex(RuntimeError, "inventory does not match"):
-                install_managed_runtime(
-                    repo_root=repo_root,
-                    codex_home=codex_home,
-                    global_skill_name="predictive-kb-preflight",
-                    global_skill_files={"SKILL.md": "# global\n"},
-                    skill_sources={SKILL_ID: source},
-                    skillguard_validation_receipts={},
-                    automation_payloads={"kb-sleep": {"id": "kb-sleep"}},
-                    automation_renderer=_renderer,
-                    retired_skill_ids=("kb-architect-pass",),
-                    retired_automation_ids=("kb-architect",),
-                )
-            stale_validation = _validation_receipt(source)
-            (source / "SKILL.md").write_text("# changed after validation\n", encoding="utf-8")
-            with self.assertRaisesRegex(RuntimeError, "validation-source-tree-digest-mismatch"):
-                _install(
-                    repo_root,
-                    codex_home,
-                    source,
-                    validation_receipt=stale_validation,
-                )
-            self.assertFalse((codex_home / "skills" / SKILL_ID).exists())
-    def test_target_specific_shallow_runtime_fails_exactly_one_declared_gap(self) -> None:
-        report = build_report(SKILL_ID, "shallow")
-
-        self.assertTrue(report["ok"], report)
-        self.assertEqual("shallow-blocked", report["observed_status"])
-        self.assertEqual(report["findings"], [])
-        self.assertEqual(
-            set(report["failed_obligation_ids"]),
-            {
-                "obligation:kb-sleep-maintenance:atomic-model-generation",
-                "obligation:kb-sleep-maintenance:index-watermark-commit",
-            },
-        )
 
     def test_stage_and_failed_backup_roots_are_cleaned_before_and_after_activation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -643,14 +349,16 @@ class TransactionalInstallHardeningTests(unittest.TestCase):
             repo_root.mkdir()
             invalid_source = root / "invalid-source"
             invalid_source.mkdir()
-            (invalid_source / "SKILL.md").write_text("# invalid\n", encoding="utf-8")
+            (invalid_source / "SKILL.md").write_text(
+                "# invalid\nThis consumer still requires SkillGuard.\n",
+                encoding="utf-8",
+            )
 
-            with self.assertRaisesRegex(RuntimeError, "lacks current validated SkillGuard"):
+            with self.assertRaisesRegex(RuntimeError, "leaked author-control tokens"):
                 _install(
                     repo_root,
                     codex_home,
                     invalid_source,
-                    validation_receipt={},
                 )
 
             control = codex_home / CONTROL_ROOT_NAME

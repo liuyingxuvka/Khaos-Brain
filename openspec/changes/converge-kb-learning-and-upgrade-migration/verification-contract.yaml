@@ -2,229 +2,56 @@ contract_version: 1
 change: converge-kb-learning-and-upgrade-migration
 
 obligations:
-  - id: req.lifecycle.timely-disposition
-    source: "specs/kb-experience-lifecycle/spec.md#Requirement: Every admitted observation receives a timely disposition"
-    claim: Every admitted observation remains visible until a committed disposition exists, and failures do not hide or advance it.
+  - id: req.consumer-independent-skills
+    source: "specs/kb-runtime-assurance/spec.md#Requirement: Maintained skills are independent consumer products"
+    claim: Installed maintained skills contain no author-control files or runtime dependency.
     required: true
     evidence: [check.assurance.aggregate]
-  - id: req.lifecycle.evidence-provenance
-    source: "specs/kb-experience-lifecycle/spec.md#Requirement: Evidence is graded by verifiable strength"
-    claim: Evidence strength, independent provenance, lifecycle replay, and promotion/demotion decisions are current and machine verifiable.
+  - id: req.author-side-maintenance
+    source: "specs/kb-runtime-assurance/spec.md#Requirement: SkillGuard is author-side maintenance supervision"
+    claim: Source contracts prove target depth without shipping their authority.
+    required: true
+    evidence: [check.assurance.author-contracts]
+  - id: req.disjoint-maintenance-units
+    source: "specs/kb-runtime-assurance/spec.md#Requirement: Maintenance units and test evidence are disjoint"
+    claim: Every maintained skill has unique obligations and test nodes.
+    required: true
+    evidence: [check.assurance.alignment]
+  - id: req.target-native-assurance
+    source: "specs/kb-runtime-assurance/spec.md#Requirement: FlowGuard and target-native checks own consumer assurance"
+    claim: Current target-owned checks and FlowGuard evidence close consumer readiness.
     required: true
     evidence: [check.assurance.aggregate]
-  - id: req.lifecycle.bounded-outcomes
-    source: "specs/kb-experience-lifecycle/spec.md#Requirement: Candidate lifecycle has bounded explicit outcomes"
-    claim: Candidates terminate as trusted, merged, superseded, rejected, or parked with reopen conditions rather than remaining unowned debt.
+  - id: req.manual-update-native-closure
+    source: "specs/kb-runtime-assurance/spec.md#Requirement: Manual update closes in one native route"
+    claim: Manual update closes directly with its own immutable receipt.
     required: true
     evidence: [check.assurance.aggregate]
-  - id: req.lifecycle.writer-lock-owner
-    source: "specs/kb-experience-lifecycle/spec.md#Requirement: Lifecycle mutation has one recoverable identified writer"
-    claim: Lifecycle mutation and active-index activation share one owner-token lock that never steals a live writer, safely reenters on the active owner thread, recovers dead or interrupted owners, and reports release failure visibly.
+  - id: req.official-openspec-external
+    source: "specs/kb-runtime-assurance/spec.md#Requirement: Official OpenSpec remains external"
+    claim: Official OpenSpec is not a SkillGuard-maintained target.
     required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.retrieval.active-only
-    source: "specs/kb-retrieval-calibration/spec.md#Requirement: Retrieval serves only eligible active knowledge"
-    claim: Rejected, merged, superseded, retired, and parked knowledge has zero retrieval exposure, including stale-index paths.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.retrieval.index-outcomes
-    source: "specs/kb-retrieval-calibration/spec.md#Requirement: Active-knowledge indexing is atomic and reproducible"
-    claim: Active indexing, no-card behavior, outcome receipts, confidence calibration, Top-3 safety, and P95 latency meet the declared contract.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.retrieval.fast-authority
-    source: "specs/kb-retrieval-calibration/spec.md#Requirement: Foreground retrieval uses a compact fail-closed authority snapshot"
-    claim: Routine queries avoid full card/lifecycle replay while entry transitions and active-source drift still invalidate the generation before unsafe knowledge can be returned.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.retrieval.source-boundary
-    source: "specs/kb-retrieval-calibration/spec.md#Requirement: Local authority and read-only organization visibility remain distinct"
-    claim: Ineligible local candidates remain outside predictive retrieval while read-only organization candidates are visible only as explicitly untrusted input and never leak into the local active index.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.sleep.incremental
-    source: "specs/kb-sleep-dream-convergence/spec.md#Requirement: Sleep consumes history through a durable incremental watermark"
-    claim: Sleep processes only eligible deltas, advances its watermark only after a validated commit, and publishes backlog progress receipts.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.dream.no-delta
-    source: "specs/kb-sleep-dream-convergence/spec.md#Requirement: Dream experiments use stable evidence fingerprints"
-    claim: Identical evidence cannot repeat experiments or history writes; changed evidence may reopen and every knowledge-changing result hands only to Sleep.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.history.versioned-migration
-    source: "specs/kb-history-debt-migration/spec.md#Requirement: Versioned history-debt inventory and migration plan"
-    claim: Migration is versioned, idempotent, checkpointed, resumable, rollbackable, and blocks concurrent managed writers.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.history.logical-settlement
-    source: "specs/kb-history-debt-migration/spec.md#Requirement: Knowledge-debt settlement"
-    claim: Legacy and concurrently admitted observations receive explicit receipt-backed dispositions; parked debt has executable reopen conditions and residual hard debt blocks completion.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.history.scale-bounded-settlement
-    source: "specs/kb-history-debt-migration/spec.md#Requirement: Historical lifecycle settlement remains scale-bounded"
-    claim: Large histories settle through atomic idempotent batches with one replay before and after each batch, and partial legacy attempts resume without duplicate events or candidates.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.history.archive-prune-index
-    source: "specs/kb-history-debt-migration/spec.md#Requirement: Integrity-preserving cold archive"
-    claim: Cold archive integrity, ownership-bounded pruning, Windows extended-length paths, late managed-surface reconciliation, atomic index rebuild, before/after accounting, and migration receipts are verified before completion.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.upgrade.retire-architect
-    source: "specs/kb-upgrade-migration/spec.md#Requirement: Complete retirement of KB Architect"
-    claim: Fresh installs omit Architect and every supported legacy upgrade removes exact managed Architect Skill, automation, route, handoff, update-gate, and readiness dependencies without touching similarly named user assets.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.upgrade.architect-active-registry-scope
-    source: "specs/kb-upgrade-migration/spec.md#Requirement: Architect retirement checks only the active Codex registry"
-    claim: Retirement checks resolve only the current Codex registry, ignore unrelated stale registries, and fail closed on an unreadable or Architect-containing active registry.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.upgrade.transactional
-    source: "specs/kb-upgrade-migration/spec.md#Requirement: Transactional Skill and integration installation"
-    claim: Whole-tree staging, pause preservation, rollback, interruption recovery, and current-evidence gates are enforced; all five incoming trees require current compiler and target-native validation, the generator/compiler/source identities remain frozen throughout receipt production, current active trees receive obligation/evidence/mandatory-owner anti-downgrade comparison rather than check-id, native-route, or depth-dimension subset comparison, conditional depth-wrapper ownership moves require exact closure-preserving proof, and absent or non-current active trees are replaced opaquely as a whole.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.upgrade.validation-toolchain-snapshot
-    source: "specs/kb-upgrade-migration/spec.md#Scenario: Global SkillGuard is replaced during long assurance"
-    claim: The complete SkillGuard execution tree is frozen once, every long-assurance child consumes that exact manifest digest, and a changed final live identity fails closed with all five automations paused.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.upgrade.flowguard-toolchain-snapshot
-    source: "specs/kb-upgrade-migration/spec.md#Scenario: Editable FlowGuard changes during long assurance"
-    claim: The complete imported FlowGuard package is frozen once, every model and child check consumes that exact manifest digest, and a changed final live identity fails closed with all five automations paused.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.upgrade.logicguard-toolchain-snapshot
-    source: "specs/kb-upgrade-migration/spec.md#Scenario: Editable LogicGuard changes during long assurance"
-    claim: The complete imported LogicGuard package is frozen once, every migration/model/mesh/projection/retrieval/Dream child consumes that exact manifest digest, and a changed final live identity fails closed with all five automations paused.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.upgrade.current-machine-operator-pause
-    source: "specs/kb-upgrade-migration/spec.md#Scenario: Current-machine all-paused operator override"
-    claim: This machine's explicit all-paused closeout consumes one current aggregate plus all five scheduled-production completions, applies one exact hash-bound group plan with PAUSED and user_paused=true, writes an immutable receipt, and blocks on any active member or pause-bit mismatch without changing the portable installer's state-preservation policy.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.upgrade.router-final-freshness
-    source: "specs/kb-upgrade-migration/spec.md#Requirement: Final SkillGuard router refresh is durable and currently fresh"
-    claim: Every attempt durably records its pre-assurance router result, a successful attempt refreshes again after the final managed-tree write, and current official registry plus prompt checks bind the live Skill surfaces; a later failure remains recoverable and paused without overwriting the last-known-good manifest.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.upgrade.cross-machine-receipt
-    source: "specs/kb-upgrade-migration/spec.md#Requirement: Upgrade migration receipt and success boundary"
-    claim: Fresh, active, paused, missing-manifest, interrupted, and repeated old-machine upgrades produce current receipts and never report success with residual hard debt.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.upgrade.current-only-runtime
-    source: "specs/kb-upgrade-migration/spec.md#Requirement: Normal runtime has no compatibility or fallback authority"
-    claim: Older managed formats are consumed only by the direct upgrade migrator; routine retrieval, every organization-layout consumer (reader, outbox dedupe, adoption, maintenance, and installed GitHub checker), launcher, automation runtime resolution, installed Skill authority, and update wrappers have exactly one current success path and visibly block when it is unavailable.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.upgrade.desktop-launcher-current-runtime
-    source: "specs/kb-upgrade-migration/spec.md#Requirement: Normal runtime has no compatibility or fallback authority"
-    claim: Source and release are explicit current choices; the launcher and shortcut builder reject removed flags and unavailable selected entries without executable-path probing or runtime switching.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.upgrade.desktop-settings-current-runtime
-    source: "specs/kb-upgrade-migration/spec.md#Requirement: Normal runtime has no compatibility or fallback authority"
-    claim: Upgrade rewrites exact retired desktop settings into the complete current schema; an exact old/current conflict blocks until the upgrade AI records a reasoned selection from those captured values with before/after hashes, while daily settings and UI code contain no maintainer-field alias reader, writer, or conflict policy.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.upgrade.card-skill-guidance-current-runtime
-    source: "specs/kb-upgrade-migration/spec.md#Requirement: Normal runtime has no compatibility or fallback authority"
-    claim: Upgrade collapses exact old Skill-guidance field aliases into unavailable_skill_guidance with collision blocking and zero residuals; daily contribution reads only that current field.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.assurance.flowguard-current
-    source: "specs/kb-runtime-assurance/spec.md#Requirement: FlowGuard evidence comes from a current executable run"
-    claim: The real FlowGuard engine runs current lifecycle and migration models, rejects known-bad variants, and binds exactly one primary owner to each obligation.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.assurance.skillguard-current
-    source: "specs/kb-runtime-assurance/spec.md#Requirement: SkillGuard closure uses current live checker receipts"
-    claim: Canonical source, staged, and installed Skill trees have declared whole-tree parity; live native checks override stale reports; the canonical repository alone compiles while exact managed-root classification—not a surface label—selects source or installed supervision and blocks unknown or ambiguous roots; an installed deployment projection is supervised through its exact current contract pair, short exact-byte control projection, and a short behavior-only SkillGuard/global-router projection whose official fingerprint equals the verified installed runtime, without runtime-state/cache pollution, recompilation, source substitution, label-derived authority, or deep-path dependence; each target-owned positive and shallow fixture check is bound exactly once across the manifest, native-check inventory, and provider readiness inventory; an incoming tree must have current compiler and target-owned fixture validation, current-to-current authority loss is blocked, and absent or non-current managed trees are replaced opaquely as a whole.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.assurance.scheduled-start-frozen-supervision
-    source: "specs/kb-runtime-assurance/spec.md#Scenario: Live SkillGuard changes while a long native run is executing"
-    claim: Every real scheduled execution verifies and freezes one official SkillGuard installation context, behavior projection, target-control projection, and six-field identity before native work, retains that same authority through terminal construction and closure, never reloads or reinstalls global SkillGuard after native completion, and leaves newer identities for the next execution.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.assurance.scheduled-dynamic-evidence-channel
-    source: "specs/kb-runtime-assurance/spec.md#Scenario: Native receipt is created after the supervision session is frozen"
-    claim: Post-native receipt evidence crosses into the retained start-frozen supervisor only through the exact seven declared dynamic keys; missing declared keys clear inherited values, undeclared keys never become receipt authority, and a missing current receipt blocks without live SkillGuard reload, global reinstall, or source fallback.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.assurance.scheduled-production-exclusive-lane
-    source: "specs/kb-runtime-assurance/spec.md#Scenario: Aggregate assurance executes real scheduled production"
-    claim: Real scheduled production runs after ordinary aggregate children on one exclusive resource lane, while one Sleep cycle assigns the final active-index publication and validation to one owner and reuses an exact current receipt when no later eligibility mutation occurs.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.assurance.former-runtime-absent
-    source: "specs/kb-runtime-assurance/spec.md#Requirement: Former SkillGuard runtime authority has no surviving route"
-    claim: All five retained automation Skills keep only the current authority trio after positive and exact single-fault shallow calibration; regeneration, fresh install, and upgrade block any reintroduced former work contract, underscore manifest, flat run record, compatibility, conversion, renewal, retirement-receipt, alias, or fallback surface.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.assurance.automation-skillguard-depth
-    source: "specs/kb-runtime-assurance/spec.md#Requirement: Background automation completion is current declared-check supervised"
-    claim: All five retained automations separate AST/JUnit-proven version capability from each concrete run; freeze one official installed-runtime supervision authority before native work; reuse its current six-field installation identity; execute and reconcile each target's exact declared-check inventory once; keep target-owned positive/shallow fixtures and proof-bound performed/not-applicable dispositions; and close only through the sole enforced profile over the exact current receipt and required artifacts. Prepared update authorization emits only a non-terminal declared-check receipt, while legal no-op or fresh composed finalization obtains enforced closure without rerunning target checks; staged hash-bound restoration authorization remains required before live activation.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.assurance.model-test-ci
-    source: "specs/kb-runtime-assurance/spec.md#Requirement: Model obligations and tests remain bidirectionally aligned"
-    claim: Model obligations, owner code contracts, focused tests, migration matrix, and CI/full regressions remain bidirectionally covered and current; alignment resolves only declared logical validation owners, while raw or unknown owner names produce a structured failed gate rather than an exception or fallback receipt.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.assurance.final-gate
-    source: "specs/kb-runtime-assurance/spec.md#Requirement: Final readiness is a hard aggregate completion gate"
-    claim: No task, upgrade, automation restore, or archive claim may complete while a required current check is failed, stale, skipped, running, or absent; a later aggregate reuses an exact current immutable full-regression owner receipt and reruns that owner exactly once only after an owner input, canonical receipt, proof, or parsed JUnit change.
-    required: true
-    evidence: [check.openspec.strict, check.assurance.aggregate]
-  - id: req.assurance.no-recursive-install
-    source: "specs/kb-runtime-assurance/spec.md#Requirement: Aggregate assurance cannot recursively re-enter upgrade gates"
-    claim: Aggregate child installer tests use isolated fixtures, cannot acquire the real migration lock, write live shell tools, persist user PATH, or launch nested aggregate assurance; overlapping installer regressions receive an exclusive lane, and normal product installation still keeps all hard gates.
-    required: true
-    evidence: [check.assurance.aggregate]
-  - id: req.assurance.entrypoint-owner-current
-    source: "specs/kb-runtime-assurance/spec.md#Requirement: Final readiness is a hard aggregate completion gate"
-    claim: Package import and direct-file execution of the aggregate readiness owner resolve the same repository-owned alignment module; an unrelated or missing scripts namespace blocks closure before restore.
-    required: true
-    evidence: [check.assurance.aggregate]
+    evidence: [check.assurance.openspec]
 
 checks:
-  - id: check.openspec.strict
-    kind: command
+  - id: check.assurance.author-contracts
+    owner: author-contract-audit
+    command: python
+    args: [scripts/check_kb_skillguard.py, --source-only, --json]
+  - id: check.assurance.alignment
+    owner: model-test-alignment
+    command: python
+    args: [scripts/check_kb_model_test_alignment.py, --json]
+  - id: check.assurance.openspec
+    owner: official-openspec
     command: openspec
     args: [validate, converge-kb-learning-and-upgrade-migration, --type, change, --strict, --json, --no-interactive]
-    required: true
-    covers: [req.assurance.final-gate]
-    expected: {exit_code: 0}
   - id: check.assurance.aggregate
-    kind: command
+    owner: chaos-brain-readiness
     command: python
-    args: [scripts/check_khaos_logicguard_native_readiness.py, --json]
-    required: true
-    covers: [req.lifecycle.timely-disposition, req.lifecycle.evidence-provenance, req.lifecycle.bounded-outcomes, req.lifecycle.writer-lock-owner, req.retrieval.active-only, req.retrieval.index-outcomes, req.retrieval.fast-authority, req.retrieval.source-boundary, req.sleep.incremental, req.dream.no-delta, req.history.versioned-migration, req.history.logical-settlement, req.history.scale-bounded-settlement, req.history.archive-prune-index, req.upgrade.retire-architect, req.upgrade.architect-active-registry-scope, req.upgrade.transactional, req.upgrade.validation-toolchain-snapshot, req.upgrade.flowguard-toolchain-snapshot, req.upgrade.logicguard-toolchain-snapshot, req.upgrade.current-machine-operator-pause, req.upgrade.router-final-freshness, req.upgrade.cross-machine-receipt, req.upgrade.current-only-runtime, req.upgrade.desktop-launcher-current-runtime, req.upgrade.desktop-settings-current-runtime, req.upgrade.card-skill-guidance-current-runtime, req.assurance.flowguard-current, req.assurance.skillguard-current, req.assurance.scheduled-start-frozen-supervision, req.assurance.scheduled-dynamic-evidence-channel, req.assurance.scheduled-production-exclusive-lane, req.assurance.former-runtime-absent, req.assurance.automation-skillguard-depth, req.assurance.model-test-ci, req.assurance.final-gate, req.assurance.no-recursive-install, req.assurance.entrypoint-owner-current]
-    expected: {exit_code: 0}
+    args: [scripts/check_chaos_brain_readiness.py, --json]
 
-freshness:
-  watch:
-    - openspec/changes/converge-kb-learning-and-upgrade-migration/proposal.md
-    - openspec/changes/converge-kb-learning-and-upgrade-migration/design.md
-    - openspec/changes/converge-kb-learning-and-upgrade-migration/tasks.md
-    - openspec/changes/converge-kb-learning-and-upgrade-migration/specs/**/*.md
-    - openspec/changes/converge-kb-learning-and-upgrade-migration/verification-contract.yaml
-    - local_kb/**/*.py
-    - scripts/**/*.py
-    - tests/**/*.py
-    - .flowguard/**/*.py
-    - .agents/skills/**/SKILL.md
-    - .agents/skills/**/.skillguard/**/*.json
-    - .agents/skills/**/.skillguard/**/*.py
-    - templates/predictive-kb-preflight/**
-    - PROJECT_SPEC.md
-    - README.md
-    - AGENTS.md
-    - docs/**/*.md
+claim_boundary: >
+  This contract separates author-side skill maintenance from consumer runtime
+  assurance. It does not publish a release or certify third-party skill
+  compatibility.

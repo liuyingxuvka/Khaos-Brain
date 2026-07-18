@@ -1,6 +1,68 @@
 {
   "schema_version": "skillguard.contract_source.v2",
   "skill_id": "kb-sleep-maintenance",
+  "repository_role": "skill_maintainer_source",
+  "maintenance_unit_id": "unit:kb-sleep-maintenance",
+  "member_skill_ids": [
+    "kb-sleep-maintenance"
+  ],
+  "consumer_projection": {
+    "prohibited_path_prefixes": [
+      ".skillguard/"
+    ],
+    "prohibited_prompt_tokens": [
+      "SkillGuard",
+      ".skillguard",
+      "skillguard.py"
+    ],
+    "projection_id": "projection:consumer-distribution",
+    "release_manifest_path": "consumer-release.json"
+  },
+  "integration_mode": "native-integrated",
+  "native_route_owner": "kb-sleep-maintenance",
+  "native_route_bindings": [
+    {
+      "binding_id": "native:kb-sleep-maintenance:run",
+      "native_route_id": "route:kb-sleep-maintenance:run",
+      "required_before_closure": true,
+      "source": ".agents/skills/kb-sleep-maintenance/SKILL.md"
+    }
+  ],
+  "native_check_bindings": [
+    {
+      "binding_id": "native-check:kb-sleep-maintenance:intake-runtime",
+      "native_check_id": "check:kb-sleep-maintenance:intake-runtime",
+      "evidence_source": "scripts/check_kb_automation_run_receipt.py",
+      "required": true
+    },
+    {
+      "binding_id": "native-check:kb-sleep-maintenance:native-runtime",
+      "native_check_id": "check:kb-sleep-maintenance:native-runtime",
+      "evidence_source": "scripts/check_kb_automation_run_receipt.py",
+      "required": true
+    },
+    {
+      "binding_id": "native-check:kb-sleep-maintenance:terminal-runtime",
+      "native_check_id": "check:kb-sleep-maintenance:terminal-runtime",
+      "evidence_source": "scripts/check_kb_automation_run_receipt.py",
+      "required": true
+    },
+    {
+      "binding_id": "native-check:kb-sleep-maintenance:depth-positive",
+      "native_check_id": "check:kb-sleep-maintenance:depth-positive",
+      "evidence_source": "scripts/check_kb_automation_run_receipt.py",
+      "required": true
+    },
+    {
+      "binding_id": "native-check:kb-sleep-maintenance:depth-shallow",
+      "native_check_id": "check:kb-sleep-maintenance:depth-shallow",
+      "evidence_source": "scripts/check_kb_automation_run_receipt.py",
+      "required": true
+    }
+  ],
+  "default_route_id": "route:kb-sleep-maintenance:run",
+  "may_define_parallel_execution_route": false,
+  "may_define_skillguard_runtime_route": false,
   "model_id": "khaos-brain.kb-sleep-maintenance.executable-contract.v2",
   "model_path": ".flowguard/kb_sleep_skill_contract_model.py",
   "confirmed": true,
@@ -25,7 +87,6 @@
     "tests/test_khaos_model_projection.py",
     "tests/test_khaos_sleep_model_maintenance.py",
     "tests/test_maintenance_lanes.py",
-    "tests/test_process_control.py",
     "local_kb/automation_contracts.py",
     "local_kb/automation_runtime.py",
     "local_kb/process_control.py",
@@ -33,7 +94,7 @@
     "scripts/build_kb_automation_skillguard_contracts.py",
     "scripts/check_kb_automation_run_receipt.py",
     "scripts/check_kb_skillguard.py",
-    "scripts/run_kb_guarded_automation.py",
+    "scripts/run_kb_automation.py",
     "tests/test_kb_automation_skillguard.py"
   ],
   "projection_consumers": [
@@ -74,7 +135,7 @@
       "step_id": "step:kb-sleep-maintenance:execute",
       "action": {
         "kind": "native",
-        "summary": "Run the native automation owner through every declared execution branch."
+        "summary": "Run the native maintenance owner through every declared execution branch."
       },
       "check_ids": [
         "check:kb-sleep-maintenance:native-runtime"
@@ -106,6 +167,11 @@
         "obligation:kb-sleep-maintenance:lane-delta-intake"
       ],
       "timeout_seconds": 120,
+      "execution_owner_id": "owner:kb-sleep-maintenance:intake-runtime",
+      "semantic_check_id": "semantic:kb-sleep-maintenance:intake-runtime",
+      "maintenance_unit_id": "unit:kb-sleep-maintenance",
+      "member_skill_id": "kb-sleep-maintenance",
+      "evidence_subject_id": "subject:check:kb-sleep-maintenance:intake-runtime",
       "command": "python",
       "args": [
         "scripts/check_kb_automation_run_receipt.py",
@@ -133,6 +199,11 @@
         "obligation:kb-sleep-maintenance:dream-handoff-once"
       ],
       "timeout_seconds": 120,
+      "execution_owner_id": "owner:kb-sleep-maintenance:native-runtime",
+      "semantic_check_id": "semantic:kb-sleep-maintenance:native-runtime",
+      "maintenance_unit_id": "unit:kb-sleep-maintenance",
+      "member_skill_id": "kb-sleep-maintenance",
+      "evidence_subject_id": "subject:check:kb-sleep-maintenance:native-runtime",
       "command": "python",
       "args": [
         "scripts/check_kb_automation_run_receipt.py",
@@ -154,10 +225,14 @@
       "covers_obligation_ids": [
         "obligation:kb-sleep-maintenance:atomic-model-generation",
         "obligation:kb-sleep-maintenance:index-watermark-commit",
-        "obligation:kb-sleep-maintenance:failure-fail-closed",
-        "obligation:kb-sleep-maintenance:timeout-tree-cleanup"
+        "obligation:kb-sleep-maintenance:failure-fail-closed"
       ],
       "timeout_seconds": 120,
+      "execution_owner_id": "owner:kb-sleep-maintenance:terminal-runtime",
+      "semantic_check_id": "semantic:kb-sleep-maintenance:terminal-runtime",
+      "maintenance_unit_id": "unit:kb-sleep-maintenance",
+      "member_skill_id": "kb-sleep-maintenance",
+      "evidence_subject_id": "subject:check:kb-sleep-maintenance:terminal-runtime",
       "command": "python",
       "args": [
         "scripts/check_kb_automation_run_receipt.py",
@@ -180,6 +255,11 @@
         "obligation:kb-sleep-maintenance:depth-calibration"
       ],
       "timeout_seconds": 300,
+      "execution_owner_id": "owner:kb-sleep-maintenance:depth-positive",
+      "semantic_check_id": "semantic:kb-sleep-maintenance:depth-positive",
+      "maintenance_unit_id": "unit:kb-sleep-maintenance",
+      "member_skill_id": "kb-sleep-maintenance",
+      "evidence_subject_id": "subject:check:kb-sleep-maintenance:depth-positive",
       "command": "python",
       "args": [
         "scripts/check_kb_automation_run_receipt.py",
@@ -206,6 +286,11 @@
         "obligation:kb-sleep-maintenance:depth-calibration"
       ],
       "timeout_seconds": 300,
+      "execution_owner_id": "owner:kb-sleep-maintenance:depth-shallow",
+      "semantic_check_id": "semantic:kb-sleep-maintenance:depth-shallow",
+      "maintenance_unit_id": "unit:kb-sleep-maintenance",
+      "member_skill_id": "kb-sleep-maintenance",
+      "evidence_subject_id": "subject:check:kb-sleep-maintenance:depth-shallow",
       "command": "python",
       "args": [
         "scripts/check_kb_automation_run_receipt.py",
@@ -251,10 +336,9 @@
         "obligation:kb-sleep-maintenance:dream-handoff-once",
         "obligation:kb-sleep-maintenance:atomic-model-generation",
         "obligation:kb-sleep-maintenance:index-watermark-commit",
-        "obligation:kb-sleep-maintenance:failure-fail-closed",
-        "obligation:kb-sleep-maintenance:timeout-tree-cleanup"
+        "obligation:kb-sleep-maintenance:failure-fail-closed"
       ],
-      "claim_boundary": "This witness binds the immutable target-owned native receipt to its exact run, checks, and non-calibration native obligations; it does not prove post-run finalization."
+      "claim_boundary": "This witness binds the immutable target-owned native receipt to its exact run, checks, and non-calibration native obligations."
     }
   ],
   "closure_profiles": [
@@ -271,7 +355,6 @@
         "obligation:kb-sleep-maintenance:atomic-model-generation",
         "obligation:kb-sleep-maintenance:index-watermark-commit",
         "obligation:kb-sleep-maintenance:failure-fail-closed",
-        "obligation:kb-sleep-maintenance:timeout-tree-cleanup",
         "obligation:kb-sleep-maintenance:depth-calibration"
       ]
     }
@@ -318,7 +401,7 @@
         "check:kb-sleep-maintenance:depth-shallow"
       ]
     },
-    "claim_boundary": "Only exact current receipts for the target skill's declared checks are supervised. The target skill retains all domain judgment, including positive/shallow behavior and conditional update finalization."
+    "claim_boundary": "Only exact current receipts for the target skill's declared checks are supervised. The target skill retains all domain judgment, including positive/shallow behavior and direct native completion."
   },
-  "claim_boundary": "SkillGuard supervises the complete native kb-sleep-maintenance route, all target-specific obligations, and the sole current enforced closure. It cannot create a parallel executor or certify future runs."
+  "claim_boundary": "SkillGuard supervises the complete native kb-sleep-maintenance maintenance unit, its target-specific obligations, and the sole current enforced closure. It does not ship with or execute on the consumer machine."
 }

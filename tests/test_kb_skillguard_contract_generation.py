@@ -16,8 +16,6 @@ from local_kb.automation_contracts import (
     expected_obligation_ids,
     native_receipt_artifact_id,
     obligation_id,
-    step_id,
-    update_finalization_artifact_id,
     validate_completion_surface,
 )
 from local_kb.install import REPO_AUTOMATION_SPECS
@@ -40,9 +38,12 @@ def _control(skill_id: str, name: str) -> dict:
 
 def _automation_prompt(skill_id: str) -> str:
     return next(
-        str(row["prompt"])
-        for row in REPO_AUTOMATION_SPECS
-        if row["skill_name"] == skill_id
+        (
+            str(row["prompt"])
+            for row in REPO_AUTOMATION_SPECS
+            if row["skill_name"] == skill_id
+        ),
+        "",
     )
 
 
@@ -65,20 +66,9 @@ class AutomationSkillGuardContractGenerationTests(unittest.TestCase):
                     source["closure_profiles"],
                     [
                         {
-                            **{
-                                "profile_id": "enforced",
-                                "required_obligation_ids": list(
-                                    expected_obligation_ids(skill_id)
-                                ),
-                            },
-                            **(
-                                {
-                                    "route_branch_requirements": source[
-                                        "closure_profiles"
-                                    ][0]["route_branch_requirements"]
-                                }
-                                if skill_id == "khaos-brain-update"
-                                else {}
+                            "profile_id": "enforced",
+                            "required_obligation_ids": list(
+                                expected_obligation_ids(skill_id)
                             ),
                         }
                     ],
@@ -134,11 +124,7 @@ class AutomationSkillGuardContractGenerationTests(unittest.TestCase):
         for skill_id in AUTOMATION_COMPLETION_CONTRACTS:
             source = build_contract_source(skill_id)
             checks = {row["check_id"]: row for row in source["checks"]}
-            expected_route = (
-                f"route:{skill_id}:authorize"
-                if skill_id == "khaos-brain-update"
-                else f"route:{skill_id}:run"
-            )
+            expected_route = f"route:{skill_id}:run"
             for case_kind in ("positive", "shallow"):
                 with self.subTest(skill_id=skill_id, case_kind=case_kind):
                     row = checks[check_id(skill_id, f"depth-{case_kind}")]
@@ -182,10 +168,6 @@ class AutomationSkillGuardContractGenerationTests(unittest.TestCase):
                     check_id(skill_id, "native-runtime"),
                     check_id(skill_id, "terminal-runtime"),
                 }
-                if skill_id == "khaos-brain-update":
-                    expected_validators.add(
-                        check_id(skill_id, "branch-terminal-runtime")
-                    )
                 self.assertEqual(
                     set(native["validator_check_ids"]), expected_validators
                 )
@@ -200,46 +182,28 @@ class AutomationSkillGuardContractGenerationTests(unittest.TestCase):
                     },
                 )
 
-    def test_update_uses_one_enforced_profile_and_conditional_finalization(self) -> None:
+    def test_update_uses_one_enforced_profile_and_direct_native_closure(self) -> None:
         skill_id = "khaos-brain-update"
         source = build_contract_source(skill_id)
         profile = source["closure_profiles"][0]
         self.assertEqual(profile["profile_id"], "enforced")
-        legal_noops = {"no-update", "waiting-for-user", "ui-running"}
-        rows = profile["route_branch_requirements"]
-        observed = {
-            branch
-            for row in rows
-            for branch in row["branch_ids"]
-        }
-        self.assertEqual(observed, legal_noops | {"prepared-update"})
-        noop = next(row for row in rows if set(row["branch_ids"]) == legal_noops)
-        finalize_id = obligation_id(
-            skill_id, "staged-restoration-authorization"
-        )
+        self.assertNotIn("route_branch_requirements", profile)
         self.assertEqual(
-            noop["applicability_rules"],
-            [
-                {
-                    "obligation_id": finalize_id,
-                    "allowed_disposition": "not_applicable",
-                    "verifier_check_id": check_id(
-                        skill_id, "branch-terminal-runtime"
-                    ),
-                }
-            ],
+            source["depth_profile"]["native_route_ids"],
+            ["route:khaos-brain-update:run"],
         )
-        finalize_check = check_id(skill_id, "finalization-runtime")
-        self.assertNotIn(finalize_check, source["depth_profile"]["native_check_ids"])
-        steps = {row["step_id"]: row for row in _control(skill_id, "compiled-contract.json")["steps"]}
-        self.assertEqual(
-            steps[step_id(skill_id, "finalize")]["binding"]["check_ids"],
-            [finalize_check],
+        self.assertNotIn(
+            check_id(skill_id, "finalization-runtime"),
+            source["depth_profile"]["native_check_ids"],
         )
-        artifacts = {row["artifact_id"]: row for row in source["artifacts"]}
-        final_artifact = artifacts[update_finalization_artifact_id()]
-        self.assertEqual(final_artifact["validator_check_ids"], [finalize_check])
-        self.assertEqual(final_artifact["covers_obligation_ids"], [finalize_id])
+        self.assertNotIn(
+            check_id(skill_id, "branch-terminal-runtime"),
+            source["depth_profile"]["native_check_ids"],
+        )
+        self.assertNotIn(
+            "artifact:khaos-brain-update:restoration-authorization",
+            {row["artifact_id"] for row in source["artifacts"]},
+        )
 
     def test_current_completion_validator_accepts_all_generated_surfaces(self) -> None:
         for skill_id in AUTOMATION_COMPLETION_CONTRACTS:
@@ -260,13 +224,11 @@ class AutomationSkillGuardContractGenerationTests(unittest.TestCase):
             "khaos-brain-update", repo_root=REPO_ROOT
         )
         required = {
-            "test_system_check_marks_upgrading_when_prepared_and_ui_closed",
-            "test_prepared_update_uses_only_ff_only_and_waits_for_skillguard_before_current",
-            "test_update_guarded_runner_restores_only_after_skillguard_closure",
-            "test_update_guarded_runner_preserves_status_and_user_pause_independently",
-            "test_update_final_skillguard_failure_repauses_every_survivor_and_marks_failed",
-            "test_update_restoration_failure_stops_before_final_skillguard_and_repauses",
-            "test_update_skillguard_failure_keeps_survivors_paused_and_marks_failed",
+            "test_manual_check_marks_upgrading_only_with_explicit_request_and_closed_ui",
+            "test_manual_update_uses_ff_only_and_closes_natively",
+            "test_manual_update_restores_status_and_user_pause_independently",
+            "test_consumer_assurance_failure_keeps_survivors_paused_and_marks_failed",
+            "test_native_update_runner_keeps_operational_blockers_unfinished",
         }
         self.assertTrue(required.issubset(resolved), sorted(required - set(resolved)))
 

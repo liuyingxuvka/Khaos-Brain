@@ -15,7 +15,7 @@ Run:
 
 `python .agents/skills/local-kb-retrieve/scripts/kb_dream.py --json`
 
-The native Dream runner owns simulations and experiments. SkillGuard supervises its declared route and checks; it must not create a second experiment, maintenance, or model-write path.
+The native Dream runner owns simulations, experiments, terminal validation, and its immutable run receipt. Do not create a second experiment, maintenance, or model-write path.
 
 ## Required behavior
 
@@ -36,12 +36,10 @@ The native Dream runner owns simulations and experiments. SkillGuard supervises 
 
 Return the run id, pinned generation/model/mesh identities, evaluated fingerprints, tested perturbation paths, evidence deltas, model gaps, suppressed duplicate and no-delta counts, selected experiments, safety and rollback data, canonical-generation-unchanged proof, validation classifications, emitted handoff ids, input digest, blockers, and final state. Repeated unchanged runs must converge without growing knowledge history.
 
-## SkillGuard completion boundary
+## Native completion boundary
 
-For a scheduled run, intake, planning, or proposal-only output is incomplete. Run `python scripts/run_kb_guarded_automation.py --skill kb-dream-pass --json`; do not call the child entrypoint directly. The guarded runner invokes the native Dream owner once, writes an immutable run receipt, and requires the sole current enforced SkillGuard closure receipt for that exact run. A declared no-op counts only when the native gate receipt proves its terminal. Positive and shallow fixtures remain target-owned checks; SkillGuard supervises their exact receipts without interpreting their domain meaning. Fixture or capability evidence cannot replace the concrete scheduled run. The installed SkillGuard builder—not caller-authored fields—binds the trigger, execution id, current installation receipt id/hash plus portable receipt-root reference, and installed runtime fingerprint. SkillGuard does not create a parallel Dream executor.
+For a scheduled run, intake, planning, or proposal-only output is incomplete. Run `python scripts/run_kb_automation.py --skill kb-dream-pass --json`. The target-owned wrapper invokes the native Dream owner once and accepts only its immutable terminal receipt for that exact run. A declared no-op counts only when the Dream gate receipt proves it terminal. Fixture or capability evidence cannot replace the concrete scheduled run.
 
-If the native owner or any validation child times out, the run is incomplete until the guarded launcher terminates the complete owned process tree, confirms zero remaining descendants, and records that cleanup under the ordered native-to-scheduled-to-aggregate timeout budget.
+If the native owner or any validation child times out, the run is incomplete until the target-owned launcher terminates the complete process tree, confirms zero remaining descendants, and records that cleanup.
 
-## SkillGuard boundary
-
-The current authority is `.skillguard/contract-source.json` plus its declared FlowGuard model. `.skillguard/compiled-contract.json` and `.skillguard/check-manifest.json` are generated projections. No former work contract, underscore manifest, flat run record, compatibility, conversion, renewal, retirement-receipt, alias, or fallback closure route may exist. SkillGuard attaches to the native Dream owner and cannot turn Dream evidence into durable knowledge.
+Ordinary use is self-contained and does not read an author-maintenance contract, external receipt, router, or installed maintenance tool. Author-side checks may validate Dream before distribution but never participate in a scheduled Dream run.

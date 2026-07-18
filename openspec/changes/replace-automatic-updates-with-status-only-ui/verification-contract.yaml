@@ -1,0 +1,52 @@
+contract_version: 1
+change: replace-automatic-updates-with-status-only-ui
+
+obligations:
+  - id: req.update.read-only-status
+    source: "specs/user-controlled-software-update/spec.md#Requirement: Read-only upstream update status"
+    claim: The UI reports status without granting execution authority.
+    required: true
+    evidence: [check.update.focused]
+  - id: req.update.no-ui-authorization
+    source: "specs/user-controlled-software-update/spec.md#Requirement: No UI update authorization"
+    claim: UI interactions create no update request or updater process.
+    required: true
+    evidence: [check.update.focused]
+  - id: req.update.explicit-manual
+    source: "specs/user-controlled-software-update/spec.md#Requirement: Explicit conversational manual update"
+    claim: Only an explicit current request can start the target-owned update route.
+    required: true
+    evidence: [check.update.native]
+  - id: req.update.scheduler-retired
+    source: "specs/user-controlled-software-update/spec.md#Requirement: Automatic update scheduling is retired"
+    claim: The retired update automation remains absent.
+    required: true
+    evidence: [check.update.install]
+  - id: req.update.direct-migration
+    source: "specs/user-controlled-software-update/spec.md#Requirement: Former authorization state is directly migrated"
+    claim: Former state migrates directly with no runtime compatibility reader.
+    required: true
+    evidence: [check.update.focused]
+
+checks:
+  - id: check.update.focused
+    owner: update-regression
+    command: python
+    args: [-m, pytest, -q, tests/test_software_update.py, tests/test_update_status_refresh.py]
+  - id: check.update.native
+    owner: manual-update-native-receipt
+    command: python
+    args: [-m, pytest, -q, tests/test_software_update.py]
+  - id: check.update.install
+    owner: consumer-install-regression
+    command: python
+    args: [-m, pytest, -q, tests/test_codex_install.py]
+  - id: check.update.openspec
+    owner: official-openspec
+    command: openspec
+    args: [validate, replace-automatic-updates-with-status-only-ui, --type, change, --strict, --json, --no-interactive]
+
+claim_boundary: >
+  This verifies read-only status, explicit manual execution, direct migration,
+  and clean consumer installation. Author-side maintenance certification is
+  separate.

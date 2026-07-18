@@ -20,9 +20,6 @@ from local_kb.install import (  # noqa: E402
     RETIRED_AUTOMATION_IDS,
     RETIRED_MAINTENANCE_SKILL_IDS,
 )
-from local_kb.codex_registry import discover_active_registry  # noqa: E402
-
-
 RETIRED_SKILL = "kb-architect-pass"
 RETIRED_AUTOMATION = "kb-architect"
 
@@ -112,18 +109,7 @@ def _active_text_violations() -> list[dict[str, Any]]:
     return violations
 
 
-def _registry_has_architect(registry_path: Path) -> tuple[bool, str]:
-    if not registry_path.is_file():
-        return False, "registry absent"
-    try:
-        payload = json.loads(registry_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        return True, f"registry unreadable: {exc}"
-    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
-    return RETIRED_SKILL in serialized, str(registry_path)
-
-
-def build_report(codex_home: Path, registry_path: Path | None = None) -> dict[str, Any]:
+def build_report(codex_home: Path) -> dict[str, Any]:
     codex_home = Path(codex_home).resolve()
     source_paths = (
         REPO_ROOT / ".agents" / "skills" / RETIRED_SKILL,
@@ -151,15 +137,12 @@ def build_report(codex_home: Path, registry_path: Path | None = None) -> dict[st
         global_route_present = RETIRED_SKILL in global_agents.read_text(
             encoding="utf-8", errors="replace"
         )
-    if registry_path is None:
-        registry_path = discover_active_registry(codex_home)
-    registry_present, registry_details = _registry_has_architect(registry_path)
     checks = (
         _check("repository_surfaces_absent", not source_present, source_present),
         _check(
-            "exact_retired_tombstones",
-            tuple(RETIRED_MAINTENANCE_SKILL_IDS) == (RETIRED_SKILL,)
-            and tuple(RETIRED_AUTOMATION_IDS) == (RETIRED_AUTOMATION,),
+            "retired_architect_tombstones_registered",
+            RETIRED_SKILL in RETIRED_MAINTENANCE_SKILL_IDS
+            and RETIRED_AUTOMATION in RETIRED_AUTOMATION_IDS,
             {
                 "skills": list(RETIRED_MAINTENANCE_SKILL_IDS),
                 "automations": list(RETIRED_AUTOMATION_IDS),
@@ -177,11 +160,6 @@ def build_report(codex_home: Path, registry_path: Path | None = None) -> dict[st
             not global_route_present,
             str(global_agents),
         ),
-        _check(
-            "global_registry_route_absent",
-            not registry_present,
-            registry_details,
-        ),
     )
     return {
         "schema_version": 1,
@@ -193,8 +171,8 @@ def build_report(codex_home: Path, registry_path: Path | None = None) -> dict[st
         },
         "checks": list(checks),
         "claim_boundary": (
-            "Exact executable source, installed surfaces, prompts, and current global "
-            "router projections; inert historical provenance is intentionally allowed."
+            "Exact executable source, installed surfaces, and active prompts. "
+            "Inert historical provenance is intentionally allowed."
         ),
     }
 
@@ -203,9 +181,8 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--codex-home", type=Path, default=Path.home() / ".codex")
-    parser.add_argument("--registry", type=Path)
     args = parser.parse_args()
-    report = build_report(args.codex_home, args.registry)
+    report = build_report(args.codex_home)
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
     else:

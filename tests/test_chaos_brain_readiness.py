@@ -211,7 +211,9 @@ class ChaosBrainReadinessTests(unittest.TestCase):
         )
         return current_path, receipt_path, junit_path, command, identity
 
-    def test_skillguard_consumers_receive_the_single_full_regression_receipt(self) -> None:
+    def test_author_contract_audit_does_not_consume_regression_or_installed_runtime(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             junit = root / "evidence" / "full-regression.junit.xml"
@@ -222,14 +224,13 @@ class ChaosBrainReadinessTests(unittest.TestCase):
                 junit_path=junit,
             )
 
-        expected = str(junit.parent / "full_regression.receipt.json")
-        for name in (
-            "skillguard_source_install_parity",
-            "skillguard_source_assurance",
-        ):
-            command = commands[name]
-            index = command.index("--capability-receipt")
-            self.assertEqual(expected, command[index + 1])
+        command = commands["author_contract_assurance"]
+        self.assertIn("--source-only", command)
+        self.assertNotIn("--execute-checks", command)
+        self.assertNotIn("--capability-receipt", command)
+        self.assertNotIn("--codex-home", command)
+        self.assertNotIn("--refresh-global-router-before-check", command)
+        self.assertNotIn("skillguard_source_install_parity", commands)
 
     def test_full_regression_has_an_exclusive_validation_lane(self) -> None:
         active: set[str] = set()
@@ -239,8 +240,6 @@ class ChaosBrainReadinessTests(unittest.TestCase):
         consumers_started_after_full = True
         logicguard_started_exclusively = False
         logicguard_started_after_other_children = False
-        scheduled_production_started_exclusively = False
-        scheduled_production_started_after_other_children = False
 
         def fake_run(item, repo_root, **kwargs):
             del repo_root, kwargs
@@ -248,8 +247,6 @@ class ChaosBrainReadinessTests(unittest.TestCase):
             nonlocal consumers_started_after_full
             nonlocal logicguard_started_exclusively
             nonlocal logicguard_started_after_other_children
-            nonlocal scheduled_production_started_exclusively
-            nonlocal scheduled_production_started_after_other_children
             name, command = item
             with lock:
                 if name == "full_regression":
@@ -264,17 +261,7 @@ class ChaosBrainReadinessTests(unittest.TestCase):
                     logicguard_started_after_other_children = {
                         "full_regression",
                         "flowguard_models",
-                        "skillguard_source_assurance",
-                        "retired_architect_absence",
-                        "retrieval_quality",
-                    }.issubset(completed)
-                if name == "skillguard_source_install_parity":
-                    scheduled_production_started_exclusively = not active
-                    scheduled_production_started_after_other_children = {
-                        "full_regression",
-                        "flowguard_models",
-                        "logicguard_runtime",
-                        "skillguard_source_assurance",
+                        "author_contract_assurance",
                         "retired_architect_absence",
                         "retrieval_quality",
                     }.issubset(completed)
@@ -295,8 +282,7 @@ class ChaosBrainReadinessTests(unittest.TestCase):
         commands = {
             "flowguard_models": ["python", "flowguard.py"],
             "logicguard_runtime": ["python", "logicguard.py"],
-            "skillguard_source_install_parity": ["python", "skillguard.py"],
-            "skillguard_source_assurance": ["python", "skillguard.py", "--source-only"],
+            "author_contract_assurance": ["python", "author_contracts.py"],
             "retired_architect_absence": ["python", "architect.py"],
             "retrieval_quality": ["python", "retrieval.py"],
             "full_regression": ["python", "-m", "pytest", "tests"],
@@ -317,8 +303,6 @@ class ChaosBrainReadinessTests(unittest.TestCase):
         self.assertTrue(consumers_started_after_full)
         self.assertTrue(logicguard_started_exclusively)
         self.assertTrue(logicguard_started_after_other_children)
-        self.assertTrue(scheduled_production_started_exclusively)
-        self.assertTrue(scheduled_production_started_after_other_children)
         self.assertTrue(all(count == 1 for count in counts.values()))
 
     def test_exact_duplicate_command_is_executed_once_and_reused(self) -> None:

@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import local_kb.active_index as active_index_module
 from local_kb.active_index import (
     load_active_entries,
     validate_active_index,
@@ -242,43 +243,58 @@ class KbRetrievalCalibrationTests(unittest.TestCase):
                 },
             )
 
-            self.assertTrue(validate_active_index_fast(repo_root)["ok"])
             with (
-                patch("local_kb.active_index.source_manifest", side_effect=AssertionError("full scan")),
-                patch("local_kb.active_index.load_lifecycle_state", side_effect=AssertionError("full replay")),
+                patch(
+                    "local_kb.active_index._validate_indexed_sources_fast",
+                    wraps=active_index_module._validate_indexed_sources_fast,
+                ) as indexed_source_validator,
             ):
-                entries, index = load_active_entries(repo_root)
+                with (
+                    patch("local_kb.active_index.source_manifest", side_effect=AssertionError("full scan")),
+                    patch("local_kb.active_index.load_lifecycle_state", side_effect=AssertionError("full replay")),
+                ):
+                    self.assertTrue(validate_active_index_fast(repo_root)["ok"])
+                    entries, index = load_active_entries(repo_root)
 
-            self.assertEqual([entry.data["id"] for entry in entries], ["card-1"])
-            self.assertEqual(index["generation"], built["generation"])
-            self.assertEqual(index["validation_mode"], "fast-authority")
+                self.assertEqual([entry.data["id"] for entry in entries], ["card-1"])
+                self.assertEqual(index["generation"], built["generation"])
+                self.assertEqual(index["validation_mode"], "fast-authority")
+                self.assertEqual(indexed_source_validator.call_count, 1)
 
-            card_path = repo_root / "kb" / "public" / "card.yaml"
-            original_projection = load_yaml_file(card_path)
-            tampered_projection = dict(original_projection)
-            tampered_projection["status"] = "rejected"
-            write_yaml_file(card_path, tampered_projection)
-            self.assertFalse(validate_active_index_fast(repo_root)["ok"])
-            with self.assertRaisesRegex(RuntimeError, "stale"):
-                search_with_receipt(
+                card_path = repo_root / "kb" / "public" / "card.yaml"
+                original_projection = load_yaml_file(card_path)
+                tampered_projection = dict(original_projection)
+                tampered_projection["status"] = "rejected"
+                write_yaml_file(card_path, tampered_projection)
+                self.assertFalse(validate_active_index_fast(repo_root)["ok"])
+                self.assertEqual(indexed_source_validator.call_count, 2)
+                with self.assertRaisesRegex(RuntimeError, "stale"):
+                    search_with_receipt(
+                        repo_root,
+                        query="migration checkpoint",
+                        record_receipt=False,
+                    )
+                self.assertEqual(indexed_source_validator.call_count, 3)
+                write_yaml_file(card_path, original_projection)
+                changed = card("card-1", "rejected")
+                publication = publish_sleep_model_generation(
+                    repo_root,
+                    reason="source-change",
+                    card_upserts={"kb/public/card.yaml": changed},
+                )
+                self.assertTrue(publication["ok"], publication)
+                post_publication_validation_count = indexed_source_validator.call_count
+                self.assertGreater(post_publication_validation_count, 3)
+                results, _receipt = search_with_receipt(
                     repo_root,
                     query="migration checkpoint",
                     record_receipt=False,
                 )
-            write_yaml_file(card_path, original_projection)
-            changed = card("card-1", "rejected")
-            publication = publish_sleep_model_generation(
-                repo_root,
-                reason="source-change",
-                card_upserts={"kb/public/card.yaml": changed},
-            )
-            self.assertTrue(publication["ok"], publication)
-            results, _receipt = search_with_receipt(
-                repo_root,
-                query="migration checkpoint",
-                record_receipt=False,
-            )
-            self.assertEqual(results, [])
+                self.assertEqual(results, [])
+                self.assertEqual(
+                    indexed_source_validator.call_count,
+                    post_publication_validation_count + 1,
+                )
 
     def test_outcome_receipt_rejects_unreturned_card_and_requires_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

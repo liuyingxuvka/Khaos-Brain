@@ -17,16 +17,26 @@ def test_repository_has_only_current_runtime_authority() -> None:
     ]
 
 
+def test_flowguard_inventory_tracks_only_the_manual_update_entrypoint() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    source = (repo_root / "scripts" / "run_flowguard_suite.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'REPO_ROOT / "scripts" / "run_khaos_brain_manual_update.py"' in source
+    assert 'REPO_ROOT / "scripts" / "run_khaos_brain_system_update.py"' not in source
+
+
 def test_retired_runtime_authority_is_a_hard_failure() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         (root / "governed.py").write_text("retired-alternate-authority\n", encoding="utf-8")
         (root / "local_kb").mkdir()
         (root / "local_kb" / "install.py").write_text(
-            "canonicalize_obsolete_update_state\n", encoding="utf-8"
+            "migrate_obsolete_update_state\n", encoding="utf-8"
         )
         (root / "local_kb" / "software_update.py").write_text(
-            "def canonicalize_obsolete_update_state(): pass\n", encoding="utf-8"
+            "def migrate_obsolete_update_state(): pass\n", encoding="utf-8"
         )
         (root / "scripts").mkdir()
         with patch.dict(

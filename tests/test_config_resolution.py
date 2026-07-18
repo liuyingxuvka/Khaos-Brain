@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import json
 import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from local_kb.config import INSTALL_STATE_SUBPATH, resolve_repo_root
+from local_kb.config import resolve_repo_root, save_install_state
 
 
 def write_minimal_repo(root: Path) -> None:
@@ -35,12 +34,7 @@ class RepoRootResolutionTests(unittest.TestCase):
             repo_root = base / "kb-root"
             codex_home = base / ".codex"
             write_minimal_repo(repo_root)
-            manifest_path = codex_home / INSTALL_STATE_SUBPATH
-            manifest_path.parent.mkdir(parents=True, exist_ok=True)
-            manifest_path.write_text(
-                json.dumps({"repo_root": str(repo_root)}, ensure_ascii=False),
-                encoding="utf-8",
-            )
+            save_install_state({"repo_root": str(repo_root)}, codex_home)
 
             with patch.dict(os.environ, {"CODEX_PREDICTIVE_KB_ROOT": ""}, clear=False):
                 self.assertEqual(resolve_repo_root("auto", cwd=base, codex_home=codex_home), repo_root.resolve())

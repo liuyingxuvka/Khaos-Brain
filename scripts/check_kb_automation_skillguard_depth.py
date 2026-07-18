@@ -43,9 +43,12 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 def _automation_prompt(skill_id: str) -> str:
     return next(
-        str(row.get("prompt") or "")
-        for row in REPO_AUTOMATION_SPECS
-        if str(row.get("skill_name") or "") == skill_id
+        (
+            str(row.get("prompt") or "")
+            for row in REPO_AUTOMATION_SPECS
+            if str(row.get("skill_name") or "") == skill_id
+        ),
+        "",
     )
 
 
@@ -170,7 +173,7 @@ def build_report(skill_id: str, fixture: str) -> dict[str, Any]:
         "findings": findings,
         "claim_boundary": (
             "Current contract shape plus target-owned positive/shallow behavior; "
-            "executed scheduled supervision remains separate evidence."
+            "scheduled execution and explicit manual execution remain separate evidence."
         ),
     }
 

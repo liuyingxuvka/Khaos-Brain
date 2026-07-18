@@ -5,12 +5,6 @@ from pathlib import Path
 import tempfile
 from unittest.mock import patch
 
-from local_kb.automation_runtime import (
-    build_update_activation_receipt,
-    build_update_finalization_receipt,
-    validate_update_activation_receipt,
-    write_native_receipt,
-)
 from local_kb.install import (
     REPO_AUTOMATION_SPECS,
     apply_repo_automation_restoration_plan,
@@ -79,14 +73,11 @@ def test_legacy_snapshot_treats_later_managed_jobs_as_new_not_ambiguous() -> Non
         snapshot = capture_repo_automation_state_snapshot(codex_home)
 
         assert snapshot["ok"], snapshot
-        for automation_id in (
-            "khaos-brain-system-update",
-            "kb-org-contribute",
-            "kb-org-maintenance",
-        ):
+        for automation_id in ("kb-org-contribute", "kb-org-maintenance"):
             assert snapshot["states"][automation_id] == "ACTIVE"
             assert snapshot["user_paused"][automation_id] is False
             assert snapshot["sources"][automation_id] == "new-automation-policy"
+        assert "khaos-brain-system-update" not in snapshot["states"]
 
 
 def test_legacy_snapshot_still_blocks_when_an_owned_sleep_state_is_missing() -> None:
@@ -181,96 +172,3 @@ def test_restoration_apply_rolls_back_a_partial_group_write() -> None:
             path = codex_home / "automations" / automation_id / "automation.toml"
             assert path.read_text(encoding="utf-8") == original
             assert 'status = "PAUSED"' in original
-
-
-def test_finalization_receipt_rejects_a_live_active_source() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        codex_home = Path(tmp) / ".codex"
-        active_id = str(REPO_AUTOMATION_SPECS[0]["id"])
-        _write_automations(codex_home, active_id=active_id)
-        states, user_paused = _desired_states()
-        plan = plan_repo_automation_restoration(
-            codex_home,
-            states,
-            user_paused_states=user_paused,
-        )
-        receipt = build_update_finalization_receipt(
-            run_id="run-active",
-            native_receipt_hash="NATIVE",
-            authorization_declared_check_receipt={
-                "ok": True,
-                "validation": {
-                    "non_terminal_authorization": True,
-                    "overall_complete": False,
-                    "closure_emitted": False,
-                    "declared_checks_current": True,
-                    "depth_receipt_id": "depth-1",
-                    "depth_receipt_hash": "depth-hash-1",
-                },
-            },
-            snapshot={
-                "states": states,
-                "user_paused": user_paused,
-                "snapshot_hash": "SNAPSHOT",
-            },
-            restoration_plan=plan,
-            deferred_install_check={"ok": True},
-            started_at="2026-01-01T00:00:00+00:00",
-        )
-
-        assert receipt["status"] == "failed"
-        assert "live-automation-active-before-final-skillguard" in receipt["issues"]
-
-
-def test_activation_receipt_is_immutable_and_bound_to_both_prior_receipts() -> None:
-    states = {str(spec["id"]): "ACTIVE" for spec in REPO_AUTOMATION_SPECS}
-    user_paused = {key: False for key in states}
-    target_hashes = {key: f"HASH-{index}" for index, key in enumerate(states)}
-    plan = {
-        "ok": True,
-        "plan_hash": "PLAN",
-        "states": states,
-        "user_paused": user_paused,
-        "target_hashes": target_hashes,
-    }
-    restoration = {
-        "ok": True,
-        "plan_hash": "PLAN",
-        "restored": states,
-        "restored_user_paused": user_paused,
-        "applied_hashes": target_hashes,
-    }
-    receipt = build_update_activation_receipt(
-        run_id="run-final",
-        native_receipt_hash="NATIVE",
-        finalization_receipt_hash="FINALIZE",
-        final_skillguard={"ok": True, "validation": {"profile": "enforced"}},
-        restoration_plan=plan,
-        restoration=restoration,
-        final_install_check={"ok": True},
-        update_state={"status": "current"},
-        created_at="2026-01-01T00:00:00+00:00",
-    )
-    with tempfile.TemporaryDirectory() as tmp:
-        path = write_native_receipt(Path(tmp) / "activation.json", receipt)
-        valid = validate_update_activation_receipt(
-            path,
-            expected_run_id="run-final",
-            expected_native_receipt_hash="NATIVE",
-            expected_finalization_receipt_hash="FINALIZE",
-            expected_receipt_hash=str(receipt["receipt_hash"]),
-        )
-        assert valid["ok"], valid
-
-        tampered = json.loads(path.read_text(encoding="utf-8"))
-        tampered["update_status"] = "FAILED"
-        path.write_text(json.dumps(tampered), encoding="utf-8")
-        invalid = validate_update_activation_receipt(
-            path,
-            expected_run_id="run-final",
-            expected_native_receipt_hash="NATIVE",
-            expected_finalization_receipt_hash="FINALIZE",
-            expected_receipt_hash=str(receipt["receipt_hash"]),
-        )
-        assert not invalid["ok"]
-        assert "activation-receipt-hash-mismatch" in invalid["issues"]

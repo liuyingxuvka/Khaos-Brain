@@ -29,6 +29,7 @@ class Input:
     lane: str = ""
     card_hash: str = ""
     ui_running: bool = False
+    explicit_user_request: bool = False
 
 
 @dataclass(frozen=True)
@@ -48,9 +49,8 @@ class State:
     local_known: tuple[str, ...] = ()
     upload_effects: tuple[str, ...] = ()
     download_effects: tuple[str, ...] = ()
-    update_status: str = "current"
+    update_status: str = "unavailable"
     update_available: bool = False
-    user_requested: bool = False
     ui_running: bool = False
 
 
@@ -187,49 +187,110 @@ class OrganizationExchangeBlock:
 
 
 class SoftwareUpdateBlock:
-    """Input x State -> Set(Output x State) for the user-prepared update gate."""
+    """Input x State -> Set(Output x State) for status-only UI and manual update."""
 
     name = "SoftwareUpdateBlock"
-    reads = ("update_status", "update_available", "user_requested", "ui_running")
-    writes = ("update_status", "update_available", "user_requested", "ui_running")
-    idempotency = "System update check marks upgrading only once, only after user request and UI closure."
+    reads = ("update_status", "update_available", "ui_running")
+    writes = ("update_status", "update_available", "ui_running")
+    idempotency = (
+        "Remote inspection only projects topology. Manual update marks upgrading once and only "
+        "for an explicit current request, a fast-forward target, and a closed UI."
+    )
+
+    def __init__(self, *, broken_mode: str = "") -> None:
+        self.broken_mode = broken_mode
 
     def apply(self, event: Input, state: State) -> Iterable[tuple[Output, State]]:
-        if event.kind == "remote_available":
-            status = "prepared" if state.user_requested and state.update_status != "failed" else "available"
-            yield Output("remote_update_available"), replace(
+        if event.kind == "remote_current":
+            yield Output("remote_update_current"), replace(
                 state,
-                update_status=status,
-                update_available=True,
-                user_requested=False if state.update_status == "failed" else state.user_requested,
+                update_status="current",
+                update_available=False,
             )
             return
-        if event.kind == "prepare_update":
-            if not state.update_available:
-                yield Output("prepare_ignored_no_update"), replace(state, user_requested=False, update_status="current")
+        if event.kind == "remote_available":
+            yield Output("remote_update_available"), replace(
+                state,
+                update_status="available",
+                update_available=True,
+            )
+            return
+        if event.kind == "remote_local_ahead":
+            if self.broken_mode == "topology_misclassified":
+                yield Output("remote_update_available"), replace(
+                    state,
+                    update_status="available",
+                    update_available=True,
+                )
                 return
-            yield Output("update_prepared"), replace(state, user_requested=True, update_status="prepared")
+            yield Output("remote_update_local_ahead"), replace(
+                state,
+                update_status="local_ahead",
+                update_available=False,
+            )
+            return
+        if event.kind == "remote_diverged":
+            if self.broken_mode == "topology_misclassified":
+                yield Output("remote_update_available"), replace(
+                    state,
+                    update_status="available",
+                    update_available=True,
+                )
+                return
+            yield Output("remote_update_diverged"), replace(
+                state,
+                update_status="diverged",
+                update_available=False,
+            )
+            return
+        if event.kind == "remote_unavailable":
+            yield Output("remote_update_unavailable"), replace(
+                state,
+                update_status="unavailable",
+                update_available=False,
+            )
             return
         if event.kind == "ui_state":
             yield Output("ui_state_changed", str(event.ui_running)), replace(state, ui_running=event.ui_running)
             return
-        if event.kind == "system_update_check":
+        if event.kind == "status_surface_interaction":
+            next_state = (
+                replace(state, update_status="upgrading", update_available=False)
+                if self.broken_mode == "ui_status_mutates"
+                else state
+            )
+            yield Output("status_surface_read_only"), next_state
+            return
+        if event.kind == "manual_update_check":
+            if not event.explicit_user_request and self.broken_mode != "missing_explicit_request":
+                yield Output("update_requires_explicit_request"), state
+                return
             if state.update_status == "upgrading":
                 yield Output("update_already_upgrading"), state
                 return
-            if state.update_status == "failed":
-                yield Output("update_failed_awaiting_user"), replace(state, user_requested=False)
-                return
-            if not state.update_available:
+            if state.update_status == "current":
                 yield Output("update_noop_no_update"), state
                 return
-            if not state.user_requested:
-                yield Output("update_waits_for_user"), state
+            if state.update_status in {"local_ahead", "diverged"}:
+                yield Output("update_blocked_non_fast_forward", state.update_status), state
                 return
-            if state.ui_running:
-                yield Output("update_waits_for_ui_close"), state
+            if state.update_status == "unavailable":
+                yield Output("update_blocked_status_unavailable"), state
                 return
-            yield Output("apply_update"), replace(state, update_status="upgrading")
+            if state.update_status == "failed":
+                yield Output("update_blocked_previous_failure"), state
+                return
+            if state.ui_running and self.broken_mode != "ui_open_applies":
+                yield Output("update_blocked_ui_running"), state
+                return
+            if state.update_status != "available" or not state.update_available:
+                yield Output("update_blocked_invalid_status"), state
+                return
+            yield Output("apply_update"), replace(
+                state,
+                update_status="upgrading",
+                update_available=False,
+            )
             return
         if event.kind == "update_done":
             if state.update_status != "upgrading":
@@ -239,18 +300,16 @@ class SoftwareUpdateBlock:
                 state,
                 update_status="current",
                 update_available=False,
-                user_requested=False,
             )
             return
         if event.kind == "update_failed":
             if state.update_status != "upgrading":
                 yield Output("update_failed_ignored"), state
                 return
-            yield Output("update_marked_failed"), replace(state, update_status="failed", user_requested=False)
+            yield Output("update_marked_failed"), replace(state, update_status="failed", update_available=False)
 
 
 BLOCKS = (MaintenanceLaneBlock(), OrganizationExchangeBlock(), SoftwareUpdateBlock())
-BROKEN_BLOCKS = (MaintenanceLaneBlock(), OrganizationExchangeBlock(broken=True), SoftwareUpdateBlock())
 
 
 EXTERNAL_INPUTS = (
@@ -269,11 +328,16 @@ EXTERNAL_INPUTS = (
     Input("contribute", card_hash="h1"),
     Input("promote_import", card_hash="h1"),
     Input("download", card_hash="h1"),
+    Input("remote_current"),
     Input("remote_available"),
-    Input("prepare_update"),
+    Input("remote_local_ahead"),
+    Input("remote_diverged"),
+    Input("remote_unavailable"),
     Input("ui_state", ui_running=True),
     Input("ui_state", ui_running=False),
-    Input("system_update_check"),
+    Input("status_surface_interaction"),
+    Input("manual_update_check", explicit_user_request=False),
+    Input("manual_update_check", explicit_user_request=True),
     Input("update_done"),
     Input("update_failed"),
 )
@@ -282,15 +346,22 @@ INITIAL_STATES = (
     State(),
     State(org_imports=("h1",)),
     State(org_main=("h1",)),
-    State(update_status="prepared", update_available=True, user_requested=True, ui_running=True),
-    State(update_status="prepared", update_available=True, user_requested=True, ui_running=False),
+    State(update_status="current"),
+    State(update_status="available", update_available=True, ui_running=True),
+    State(update_status="available", update_available=True, ui_running=False),
+    State(update_status="local_ahead"),
+    State(update_status="diverged"),
 )
 
 
-def run_sequence(inputs: tuple[Input, ...], initial: State, *, broken: bool = False) -> Trace:
+def run_sequence(inputs: tuple[Input, ...], initial: State, *, broken_mode: str = "") -> Trace:
     state = initial
     steps: list[Step] = []
-    blocks = BROKEN_BLOCKS if broken else BLOCKS
+    blocks = (
+        MaintenanceLaneBlock(),
+        OrganizationExchangeBlock(broken=broken_mode == "duplicate_upload"),
+        SoftwareUpdateBlock(broken_mode=broken_mode),
+    ) if broken_mode else BLOCKS
     for event in inputs:
         emitted = False
         for block in blocks:
@@ -354,9 +425,64 @@ def invariant_update_apply_gate(trace: Trace) -> CheckResult:
         if step.output.label != "apply_update":
             continue
         old = step.old_state
-        if old.update_status != "prepared" or not old.user_requested or old.ui_running:
-            return CheckResult("update_apply_gate", False, "update applied without prepared user request and closed UI", trace)
+        if (
+            old.update_status != "available"
+            or not old.update_available
+            or old.ui_running
+            or not step.input.explicit_user_request
+        ):
+            return CheckResult(
+                "update_apply_gate",
+                False,
+                "update applied without an explicit request, fast-forward availability, and closed UI",
+                trace,
+            )
     return CheckResult("update_apply_gate", True)
+
+
+def invariant_status_surface_is_read_only(trace: Trace) -> CheckResult:
+    for step in trace.steps:
+        if step.output.label == "status_surface_read_only" and step.old_state != step.new_state:
+            return CheckResult(
+                "status_surface_is_read_only",
+                False,
+                "status interaction changed update state",
+                trace,
+            )
+    return CheckResult("status_surface_is_read_only", True)
+
+
+def invariant_update_available_matches_status(trace: Trace) -> CheckResult:
+    for step in trace.steps:
+        state = step.new_state
+        if state.update_available != (state.update_status == "available"):
+            return CheckResult(
+                "update_available_matches_status",
+                False,
+                "update_available is true outside the sole fast-forward-available status",
+                trace,
+            )
+    return CheckResult("update_available_matches_status", True)
+
+
+def invariant_remote_topology_is_not_collapsed(trace: Trace) -> CheckResult:
+    expected = {
+        "remote_local_ahead": ("remote_update_local_ahead", "local_ahead"),
+        "remote_diverged": ("remote_update_diverged", "diverged"),
+        "remote_unavailable": ("remote_update_unavailable", "unavailable"),
+    }
+    for step in trace.steps:
+        if step.input.kind not in expected:
+            continue
+        label, status = expected[step.input.kind]
+        if step.output.label != label or step.new_state.update_status != status or step.new_state.update_available:
+            return CheckResult(
+                "remote_topology_is_not_collapsed",
+                False,
+                f"{step.input.kind} was collapsed into an actionable update state",
+                trace,
+            )
+    return CheckResult("remote_topology_is_not_collapsed", True)
 
 
 INVARIANTS: tuple[Callable[[Trace], CheckResult], ...] = (
@@ -365,6 +491,9 @@ INVARIANTS: tuple[Callable[[Trace], CheckResult], ...] = (
     invariant_lock_groups_are_exclusive,
     invariant_released_locks_do_not_leave_running_status,
     invariant_update_apply_gate,
+    invariant_status_surface_is_read_only,
+    invariant_update_available_matches_status,
+    invariant_remote_topology_is_not_collapsed,
 )
 
 REQUIRED_LABELS = {
@@ -379,19 +508,28 @@ REQUIRED_LABELS = {
     "promoted_to_main",
     "downloaded_from_main",
     "download_duplicate_skipped",
-    "update_waits_for_ui_close",
-    "update_failed_awaiting_user",
+    "remote_update_current",
+    "remote_update_available",
+    "remote_update_local_ahead",
+    "remote_update_diverged",
+    "remote_update_unavailable",
+    "status_surface_read_only",
+    "update_requires_explicit_request",
+    "update_noop_no_update",
+    "update_blocked_non_fast_forward",
+    "update_blocked_status_unavailable",
+    "update_blocked_ui_running",
     "apply_update",
 }
 
 
-def explore(*, max_sequence_length: int = 3, broken: bool = False) -> dict[str, object]:
+def explore(*, max_sequence_length: int = 3, broken_mode: str = "") -> dict[str, object]:
     traces: list[Trace] = []
     labels: set[str] = set()
     for initial in INITIAL_STATES:
         for length in range(1, max_sequence_length + 1):
             for sequence in product(EXTERNAL_INPUTS, repeat=length):
-                trace = run_sequence(tuple(sequence), initial, broken=broken)
+                trace = run_sequence(tuple(sequence), initial, broken_mode=broken_mode)
                 traces.append(trace)
                 labels.update(step.output.label for step in trace.steps)
                 for invariant in INVARIANTS:
@@ -399,7 +537,8 @@ def explore(*, max_sequence_length: int = 3, broken: bool = False) -> dict[str, 
                     if not result.ok:
                         return {
                             "ok": False,
-                            "broken_model": broken,
+                            "broken_model": bool(broken_mode),
+                            "broken_mode": broken_mode,
                             "failure": result.name,
                             "detail": result.detail,
                             "trace": trace_to_dict(result.trace or trace),
@@ -409,14 +548,16 @@ def explore(*, max_sequence_length: int = 3, broken: bool = False) -> dict[str, 
     if missing:
         return {
             "ok": False,
-            "broken_model": broken,
+            "broken_model": bool(broken_mode),
+            "broken_mode": broken_mode,
             "failure": "missing_required_labels",
             "detail": ", ".join(missing),
             "checked_traces": len(traces),
         }
     return {
         "ok": True,
-        "broken_model": broken,
+        "broken_model": bool(broken_mode),
+        "broken_mode": broken_mode,
         "checked_traces": len(traces),
         "labels_seen": sorted(labels),
         "scenario_review": {
@@ -424,8 +565,9 @@ def explore(*, max_sequence_length: int = 3, broken: bool = False) -> dict[str, 
             "human_expectation": (
                 "maintenance lanes wait inside their group, org imports are not downloaded, "
                 "duplicate hashes do not create duplicate exchange side effects, released lanes "
-                "do not leave running statuses, and software updates apply only after user "
-                "preparation with the UI closed"
+                "do not leave running statuses, the update surface is read-only, upstream "
+                "topology is explicit, and software updates apply only for a current explicit "
+                "request with a fast-forward target and the UI closed"
             ),
         },
         "loop_stuck_review": {
@@ -456,18 +598,25 @@ def trace_to_dict(trace: Trace) -> dict[str, object]:
 
 def main() -> int:
     expected = explore()
-    broken = explore(broken=True)
+    broken_modes = (
+        "duplicate_upload",
+        "missing_explicit_request",
+        "ui_status_mutates",
+        "topology_misclassified",
+        "ui_open_applies",
+    )
+    broken = {mode: explore(broken_mode=mode) for mode in broken_modes}
     report = {
         "model": "khaos_brain_function_flow",
         "flowguard_package_available": _flowguard is not None,
         "flowguard_schema_version": getattr(_flowguard, "SCHEMA_VERSION", "") if _flowguard is not None else "",
         "model_engine": "project_local_standard_library_explorer",
         "correct_model": expected,
-        "broken_variant": broken,
+        "broken_variants": broken,
         "broken_variant_expected_to_fail": True,
     }
     print(json.dumps(report, indent=2, sort_keys=True))
-    return 0 if expected.get("ok") and not broken.get("ok") else 1
+    return 0 if expected.get("ok") and all(not result.get("ok") for result in broken.values()) else 1
 
 
 if __name__ == "__main__":

@@ -12,13 +12,6 @@ SCRIPT_REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(SCRIPT_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPT_REPO_ROOT))
 
-from local_kb.cli_output import print_json, print_text
-from local_kb.feedback import build_observation, record_observation
-from local_kb.lifecycle import record_outcome_receipt
-from local_kb.common import csv_to_list
-from local_kb.store import history_events_path, resolve_repo_root
-
-
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", default="auto")
@@ -60,6 +53,15 @@ def main() -> None:
     parser.add_argument("--user-correction", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
+
+    # Keep argparse help independent from the KB runtime.  Several of these
+    # modules load the LogicGuard/lifecycle stack, which is required for a real
+    # feedback write but must not turn ``feedback --help`` into a slow KB boot.
+    from local_kb.cli_output import print_json, print_text
+    from local_kb.common import csv_to_list
+    from local_kb.feedback import build_observation, record_observation
+    from local_kb.lifecycle import record_outcome_receipt
+    from local_kb.store import history_events_path, resolve_repo_root
 
     repo_root = resolve_repo_root(args.repo_root)
     event = build_observation(

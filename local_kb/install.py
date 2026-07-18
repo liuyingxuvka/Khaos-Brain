@@ -10,21 +10,16 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 import time
 import tomllib
 from pathlib import Path
 from typing import Any, Mapping
 
-from local_kb.automation_contracts import (
-    PRE_RESTORE_ASSURANCE_TIMEOUT_SECONDS,
-    SKILLGUARD_COMPLETION_MARKER,
-    SKILLGUARD_PARTIAL_MARKER,
-    validate_completion_surface,
-)
+from local_kb.automation_contracts import PRE_RESTORE_ASSURANCE_TIMEOUT_SECONDS
 from local_kb.card_ids import load_or_create_installation_id
 from local_kb.common import utc_now_iso
 from local_kb.transactional_install import (
+    consumer_skill_manifest,
     install_managed_runtime,
     latest_install_receipt,
     tree_manifest,
@@ -55,13 +50,12 @@ AUTOMATION_REASONING_EFFORT_POLICY = "deepest"
 AUTOMATION_MODEL_ENV_VAR = "CODEX_KB_AUTOMATION_MODEL"
 AUTOMATION_REASONING_EFFORT_ENV_VAR = "CODEX_KB_AUTOMATION_REASONING_EFFORT"
 UPGRADE_ATTEMPT_SCHEMA = "khaos-brain.upgrade-attempt.v1"
+UPGRADE_ATTEMPT_PROJECTION_SCHEMA = "khaos-brain.upgrade-attempt-projection.v1"
 UPGRADE_ATTEMPT_ROOT = Path(".khaos-brain-install") / "attempts"
 REASONING_EFFORT_ORDER = ("none", "minimal", "low", "medium", "high", "xhigh")
 AUTOMATION_DAILY_BYDAY = "SU,MO,TU,WE,TH,FR,SA"
 RETIRED_MAINTENANCE_SKILL_IDS = ("kb-architect-pass",)
-RETIRED_AUTOMATION_IDS = ("kb-architect",)
-SKILLGUARD_VALIDATION_ROOT_ENV = "KHAOS_BRAIN_SKILLGUARD_VALIDATION_ROOT"
-SKILLGUARD_VALIDATION_DIGEST_ENV = "KHAOS_BRAIN_SKILLGUARD_VALIDATION_DIGEST"
+RETIRED_AUTOMATION_IDS = ("kb-architect", "khaos-brain-system-update")
 FLOWGUARD_VALIDATION_ROOT_ENV = "KHAOS_BRAIN_FLOWGUARD_VALIDATION_ROOT"
 FLOWGUARD_VALIDATION_DIGEST_ENV = "KHAOS_BRAIN_FLOWGUARD_VALIDATION_DIGEST"
 LOGICGUARD_VALIDATION_ROOT_ENV = "KHAOS_BRAIN_LOGICGUARD_VALIDATION_ROOT"
@@ -104,11 +98,6 @@ LOGICGUARD_NATIVE_DEFAULT_MARKERS = (
     "grounded modelmesh",
     "sleep is the sole normal-runtime",
 )
-AUTOMATION_SKILLGUARD_COMPLETION_RULE = (
-    f"SkillGuard completion rule: {SKILLGUARD_PARTIAL_MARKER}; complete the native route and its "
-    f"{SKILLGUARD_COMPLETION_MARKER}. A declared no-op is complete only when the native gate receipt proves its terminal. "
-    "Fixture or capability evidence cannot close a scheduled run; the installed SkillGuard builder must bind the exact scheduler execution, current installation receipt id/hash plus portable receipt-root reference, and installed runtime fingerprint. "
-)
 MAINTENANCE_SKILL_SPECS = (
     {
         "name": "kb-sleep-maintenance",
@@ -132,7 +121,8 @@ MAINTENANCE_SKILL_SPECS = (
     },
     {
         "name": "khaos-brain-update",
-        "automation_id": "khaos-brain-system-update",
+        "automation_id": "",
+        "execution_kind": "explicit-user-request",
         "prompt_marker": "scripts/install_codex_kb.py",
     },
 )
@@ -158,40 +148,16 @@ def _has_logicguard_native_default_wording(text: str) -> bool:
     normalized = text.lower()
     return all(marker in normalized for marker in LOGICGUARD_NATIVE_DEFAULT_MARKERS)
 
-SYSTEM_UPDATE_AUTOMATION_PROMPT = (
-    "Use $khaos-brain-update only as the fully automatic system-maintenance update gate for this workspace. "
-    + AUTOMATION_SKILLGUARD_COMPLETION_RULE
-    +
-    "Read PROJECT_SPEC.md and .agents/skills/local-kb-retrieve/SKILL.md, then run only "
-    "`python scripts/run_kb_guarded_automation.py --skill khaos-brain-update --json`. The guarded runner invokes "
-    "the native system-update owner and binds this exact immutable native receipt to SkillGuard; do not run only the child "
-    "system-check and call it complete. If apply_ready=false, finish through the sole enforced successful terminal no-op only for "
-    "no-update, waiting-for-user, or ui-running; already-upgrading, failed-awaiting-user, concurrent-update, and unknown blockers remain incomplete. "
-    "If apply_ready=true, apply the explicitly prepared update through "
-    "$khaos-brain-update: preserve local knowledge and settings, use Git fast-forward only, run the transactional "
-    "installer and install check, retire legacy managed surfaces, and execute the versioned maintenance migration as a direct-to-current LogicGuard authority cutover. "
-    "The migration must publish exact models, scoped meshes, deterministic projections, the exact active index, and the generation pointer last; "
-    "it must prove zero retired authority residuals and must not add a runtime legacy reader or projection fallback. Always keep surviving automations paused—"
-    "all five of them—through the prepared-update non-terminal declared-check authorization receipt (`authorization_only`, `overall_complete=false`), never a second closure profile. Then bind the preserved states, independent "
-    "user_paused values, current source hashes, and exact target automation.toml hashes into a staged restoration receipt; "
-    "run a fresh composed enforced SkillGuard closure over authorize+finalize before activating anything. Only after it "
-    "passes may the native executor apply those exact hashes, read back every managed state, run the normal install check, "
-    "mark CURRENT, and write the activation receipt. Completion means every hard gate passes. On any failure keep or return all survivors to PAUSED, preserve rollback "
-    "copies, mark FAILED, and report the machine receipts."
-)
-
 # Chaos Brain lifecycle prompts supersede the legacy editorial prompt bodies.
 # prompt bodies above.  They are intentionally compact because the Skills own
 # the full workflow contract and the automations only select the entrypoint.
 SLEEP_AUTOMATION_PROMPT = (
     "Use $kb-sleep-maintenance for the fully automatic local Sleep pass. Read PROJECT_SPEC.md, "
-    + AUTOMATION_SKILLGUARD_COMPLETION_RULE
-    +
     "docs/maintenance_agent_worldview.md, and .agents/skills/local-kb-retrieve/MAINTENANCE_PROMPT.md. "
-    "Run only `python scripts/run_kb_guarded_automation.py --skill kb-sleep-maintenance --json`; the guarded "
+    "Run only `python scripts/run_kb_automation.py --skill kb-sleep-maintenance --json`; the target-owned "
     "runner owns lane-to-terminal orchestration, invokes the native Sleep entrypoint "
-    "`.agents/skills/local-kb-retrieve/scripts/kb_sleep.py` exactly once, and binds this "
-    "run's immutable native receipt to SkillGuard. Do not run the child entrypoint directly. Consume only the committed "
+    "`.agents/skills/local-kb-retrieve/scripts/kb_sleep.py` exactly once, and validates this "
+    "run's immutable native terminal receipt. Do not run the child entrypoint directly. Consume only the committed "
     "increment after the last watermark, give every admitted observation one explicit disposition, settle or park "
     "candidates with executable reopen conditions, apply evidence-driven promotion or downgrade review, and act as the "
     "sole canonical model-generation publisher. Build a LogicGuard model revision for every admitted entry, preserve "
@@ -205,12 +171,10 @@ SLEEP_AUTOMATION_PROMPT = (
 
 DREAM_AUTOMATION_PROMPT = (
     "Use $kb-dream-pass for one fully automatic bounded Dream pass. Read PROJECT_SPEC.md, "
-    + AUTOMATION_SKILLGUARD_COMPLETION_RULE
-    +
     "docs/maintenance_agent_worldview.md, docs/dream_runbook.md, and "
     ".agents/skills/local-kb-retrieve/DREAM_PROMPT.md, then run only "
-    "`python scripts/run_kb_guarded_automation.py --skill kb-dream-pass --json`. The guarded runner invokes the "
-    "native Dream entrypoint `.agents/skills/local-kb-retrieve/scripts/kb_dream.py` exactly once and binds this run's immutable terminal receipt to SkillGuard; do not "
+    "`python scripts/run_kb_automation.py --skill kb-dream-pass --json`. The target-owned runner invokes the "
+    "native Dream entrypoint `.agents/skills/local-kb-retrieve/scripts/kb_dream.py` exactly once and validates this run's immutable native terminal receipt; do not "
     "run the child entrypoint directly. First pin the exact LogicGuard generation, model revision, root ArgumentBlock, "
     "and ModelMesh revision. Derive decision-relevant stable fingerprints, skip already closed unchanged evidence as "
     "no_delta_closed, execute only a small valuable route-deduplicated experiment set, and run separate applicable checks for evidence removal, "
@@ -222,8 +186,6 @@ DREAM_AUTOMATION_PROMPT = (
 
 ORG_CONTRIBUTE_AUTOMATION_PROMPT = (
     "Use $kb-organization-contribute to run one settings-gated organization KB contribution pass for this workspace. "
-    + AUTOMATION_SKILLGUARD_COMPLETION_RULE
-    +
     "Use PROJECT_SPEC.md, docs/organization_mode_plan.md, and .agents/skills/local-kb-retrieve/SKILL.md "
     "as the authoritative guides. Start by reading .local/khaos_brain_desktop_settings.json through "
     "scripts/kb_org_outbox.py --automation; if the desktop settings are personal mode, missing, unvalidated, or not "
@@ -235,9 +197,9 @@ ORG_CONTRIBUTE_AUTOMATION_PROMPT = (
     "depend on local Skills, upload card-bound Skill bundles with bundle_id, content_hash, version_time, "
     "original_author, readonly_when_imported, and update_policy=original_author_only; if several local cards point "
     "at the same bundle_id, upload the local latest version for that bundle rather than an older card-carried copy. Use "
-    "`python scripts/run_kb_guarded_automation.py --skill kb-organization-contribute --json` for the scheduled pass; "
-    "the guarded runner invokes scripts/kb_org_outbox.py --automation exactly once and binds the immutable native "
-    "terminal receipt to SkillGuard. Do not run the child entrypoint directly. The native pass should prepare an import branch under kb/imports, then revalidate the exact materialized changed paths, counts, hashes, privacy/shareability, Skill author/version/hash metadata, and base-branch rollback before any push, then push eligible import proposals automatically only after that current revalidation, open a GitHub PR when available, and apply org-kb:auto-merge only when current checks allow it "
+    "`python scripts/run_kb_automation.py --skill kb-organization-contribute --json` for the scheduled pass; "
+    "the target-owned runner invokes scripts/kb_org_outbox.py --automation exactly once and validates the immutable native "
+    "terminal receipt. Do not run the child entrypoint directly. The native pass should prepare an import branch under kb/imports, then revalidate the exact materialized changed paths, counts, hashes, privacy/shareability, Skill author/version/hash metadata, and base-branch rollback before any push, then push eligible import proposals automatically only after that current revalidation, open a GitHub PR when available, and apply org-kb:auto-merge only when current checks allow it "
     "while leaving movement into organization main, trust upgrades, and final merge to organization maintenance and GitHub checks. Run KB postflight after "
     "any non-skipped pass, record a "
     "structured observation, and report the settings gate, sync result, preflight entries, created and skipped proposal counts, "
@@ -247,16 +209,14 @@ ORG_CONTRIBUTE_AUTOMATION_PROMPT = (
 
 ORG_MAINTENANCE_AUTOMATION_PROMPT = (
     "Use $kb-organization-maintenance to run one settings-gated organization-level Sleep-like maintenance pass for this workspace. "
-    + AUTOMATION_SKILLGUARD_COMPLETION_RULE
-    +
     "Treat the organization KB as a shared exchange layer rather than a central truth layer: "
     "organization maintenance may maintain organization main cards and imported card content with the same editorial "
     "posture as local Sleep, while local machines keep final adoption authority. Use PROJECT_SPEC.md, "
     "docs/maintenance_agent_worldview.md, docs/organization_mode_plan.md, "
     ".agents/skills/local-kb-retrieve/SKILL.md, and organization-review guidance when available. Start by "
-    "running only `python scripts/run_kb_guarded_automation.py --skill kb-organization-maintenance --json`; the "
-    "guarded runner invokes scripts/kb_org_maintainer.py --automation exactly once and binds its immutable terminal "
-    "receipt to SkillGuard. Do not run the child entrypoint directly. The native pass first reads "
+    "running only `python scripts/run_kb_automation.py --skill kb-organization-maintenance --json`; the "
+    "target-owned runner invokes scripts/kb_org_maintainer.py --automation exactly once and validates its immutable native terminal "
+    "receipt. Do not run the child entrypoint directly. The native pass first reads "
     ".local/khaos_brain_desktop_settings.json; if the "
     "desktop settings are personal mode, missing, unvalidated, or organization maintenance participation is not "
     "requested, return a successful no-op. When participation is available for a validated organization "
@@ -309,18 +269,6 @@ REPO_AUTOMATION_SPECS = (
         "execution_environment": "local",
     },
     {
-        "id": "khaos-brain-system-update",
-        "name": "Khaos Brain System Update",
-        "kind": "cron",
-        "prompt": SYSTEM_UPDATE_AUTOMATION_PROMPT,
-        "skill_name": "khaos-brain-update",
-        "status": "ACTIVE",
-        "rrule": "FREQ=WEEKLY;BYDAY=SU,MO,TU,WE,TH,FR,SA;BYHOUR=14;BYMINUTE=0",
-        "model_policy": AUTOMATION_MODEL_POLICY,
-        "reasoning_effort_policy": AUTOMATION_REASONING_EFFORT_POLICY,
-        "execution_environment": "local",
-    },
-    {
         "id": "kb-org-contribute",
         "name": "KB Organization Contribute",
         "kind": "cron",
@@ -353,7 +301,6 @@ REPO_AUTOMATION_SPECS = (
 # those states.
 POST_LEGACY_AUTOMATION_IDS = frozenset(
     {
-        "khaos-brain-system-update",
         "kb-org-contribute",
         "kb-org-maintenance",
     }
@@ -1031,6 +978,293 @@ def _load_upgrade_attempt(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _bounded_projection_strings(
+    value: object,
+    *,
+    limit: int = 32,
+    text_limit: int = 1000,
+) -> list[str]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    projected = [str(item)[:text_limit] for item in value[:limit]]
+    if len(value) > limit:
+        projected.append(f"... {len(value) - limit} additional items in immutable event")
+    return projected
+
+
+def _tree_manifest_projection(value: object) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    return {
+        key: value[key]
+        for key in ("schema_version", "digest", "file_count", "total_bytes")
+        if key in value
+    }
+
+
+def _validation_toolchain_projection(value: object) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    projected = {
+        key: value[key]
+        for key in (
+            "schema_version",
+            "ok",
+            "status",
+            "attempt_count",
+            "snapshot_root",
+            "source_root",
+            "canonical_snapshot_root",
+            "router_snapshot_root",
+            "router_source_root",
+            "router_canonical_snapshot_root",
+            "validation_codex_home",
+            "installation_receipt_root",
+            "installation_python_executable",
+            "receipt_path",
+            "receipt_hash",
+            "cli_sha256",
+            "compiler_sha256",
+        )
+        if key in value
+    }
+    for key in (
+        "manifest",
+        "source_manifest",
+        "canonical_manifest",
+        "router_manifest",
+        "router_source_manifest",
+        "router_canonical_manifest",
+    ):
+        manifest = _tree_manifest_projection(value.get(key))
+        if manifest:
+            projected[key] = manifest
+    dependency = value.get("dependency")
+    if isinstance(dependency, Mapping):
+        projected["dependency"] = {
+            key: dependency[key]
+            for key in (
+                "package",
+                "version",
+                "schema_version",
+                "source_root",
+                "digest",
+            )
+            if key in dependency
+        }
+    return projected
+
+
+def _migration_projection(value: object) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    projected = {
+        key: value[key]
+        for key in (
+            "schema_version",
+            "ok",
+            "status",
+            "migration_id",
+            "idempotent_no_delta",
+            "residual_retired_state_count",
+            "attempt_count",
+            "receipt_hash",
+        )
+        if key in value
+    }
+    for key in (
+        "logical_debt_reconciliation",
+        "maintenance_state",
+        "managed_surface_reconciliation",
+        "post_commit_convergence_runs",
+        "validation",
+    ):
+        nested = value.get(key)
+        if isinstance(nested, Mapping):
+            projected[key] = {
+                nested_key: nested_value
+                for nested_key, nested_value in nested.items()
+                if isinstance(nested_value, (str, int, float, bool)) or nested_value is None
+            }
+    issues = _bounded_projection_strings(value.get("issues"))
+    if issues:
+        projected["issues"] = issues
+    receipt = value.get("receipt")
+    if isinstance(receipt, Mapping):
+        projected["receipt"] = {
+            key: receipt[key]
+            for key in (
+                "schema_version",
+                "ok",
+                "status",
+                "migration_id",
+                "receipt_hash",
+            )
+            if key in receipt
+        }
+    return projected
+
+
+def _transaction_projection(value: object) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    projected = {
+        key: value[key]
+        for key in (
+            "schema_version",
+            "ok",
+            "status",
+            "transaction_id",
+            "receipt_hash",
+            "journal_path",
+            "backup_root",
+        )
+        if key in value
+    }
+    for key in ("retired_skill_ids", "retired_automation_ids"):
+        rows = _bounded_projection_strings(value.get(key))
+        if rows:
+            projected[key] = rows
+    return projected
+
+
+def _upgrade_assurance_projection(value: object) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    projected = {
+        key: value[key]
+        for key in (
+            "schema_version",
+            "ok",
+            "status",
+            "check",
+            "pre_restore",
+            "evidence_run_id",
+            "evidence_manifest",
+            "generated_at",
+            "source_stable_during_checks",
+            "exact_execution_identity_counts",
+            "duplicate_exact_executions",
+            "verifier_fingerprint",
+            "claim_boundary",
+        )
+        if key in value
+    }
+    checks = value.get("checks")
+    if isinstance(checks, (list, tuple)):
+        projected["check_count"] = len(checks)
+    failed_checks = _bounded_projection_strings(value.get("failed_checks"))
+    projected["failed_checks"] = failed_checks
+    return projected
+
+
+def _post_assurance_convergence_projection(value: object) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    projected = {
+        key: value[key]
+        for key in (
+            "schema_version",
+            "ok",
+            "status",
+            "attempt_count",
+            "receipt_hash",
+        )
+        if key in value
+    }
+    attempts = value.get("attempts")
+    if isinstance(attempts, (list, tuple)):
+        projected["attempts"] = [
+            {
+                key: item[key]
+                for key in ("attempt", "ok", "status")
+                if isinstance(item, Mapping) and key in item
+            }
+            for item in attempts[:10]
+            if isinstance(item, Mapping)
+        ]
+    for key in ("history_migration", "migration_check"):
+        nested = _migration_projection(value.get(key))
+        if nested:
+            projected[key] = nested
+    retrieval = value.get("retrieval_evaluation")
+    if isinstance(retrieval, Mapping):
+        projected["retrieval_evaluation"] = {
+            key: retrieval[key]
+            for key in (
+                "schema_version",
+                "ok",
+                "status",
+                "metrics",
+                "threshold_results",
+                "receipt_hash",
+            )
+            if key in retrieval
+        }
+    return projected
+
+
+def _upgrade_attempt_detail_projection(details: Mapping[str, Any]) -> dict[str, Any]:
+    projected: dict[str, Any] = {}
+    for key in (
+        "repo_root",
+        "repo_root_hash",
+        "survivors_must_remain_paused",
+        "post_install_check_ok",
+        "projection_compacted",
+        "projection_source_sequence",
+        "error_type",
+        "recovery_action",
+    ):
+        if key in details:
+            projected[key] = details[key]
+    if "error" in details:
+        projected["error"] = str(details.get("error") or "")[-4000:]
+
+    pause = details.get("pause_before_migration")
+    if isinstance(pause, Mapping):
+        projected["pause_before_migration"] = {
+            key: pause[key]
+            for key in ("ok", "expected_ids", "paused_ids")
+            if key in pause
+        }
+    for key in ("pre_assurance_update_state_migration",):
+        nested = details.get(key)
+        if isinstance(nested, Mapping):
+            projected[key] = {
+                nested_key: nested_value
+                for nested_key, nested_value in nested.items()
+                if isinstance(nested_value, (str, int, float, bool))
+            }
+    for key in (
+        "history_migration",
+        "post_assurance_history_migration",
+    ):
+        nested = _migration_projection(details.get(key))
+        if nested:
+            projected[key] = nested
+    for key in (
+        "flowguard_validation_toolchain",
+        "logicguard_validation_toolchain",
+    ):
+        nested = _validation_toolchain_projection(details.get(key))
+        if nested:
+            projected[key] = nested
+    for key in ("paused_install_transaction", "install_transaction"):
+        nested = _transaction_projection(details.get(key))
+        if nested:
+            projected[key] = nested
+    assurance = _upgrade_assurance_projection(details.get("upgrade_assurance"))
+    if assurance:
+        projected["upgrade_assurance"] = assurance
+    convergence = _post_assurance_convergence_projection(
+        details.get("post_assurance_data_convergence")
+    )
+    if convergence:
+        projected["post_assurance_data_convergence"] = convergence
+    return projected
+
+
 def latest_upgrade_attempt(codex_home: Path) -> dict[str, Any]:
     root = codex_home / UPGRADE_ATTEMPT_ROOT
     if not root.is_dir():
@@ -1107,8 +1341,11 @@ def _record_upgrade_attempt(
             "relative_path": event_path.relative_to(attempt_dir).as_posix(),
         },
     ]
+    previous_projection = _upgrade_attempt_detail_projection(previous)
+    current_projection = _upgrade_attempt_detail_projection(dict(details or {}))
     current_body = {
         "schema_version": UPGRADE_ATTEMPT_SCHEMA,
+        "projection_schema_version": UPGRADE_ATTEMPT_PROJECTION_SCHEMA,
         "attempt_id": attempt_id,
         "status": status,
         "phase": phase,
@@ -1117,25 +1354,8 @@ def _record_upgrade_attempt(
         "updated_at": now,
         "latest_event_hash": event_hash,
         "checkpoint_refs": checkpoint_refs,
-        **{
-            key: value
-            for key, value in previous.items()
-            if key
-            not in {
-                "schema_version",
-                "attempt_id",
-                "status",
-                "phase",
-                "sequence",
-                "started_at",
-                "updated_at",
-                "latest_event_hash",
-                "checkpoint_refs",
-                "receipt_hash",
-                "current_path",
-            }
-        },
-        **dict(details or {}),
+        **previous_projection,
+        **current_projection,
     }
     current = {**current_body, "receipt_hash": _canonical_payload_hash(current_body)}
     attempt_dir.mkdir(parents=True, exist_ok=True)
@@ -1144,6 +1364,28 @@ def _record_upgrade_attempt(
         json.dumps(current, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
     )
     return {**current, "current_path": str(current_path)}
+
+
+def compact_upgrade_attempt_projection(
+    codex_home: Path,
+    attempt_id: str,
+) -> dict[str, Any]:
+    """Replace one oversized current pointer with a bounded event-backed projection."""
+
+    current_path = _upgrade_attempt_dir(codex_home, attempt_id) / "current.json"
+    current = _load_upgrade_attempt(current_path)
+    if not current:
+        raise RuntimeError(f"current upgrade attempt is missing or invalid: {attempt_id}")
+    return _record_upgrade_attempt(
+        codex_home,
+        attempt_id,
+        phase=str(current.get("phase") or ""),
+        status=str(current.get("status") or ""),
+        details={
+            "projection_compacted": True,
+            "projection_source_sequence": int(current.get("sequence") or 0),
+        },
+    )
 
 
 def _start_upgrade_attempt(
@@ -1481,7 +1723,7 @@ def apply_repo_automation_restoration_plan(
     except OSError as exc:
         write_failed = True
         issues.append(f"restoration-write-failed:{type(exc).__name__}:{exc}")
-        # A five-file restoration is one logical activation.  Compensate a
+        # A four-file restoration is one logical activation. Compensate a
         # partial write immediately instead of leaving a mixed live set for a
         # caller to discover later.  The preflight source bytes are already
         # hash-bound by the authorized plan.
@@ -1608,6 +1850,10 @@ def restore_repo_automation_states(
 
 
 def _automation_toml_text(payload: Mapping[str, Any]) -> str:
+    # Codex owns the live automation document schema and normalizes unknown
+    # keys away. Khaos-only policy and user-pause evidence therefore belongs
+    # in the install/upgrade receipts, while this renderer emits only the
+    # durable Codex automation surface.
     lines = [
         f"version = {int(payload['version'])}",
         f"id = {json.dumps(payload['id'], ensure_ascii=False)}",
@@ -1615,14 +1861,9 @@ def _automation_toml_text(payload: Mapping[str, Any]) -> str:
         f"name = {json.dumps(payload['name'], ensure_ascii=False)}",
         f"prompt = {json.dumps(payload['prompt'], ensure_ascii=False)}",
         f"status = {json.dumps(payload['status'], ensure_ascii=False)}",
-        f"user_paused = {json.dumps(bool(payload.get('user_paused', False)), ensure_ascii=False).lower()}",
         f"rrule = {json.dumps(payload['rrule'], ensure_ascii=False)}",
-        f"schedule_policy = {json.dumps(payload.get('schedule_policy', 'fixed'), ensure_ascii=False)}",
-        f"schedule_window = {json.dumps(payload.get('schedule_window', ''), ensure_ascii=False)}",
         f"model = {json.dumps(payload['model'], ensure_ascii=False)}",
         f"reasoning_effort = {json.dumps(payload['reasoning_effort'], ensure_ascii=False)}",
-        f"model_policy = {json.dumps(payload['model_policy'], ensure_ascii=False)}",
-        f"reasoning_effort_policy = {json.dumps(payload['reasoning_effort_policy'], ensure_ascii=False)}",
         f"execution_environment = {json.dumps(payload['execution_environment'], ensure_ascii=False)}",
         f"cwds = {json.dumps(list(payload['cwds']), ensure_ascii=False)}",
         f"created_at = {int(payload['created_at'])}",
@@ -1645,471 +1886,6 @@ def install_repo_automations(repo_root: Path, codex_home: Path | None = None) ->
         "Partial managed-automation installation is retired; use install_codex_integration() "
         "so Skills, automations, retirement, parity, and rollback share one transaction."
     )
-
-
-def _skillguard_runtime_roots(
-    codex_home: Path,
-    explicit_root: Path | None = None,
-) -> tuple[Path, ...]:
-    roots: list[Path] = []
-    environment_root = os.environ.get(SKILLGUARD_VALIDATION_ROOT_ENV, "").strip()
-    for candidate in (
-        explicit_root,
-        Path(environment_root) if environment_root else None,
-        codex_home / "skills" / "skillguard",
-        default_codex_home() / "skills" / "skillguard",
-    ):
-        if candidate is None:
-            continue
-        resolved = Path(candidate).resolve()
-        if resolved not in roots:
-            roots.append(resolved)
-    return tuple(roots)
-
-
-def _skillguard_compiler_path(
-    codex_home: Path,
-    skillguard_root: Path | None = None,
-) -> Path:
-    for root in _skillguard_runtime_roots(codex_home, skillguard_root):
-        path = root / "scripts" / "skillguard_compile.py"
-        if path.is_file():
-            return path
-    raise FileNotFoundError(
-        "The current SkillGuard compiler is required before Chaos Brain managed Skills can be activated."
-    )
-
-
-def _freeze_skillguard_validation_toolchain(
-    codex_home: Path,
-    destination: Path,
-    *,
-    max_attempts: int = 20,
-) -> dict[str, Any]:
-    """Install one exact SkillGuard identity into an isolated validation home.
-
-    The source tree is never activated in the user's real Codex home.  It is
-    copied into the rollbackable Khaos upgrade attempt, installed with the
-    official SkillGuard transaction owner, and bound to an official current
-    installation receipt before scheduled-production validation may consume it.
-    """
-
-    inherited_root = os.environ.get(SKILLGUARD_VALIDATION_ROOT_ENV, "").strip()
-    inherited_digest = os.environ.get(SKILLGUARD_VALIDATION_DIGEST_ENV, "").strip()
-    if inherited_root and inherited_digest:
-        root = Path(inherited_root).resolve()
-        router_root = root.parent / "skillguard-global-router"
-        validation_codex_home = root.parent.parent
-        manifest = tree_manifest(root) if root.is_dir() else {}
-        router_manifest = tree_manifest(router_root) if router_root.is_dir() else {}
-        if (
-            str(manifest.get("digest") or "") == inherited_digest
-            and validation_codex_home.name == ".codex"
-            and (root / "scripts" / "skillguard_compile.py").is_file()
-            and (root / "scripts" / "skillguard.py").is_file()
-            and (router_root / "SKILL.md").is_file()
-            and (
-                root / ".sg-runtime" / "installation" / "HEAD.json"
-            ).is_file()
-        ):
-            receipt = {
-                "schema_version": "khaos-brain.skillguard-validation-toolchain.v2",
-                "ok": True,
-                "status": "inherited_isolated_installation",
-                "source_root": str(root),
-                "source_manifest": manifest,
-                "canonical_snapshot_root": str(root),
-                "canonical_manifest": manifest,
-                "snapshot_root": str(root),
-                "manifest": manifest,
-                "router_source_root": str(router_root),
-                "router_source_manifest": router_manifest,
-                "router_canonical_snapshot_root": str(router_root),
-                "router_canonical_manifest": router_manifest,
-                "router_snapshot_root": str(router_root),
-                "router_manifest": router_manifest,
-                "validation_codex_home": str(validation_codex_home),
-                "installation_python_executable": os.environ.get(
-                    INSTALLATION_IDENTITY_PYTHON_EXECUTABLE_ENV,
-                    sys.executable,
-                ),
-                "installation_receipt_root": str(
-                    root / ".sg-runtime" / "installation"
-                ),
-                "compiler_sha256": _file_sha256(
-                    root / "scripts" / "skillguard_compile.py"
-                ),
-                "cli_sha256": _file_sha256(root / "scripts" / "skillguard.py"),
-            }
-            receipt["receipt_hash"] = _canonical_payload_hash(receipt)
-            return receipt
-
-    destination = destination.resolve()
-    if not (
-        destination.name == "skillguard"
-        and destination.parent.name == "skills"
-        and destination.parent.parent.name == ".agents"
-    ):
-        raise ValueError(
-            "SkillGuard canonical snapshot must end with .agents/skills/skillguard"
-        )
-    canonical_repository_root = destination.parents[2]
-    snapshot_parent = destination.parents[3]
-    staging = destination.with_name(f".{destination.name}.staging")
-    router_destination = destination.parent / "skillguard-global-router"
-    router_staging = router_destination.with_name(
-        f".{router_destination.name}.staging"
-    )
-    stage_root = snapshot_parent / "stage" / ".codex" / "skills" / "skillguard"
-    validation_codex_home = snapshot_parent / "installed" / ".codex"
-    last_error = "skillguard_runtime_missing"
-    for attempt in range(1, max_attempts + 1):
-        source = next(
-            (
-                root
-                for root in _skillguard_runtime_roots(codex_home)
-                if (root / "scripts" / "skillguard_compile.py").is_file()
-                and (root / "scripts" / "skillguard.py").is_file()
-            ),
-            None,
-        )
-        if source is None:
-            last_error = "skillguard_runtime_missing"
-            time.sleep(0.5)
-            continue
-        source_router = source.parent / "skillguard-global-router"
-        if not (source_router / "SKILL.md").is_file():
-            last_error = "skillguard_global_router_runtime_missing"
-            time.sleep(0.5)
-            continue
-        try:
-            before = tree_manifest(source)
-            router_before = tree_manifest(source_router)
-            if staging.exists():
-                shutil.rmtree(staging)
-            if router_staging.exists():
-                shutil.rmtree(router_staging)
-            staging.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(
-                source,
-                staging,
-                ignore=shutil.ignore_patterns(
-                    "__pycache__",
-                    "*.pyc",
-                    "*.pyo",
-                    "runs",
-                    "locks",
-                    "bootstrap",
-                    "test-results",
-                    ".sg-runtime",
-                ),
-            )
-            shutil.copytree(
-                source_router,
-                router_staging,
-                ignore=shutil.ignore_patterns(
-                    "__pycache__",
-                    "*.pyc",
-                    "*.pyo",
-                    "runs",
-                    "locks",
-                    "bootstrap",
-                    "test-results",
-                    ".sg-runtime",
-                ),
-            )
-            after = tree_manifest(source)
-            router_after = tree_manifest(source_router)
-            snapshot = tree_manifest(staging)
-            router_snapshot = tree_manifest(router_staging)
-            portable_source_rows = [
-                row
-                for row in list(before.get("files") or [])
-                if not str(row.get("path") or "").startswith(".sg-runtime/")
-            ]
-            if not (
-                before == after
-                and portable_source_rows == list(snapshot.get("files") or [])
-                and router_before == router_after == router_snapshot
-                and (staging / "scripts" / "skillguard_compile.py").is_file()
-                and (staging / "scripts" / "skillguard.py").is_file()
-                and (staging / "scripts" / "skillguard_install.py").is_file()
-                and (router_staging / "SKILL.md").is_file()
-            ):
-                last_error = "skillguard_source_changed_during_snapshot"
-                shutil.rmtree(staging, ignore_errors=True)
-                shutil.rmtree(router_staging, ignore_errors=True)
-                time.sleep(0.5)
-                continue
-            if destination.exists():
-                shutil.rmtree(destination)
-            if router_destination.exists():
-                shutil.rmtree(router_destination)
-            os.replace(staging, destination)
-            os.replace(router_staging, router_destination)
-
-            for controlled_root in (stage_root.parents[2], validation_codex_home.parent):
-                try:
-                    controlled_root.relative_to(snapshot_parent)
-                except ValueError as exc:
-                    raise RuntimeError(
-                        "isolated SkillGuard validation root escaped its upgrade attempt"
-                    ) from exc
-                if controlled_root.exists():
-                    shutil.rmtree(controlled_root)
-
-            installer = destination / "scripts" / "skillguard_install.py"
-            install_process = subprocess.run(
-                [
-                    sys.executable,
-                    str(installer),
-                    "--canonical-skill-root",
-                    str(destination),
-                    "--stage-root",
-                    str(stage_root),
-                    "--codex-home",
-                    str(validation_codex_home),
-                    "--prepare",
-                    "--activate",
-                ],
-                cwd=str(canonical_repository_root),
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=300,
-                check=False,
-            )
-            try:
-                install_report = json.loads(install_process.stdout)
-            except json.JSONDecodeError:
-                install_report = {}
-            if (
-                install_process.returncode != 0
-                or str(install_report.get("status") or "") != "passed"
-            ):
-                detail = install_report or install_process.stderr or install_process.stdout
-                raise RuntimeError(
-                    "Isolated SkillGuard transaction installation failed: " + str(detail)
-                )
-
-            installed_root = validation_codex_home / "skills" / "skillguard"
-            installed_router_root = (
-                validation_codex_home / "skills" / "skillguard-global-router"
-            )
-            installed_cli = installed_root / "scripts" / "skillguard.py"
-            command_prefix = [
-                sys.executable,
-                str(installed_cli),
-            ]
-            common_receipt_arguments = [
-                "--repository-root",
-                str(canonical_repository_root),
-                "--canonical-skill-root",
-                ".agents/skills/skillguard",
-                "--codex-home",
-                str(validation_codex_home),
-                "--output",
-                "-",
-            ]
-            capture_process = subprocess.run(
-                [
-                    *command_prefix,
-                    "capture-installation-receipt",
-                    *common_receipt_arguments,
-                ],
-                cwd=str(canonical_repository_root),
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=120,
-                check=False,
-            )
-            try:
-                capture_report = json.loads(capture_process.stdout)
-            except json.JSONDecodeError:
-                capture_report = {}
-            if (
-                capture_process.returncode != 0
-                or str(capture_report.get("status") or "") != "passed"
-            ):
-                detail = capture_report or capture_process.stderr or capture_process.stdout
-                raise RuntimeError(
-                    "Isolated SkillGuard installation receipt capture failed: "
-                    + str(detail)
-                )
-            verify_process = subprocess.run(
-                [
-                    *command_prefix,
-                    "verify-installation-receipt",
-                    *common_receipt_arguments,
-                    "--require-current-installed-parity",
-                ],
-                cwd=str(canonical_repository_root),
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=120,
-                check=False,
-            )
-            try:
-                verify_report = json.loads(verify_process.stdout)
-            except json.JSONDecodeError:
-                verify_report = {}
-            if (
-                verify_process.returncode != 0
-                or str(verify_report.get("status") or "") != "passed"
-            ):
-                detail = verify_report or verify_process.stderr or verify_process.stdout
-                raise RuntimeError(
-                    "Isolated SkillGuard installation receipt verification failed: "
-                    + str(detail)
-                )
-
-            installation_receipt_root = (
-                installed_root / ".sg-runtime" / "installation"
-            )
-            if not (installation_receipt_root / "HEAD.json").is_file():
-                raise RuntimeError(
-                    "Isolated SkillGuard current installation receipt is unavailable"
-                )
-            installed_manifest = tree_manifest(installed_root)
-            installed_router_manifest = tree_manifest(installed_router_root)
-            canonical_manifest = tree_manifest(destination)
-            canonical_router_manifest = tree_manifest(router_destination)
-            if not (
-                before == tree_manifest(source)
-                and router_before == tree_manifest(source_router)
-                and canonical_manifest == snapshot
-                and canonical_router_manifest == router_snapshot
-            ):
-                raise RuntimeError(
-                    "SkillGuard source or canonical validation snapshot changed during isolated installation"
-                )
-            receipt = {
-                "schema_version": "khaos-brain.skillguard-validation-toolchain.v2",
-                "ok": True,
-                "status": "isolated_installed_current",
-                "attempt_count": attempt,
-                "source_root": str(source),
-                "source_manifest": before,
-                "canonical_snapshot_root": str(destination),
-                "canonical_manifest": canonical_manifest,
-                "snapshot_root": str(installed_root),
-                "manifest": installed_manifest,
-                "router_source_root": str(source_router),
-                "router_source_manifest": router_before,
-                "router_canonical_snapshot_root": str(router_destination),
-                "router_canonical_manifest": canonical_router_manifest,
-                "router_snapshot_root": str(installed_router_root),
-                "router_manifest": installed_router_manifest,
-                "validation_codex_home": str(validation_codex_home),
-                "installation_python_executable": sys.executable,
-                "installation_receipt_root": str(installation_receipt_root),
-                "installation_transaction_id": str(
-                    ((install_report.get("reports") or [{}])[-1]).get(
-                        "transaction_id"
-                    )
-                    or ""
-                ),
-                "installation_receipt_id": str(
-                    capture_report.get("receipt_id") or ""
-                ),
-                "installation_receipt_hash": str(
-                    capture_report.get("receipt_hash") or ""
-                ),
-                "compiler_sha256": _file_sha256(
-                    installed_root / "scripts" / "skillguard_compile.py"
-                ),
-                "cli_sha256": _file_sha256(
-                    installed_root / "scripts" / "skillguard.py"
-                ),
-            }
-            receipt["receipt_hash"] = _canonical_payload_hash(receipt)
-            receipt_path = destination.parent / "skillguard-validation-toolchain.json"
-            _write_text_atomic(
-                receipt_path,
-                json.dumps(receipt, ensure_ascii=False, indent=2, sort_keys=True)
-                + "\n",
-            )
-            receipt["receipt_path"] = str(receipt_path)
-            return receipt
-        except OSError as exc:
-            last_error = f"{type(exc).__name__}:{exc}"
-            shutil.rmtree(staging, ignore_errors=True)
-            shutil.rmtree(router_staging, ignore_errors=True)
-            time.sleep(0.5)
-    raise RuntimeError(
-        "Unable to freeze one current SkillGuard validation toolchain: " + last_error
-    )
-
-
-def _require_live_skillguard_matches_snapshot(receipt: Mapping[str, Any]) -> None:
-    source = Path(str(receipt.get("source_root") or ""))
-    expected = str((receipt.get("source_manifest") or {}).get("digest") or "")
-    actual = tree_manifest(source) if source.is_dir() else {}
-    if not expected or str(actual.get("digest") or "") != expected:
-        raise RuntimeError(
-            "Live SkillGuard identity changed after validation snapshot; "
-            "restart the idempotent upgrade against one current toolchain identity."
-        )
-    router_source = Path(str(receipt.get("router_source_root") or ""))
-    expected_router = str(
-        (receipt.get("router_source_manifest") or {}).get("digest") or ""
-    )
-    actual_router = tree_manifest(router_source) if router_source.is_dir() else {}
-    if (
-        not expected_router
-        or str(actual_router.get("digest") or "") != expected_router
-    ):
-        raise RuntimeError(
-            "Live SkillGuard global-router identity changed after validation snapshot; "
-            "restart the idempotent upgrade against one current toolchain identity."
-        )
-    snapshot_root = Path(str(receipt.get("snapshot_root") or ""))
-    expected_snapshot = str((receipt.get("manifest") or {}).get("digest") or "")
-    actual_snapshot = tree_manifest(snapshot_root) if snapshot_root.is_dir() else {}
-    router_snapshot_root = Path(str(receipt.get("router_snapshot_root") or ""))
-    expected_router_snapshot = str(
-        (receipt.get("router_manifest") or {}).get("digest") or ""
-    )
-    actual_router_snapshot = (
-        tree_manifest(router_snapshot_root) if router_snapshot_root.is_dir() else {}
-    )
-    if (
-        not expected_snapshot
-        or str(actual_snapshot.get("digest") or "") != expected_snapshot
-        or not expected_router_snapshot
-        or str(actual_router_snapshot.get("digest") or "")
-        != expected_router_snapshot
-    ):
-        raise RuntimeError(
-            "Isolated installed SkillGuard validation identity changed after receipt capture; "
-            "restart the idempotent upgrade."
-        )
-
-
-def _cleanup_ephemeral_skillguard_validation_toolchain(
-    declared_root: Path | None,
-) -> dict[str, Any]:
-    if declared_root is None:
-        return {"ok": True, "status": "not_required", "removed": False}
-    root = Path(declared_root).resolve()
-    temp_root = Path(tempfile.gettempdir()).resolve()
-    if root.parent != temp_root or not root.name.startswith("khaos-sg-"):
-        raise RuntimeError(
-            "Refusing to clean a SkillGuard validation root outside the exact Khaos temp namespace"
-        )
-    if root.exists():
-        shutil.rmtree(root)
-    return {
-        "ok": not root.exists(),
-        "status": "removed" if not root.exists() else "failed",
-        "removed": not root.exists(),
-        "root": str(root),
-    }
 
 
 def _freeze_flowguard_validation_toolchain(
@@ -2318,380 +2094,16 @@ def _require_live_logicguard_matches_snapshot(receipt: Mapping[str, Any]) -> Non
         )
 
 
-def _transaction_receipt_hash(value: Any) -> str:
-    return hashlib.sha256(
-        json.dumps(
-            value,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-    ).hexdigest()
-
-
-def _file_sha256(path: Path) -> str:
-    try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
-    except OSError as exc:
-        raise RuntimeError(f"Validation identity is unavailable: {path}: {exc}") from exc
-
-
-def _require_unchanged_validation_file(
-    path: Path, expected_sha256: str, *, identity: str
-) -> None:
-    actual_sha256 = _file_sha256(path)
-    if actual_sha256 != expected_sha256:
-        raise RuntimeError(
-            f"Validation identity changed during source validation: {identity}: "
-            f"expected={expected_sha256} actual={actual_sha256}"
-        )
-
-
-def _check_repo_skillguard_current_sources(
-    repo_root: Path,
-    codex_home: Path,
-    *,
-    skillguard_root: Path | None = None,
-) -> list[dict[str, Any]]:
-    compiler = _skillguard_compiler_path(codex_home, skillguard_root)
-    generator = repo_root / "scripts" / "build_kb_automation_skillguard_contracts.py"
-    generator_sha256 = _file_sha256(generator)
-    compiler_sha256 = _file_sha256(compiler)
-    generator_process = subprocess.run(
-        [sys.executable, str(generator), "--check", "--json"],
-        cwd=str(repo_root),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=120,
-        check=False,
-    )
-    _require_unchanged_validation_file(
-        generator, generator_sha256, identity="target-owned-generator"
-    )
-    _require_unchanged_validation_file(
-        compiler, compiler_sha256, identity="current-skillguard-compiler"
-    )
-    try:
-        generator_report = json.loads(generator_process.stdout)
-    except json.JSONDecodeError:
-        generator_report = {}
-    if generator_process.returncode != 0 or not bool(generator_report.get("ok")):
-        detail = generator_report or generator_process.stderr or generator_process.stdout
-        raise RuntimeError(f"Target-owned SkillGuard generation parity failed: {detail}")
-    generator_check_hash = _transaction_receipt_hash(generator_report)
-
-    checks: list[dict[str, Any]] = []
-    for spec in MAINTENANCE_SKILL_SPECS:
-        skill_name = str(spec["name"])
-        skill_root = maintenance_skill_source_dir(repo_root, skill_name)
-        for relative in (
-            "SKILL.md",
-            ".skillguard/contract-source.json",
-            ".skillguard/compiled-contract.json",
-            ".skillguard/check-manifest.json",
-        ):
-                path = skill_root / relative
-                if not path.is_file():
-                    raise FileNotFoundError(f"Managed Skill current authority is missing: {path}")
-        before_manifest = tree_manifest(skill_root)
-        _require_unchanged_validation_file(
-            compiler,
-            compiler_sha256,
-            identity=f"current-skillguard-compiler:before:{skill_name}",
-        )
-        process = subprocess.run(
-            [
-                sys.executable,
-                str(compiler),
-                str(skill_root),
-                "--repository-root",
-                str(repo_root),
-                "--check",
-            ],
-            cwd=str(repo_root),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=120,
-            check=False,
-        )
-        _require_unchanged_validation_file(
-            compiler,
-            compiler_sha256,
-            identity=f"current-skillguard-compiler:after:{skill_name}",
-        )
-        _require_unchanged_validation_file(
-            generator,
-            generator_sha256,
-            identity=f"target-owned-generator:after:{skill_name}",
-        )
-        manifest = tree_manifest(skill_root)
-        if manifest.get("digest") != before_manifest.get("digest"):
-            raise RuntimeError(
-                f"Managed Skill source changed during current validation: {skill_name}: "
-                f"before={before_manifest.get('digest')} after={manifest.get('digest')}"
-            )
-        try:
-            payload = json.loads(process.stdout)
-        except json.JSONDecodeError:
-            payload = {}
-        if process.returncode != 0 or not bool(payload.get("ok")):
-            detail = payload.get("findings") or process.stderr or process.stdout
-            raise RuntimeError(f"SkillGuard current parity failed for {skill_name}: {detail}")
-        receipt: dict[str, Any] = {
-            "schema_version": "chaos_brain.skillguard_source_validation.v1",
-            "skill_id": skill_name,
-            "status": "current",
-            "ok": True,
-            "source_tree_digest": str(manifest.get("digest") or ""),
-            "contract_hash": str(payload.get("contract_hash") or ""),
-            "manifest_hash": str(payload.get("manifest_hash") or ""),
-            "contract_source_sha256": hashlib.sha256(
-                (skill_root / ".skillguard" / "contract-source.json").read_bytes()
-            ).hexdigest(),
-            "compiled_contract_sha256": hashlib.sha256(
-                (skill_root / ".skillguard" / "compiled-contract.json").read_bytes()
-            ).hexdigest(),
-            "check_manifest_sha256": hashlib.sha256(
-                (skill_root / ".skillguard" / "check-manifest.json").read_bytes()
-            ).hexdigest(),
-            "compiler_sha256": compiler_sha256,
-            "generator_sha256": generator_sha256,
-            "generator_check_hash": generator_check_hash,
-        }
-        receipt["validation_input_hash"] = _transaction_receipt_hash(receipt)
-        receipt["receipt_hash"] = _transaction_receipt_hash(receipt)
-        checks.append(receipt)
-    _require_unchanged_validation_file(
-        compiler, compiler_sha256, identity="current-skillguard-compiler:final"
-    )
-    _require_unchanged_validation_file(
-        generator, generator_sha256, identity="target-owned-generator:final"
-    )
-    return checks
-
-
-def _refresh_skillguard_global_router(codex_home: Path) -> dict[str, Any]:
-    cli_candidates = tuple(
-        root / "scripts" / "skillguard.py"
-        for root in _skillguard_runtime_roots(codex_home)
-    )
-    cli = next((path for path in cli_candidates if path.is_file()), None)
-    if cli is None:
-        raise FileNotFoundError("SkillGuard CLI is required to refresh the global router after retirement.")
-    process = subprocess.run(
-        [
-            sys.executable,
-            str(cli),
-            "refresh-global-router",
-            "--codex-home",
-            str(codex_home),
-            "--output",
-            "-",
-        ],
-        cwd=str(codex_home),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=240,
-        check=False,
-    )
-    try:
-        payload = json.loads(process.stdout)
-    except json.JSONDecodeError:
-        payload = {}
-    if process.returncode != 0 or str(payload.get("decision") or "") != "pass":
-        raise RuntimeError(
-            "SkillGuard global-router refresh failed: "
-            + str(payload.get("failures") or process.stderr or process.stdout)
-        )
-    return payload
-
-
-def _skillguard_router_surface(codex_home: Path) -> dict[str, Any]:
-    rows: list[dict[str, Any]] = []
-    for skill_name in ("skillguard", "skillguard-global-router"):
-        root = codex_home / "skills" / skill_name
-        if not root.is_dir():
-            rows.append({"skill_name": skill_name, "present": False, "digest": ""})
-            continue
-        manifest = tree_manifest(root)
-        rows.append(
-            {
-                "skill_name": skill_name,
-                "present": True,
-                "digest": str(manifest.get("digest") or ""),
-                "file_count": int(manifest.get("file_count") or 0),
-            }
-        )
-    return {
-        "rows": rows,
-        "surface_hash": _canonical_payload_hash({"rows": rows}),
-    }
-
-
-def _run_skillguard_router_check(
-    codex_home: Path,
-    *,
-    command: str,
-    registry_path: Path,
-) -> dict[str, Any]:
-    cli_candidates = tuple(
-        root / "scripts" / "skillguard.py"
-        for root in _skillguard_runtime_roots(codex_home)
-    )
-    cli = next((path for path in cli_candidates if path.is_file()), None)
-    if cli is None:
-        return {
-            "ok": False,
-            "decision": "block",
-            "command": command,
-            "blockers": ["skillguard_cli_missing"],
-        }
-    arguments = [
-        sys.executable,
-        str(cli),
-        command,
-        "--registry",
-        str(registry_path),
-    ]
-    arguments.extend(
-        [
-            "--codex-home",
-            str(codex_home),
-            "--output",
-            "-",
-        ]
-    )
-    process = subprocess.run(
-        arguments,
-        cwd=str(codex_home),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=240,
-        check=False,
-    )
-    try:
-        payload = json.loads(process.stdout)
-    except json.JSONDecodeError:
-        payload = {}
-    return {
-        **(payload if isinstance(payload, dict) else {}),
-        "ok": process.returncode == 0
-        and str(payload.get("decision") or "") == "pass",
-        "exit_code": process.returncode,
-        "command": command,
-        "stderr_tail": process.stderr[-2000:],
-    }
-
-
-def _verify_skillguard_global_router(
-    codex_home: Path,
-    refresh_payload: Mapping[str, Any],
-) -> dict[str, Any]:
-    registry_text = str(refresh_payload.get("registry_path") or "").strip()
-    canonical_registry = (
-        codex_home / ".skillguard" / "global-router" / "global_registry.json"
-    ).resolve()
-    display_registry = Path(registry_text).expanduser() if registry_text else Path()
-    registry_candidates = [
-        canonical_registry,
-        display_registry.resolve() if registry_text and display_registry.is_absolute() else Path(),
-        (Path.home() / display_registry).resolve() if registry_text else Path(),
-        (codex_home / display_registry).resolve() if registry_text else Path(),
-    ]
-    registry_path = next(
-        (candidate for candidate in registry_candidates if candidate.is_file()),
-        canonical_registry,
-    )
-    registry = _run_skillguard_router_check(
-        codex_home,
-        command="check-global-registry",
-        registry_path=registry_path,
-    )
-    prompt = _run_skillguard_router_check(
-        codex_home,
-        command="check-global-prompt",
-        registry_path=registry_path,
-    )
-    return {
-        "ok": bool(registry.get("ok") and prompt.get("ok")),
-        "registry_path": str(registry_path),
-        "registry_hash": str(refresh_payload.get("registry_hash") or ""),
-        "registry_check": registry,
-        "prompt_check": prompt,
-        "checked_at": utc_now_iso(),
-        "claim_boundary": (
-            "Current official registry and managed-prompt freshness against the active "
-            "SkillGuard/skill roots only."
-        ),
-    }
-
-
-def _refresh_and_verify_skillguard_global_router(
-    codex_home: Path,
-    *,
-    max_attempts: int = 2,
-) -> dict[str, Any]:
-    last: dict[str, Any] = {}
-    for attempt_number in range(1, max_attempts + 1):
-        refresh = _refresh_skillguard_global_router(codex_home)
-        surface_after_refresh = _skillguard_router_surface(codex_home)
-        live = _verify_skillguard_global_router(codex_home, refresh)
-        surface_after_check = _skillguard_router_surface(codex_home)
-        stable = (
-            surface_after_refresh.get("surface_hash")
-            == surface_after_check.get("surface_hash")
-        )
-        last = {
-            "ok": bool(live.get("ok") and stable),
-            "attempt_number": attempt_number,
-            "refresh": refresh,
-            "live_freshness": live,
-            "surface_after_refresh": surface_after_refresh,
-            "surface_after_check": surface_after_check,
-            "surface_stable": stable,
-        }
-        if last["ok"]:
-            return last
-    raise RuntimeError(
-        "SkillGuard global router did not remain current after refresh: "
-        + str(
-            last.get("live_freshness", {}).get("registry_check", {}).get("failures")
-            or last.get("live_freshness", {}).get("registry_check", {}).get("blockers")
-            or last.get("live_freshness", {}).get("prompt_check", {}).get("failures")
-            or last.get("live_freshness", {}).get("prompt_check", {}).get("blockers")
-            or "active SkillGuard surface changed during verification"
-        )
-    )
-
-
 def _run_pre_restore_upgrade_assurance(
     repo_root: Path,
     codex_home: Path,
     *,
-    skillguard_validation_toolchain: Mapping[str, Any],
     flowguard_validation_toolchain: Mapping[str, Any],
     logicguard_validation_toolchain: Mapping[str, Any],
 ) -> dict[str, Any]:
-    script = repo_root / "scripts" / "check_chaos_brain_readiness.py"
+    script = repo_root / "scripts" / "check_consumer_install_assurance.py"
     environment = os.environ.copy()
-    environment[SKILLGUARD_VALIDATION_ROOT_ENV] = str(
-        skillguard_validation_toolchain.get("snapshot_root") or ""
-    )
-    environment[SKILLGUARD_VALIDATION_DIGEST_ENV] = str(
-        (skillguard_validation_toolchain.get("manifest") or {}).get("digest") or ""
-    )
-    environment[INSTALLATION_IDENTITY_PYTHON_EXECUTABLE_ENV] = str(
-        skillguard_validation_toolchain.get("installation_python_executable")
-        or sys.executable
-    )
+    environment[INSTALLATION_IDENTITY_PYTHON_EXECUTABLE_ENV] = sys.executable
     flowguard_root = Path(
         str(flowguard_validation_toolchain.get("snapshot_root") or "")
     ).resolve()
@@ -2728,11 +2140,8 @@ def _run_pre_restore_upgrade_assurance(
         sys.executable,
         str(script),
         "--json",
-        "--pre-restore",
         "--repo-root",
         str(repo_root),
-        "--codex-home",
-        str(codex_home),
     ]
     try:
         process = run_with_timeout_cleanup(
@@ -3030,7 +2439,6 @@ def _install_codex_integration_impl(
     require_upgrade_assurance: bool = False,
     defer_automation_restore: bool = False,
     upgrade_attempt_id: str = "",
-    skillguard_validation_toolchain: Mapping[str, Any] | None = None,
     flowguard_validation_toolchain: Mapping[str, Any] | None = None,
     logicguard_validation_toolchain: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -3053,10 +2461,6 @@ def _install_codex_integration_impl(
         "kb_launch.py": _read_template(repo_root, "kb_launch.py"),
         "agents/openai.yaml": _read_template(repo_root, Path("agents") / "openai.yaml"),
     }
-    validation_toolchain = dict(skillguard_validation_toolchain or {})
-    validation_root = Path(str(validation_toolchain.get("snapshot_root") or ""))
-    if not validation_root.is_dir():
-        raise RuntimeError("Frozen SkillGuard validation toolchain is unavailable")
     flowguard_toolchain = dict(flowguard_validation_toolchain or {})
     flowguard_validation_root = Path(
         str(flowguard_toolchain.get("snapshot_root") or "")
@@ -3069,11 +2473,6 @@ def _install_codex_integration_impl(
     )
     if not (logicguard_validation_root / "__init__.py").is_file():
         raise RuntimeError("Frozen LogicGuard validation toolchain is unavailable")
-    skillguard_source_checks = _check_repo_skillguard_current_sources(
-        repo_root,
-        home,
-        skillguard_root=validation_root,
-    )
     now_ms = int(time.time() * 1000)
     automation_payloads: dict[str, dict[str, Any]] = {}
     for spec in REPO_AUTOMATION_SPECS:
@@ -3103,9 +2502,6 @@ def _install_codex_integration_impl(
             str(spec["name"]): maintenance_skill_source_dir(repo_root, str(spec["name"]))
             for spec in MAINTENANCE_SKILL_SPECS
         },
-        skillguard_validation_receipts={
-            str(row["skill_id"]): row for row in skillguard_source_checks
-        },
         automation_payloads=activation_payloads,
         automation_renderer=_automation_toml_text,
         retired_skill_ids=RETIRED_MAINTENANCE_SKILL_IDS,
@@ -3113,9 +2509,9 @@ def _install_codex_integration_impl(
     )
     if safe_upgrade:
         paused_transaction = transaction
-        from local_kb.software_update import canonicalize_obsolete_update_state
+        from local_kb.software_update import migrate_obsolete_update_state
 
-        pre_assurance_update_state_migration = canonicalize_obsolete_update_state(
+        pre_assurance_update_state_migration = migrate_obsolete_update_state(
             repo_root,
             install_receipt=_committed_install_receipt_projection(
                 paused_transaction
@@ -3166,20 +2562,16 @@ def _install_codex_integration_impl(
         rg_source=rg_source,
         persist_user_path=persist_user_shell_path,
     )
-    global_router_refresh: dict[str, Any] = {}
-    global_router_live_freshness: dict[str, Any] = {}
-    pre_assurance_global_router: dict[str, Any] = {}
     upgrade_assurance: dict[str, Any] = {}
     if safe_upgrade:
-        pre_assurance_global_router = _refresh_and_verify_skillguard_global_router(home)
         if upgrade_attempt_id:
             _record_upgrade_attempt(
                 home,
                 upgrade_attempt_id,
-                phase="pre_assurance_router_current",
+                phase="pre_assurance_consumer_projection_current",
                 status="in_progress",
                 details={
-                    "pre_assurance_global_router": pre_assurance_global_router,
+                    "consumer_projection_independent": True,
                     "survivors_must_remain_paused": True,
                 },
             )
@@ -3188,13 +2580,11 @@ def _install_codex_integration_impl(
             # toolchain that is already stale.  A change that happens during
             # the campaign is still caught by the identical restore-gate
             # checks below; neither case authorizes reinstalling that tool.
-            _require_live_skillguard_matches_snapshot(validation_toolchain)
             _require_live_flowguard_matches_snapshot(flowguard_toolchain)
             _require_live_logicguard_matches_snapshot(logicguard_toolchain)
             upgrade_assurance = _run_pre_restore_upgrade_assurance(
                 repo_root,
                 home,
-                skillguard_validation_toolchain=validation_toolchain,
                 flowguard_validation_toolchain=flowguard_toolchain,
                 logicguard_validation_toolchain=logicguard_toolchain,
             )
@@ -3248,14 +2638,8 @@ def _install_codex_integration_impl(
         final_activation_payloads = (
             activation_payloads if defer_automation_restore else automation_payloads
         )
-        _require_live_skillguard_matches_snapshot(validation_toolchain)
         _require_live_flowguard_matches_snapshot(flowguard_toolchain)
         _require_live_logicguard_matches_snapshot(logicguard_toolchain)
-        final_skillguard_source_checks = _check_repo_skillguard_current_sources(
-            repo_root,
-            home,
-            skillguard_root=validation_root,
-        )
         transaction = install_managed_runtime(
             repo_root=repo_root,
             codex_home=home,
@@ -3264,9 +2648,6 @@ def _install_codex_integration_impl(
             skill_sources={
                 str(spec["name"]): maintenance_skill_source_dir(repo_root, str(spec["name"]))
                 for spec in MAINTENANCE_SKILL_SPECS
-            },
-            skillguard_validation_receipts={
-                str(row["skill_id"]): row for row in final_skillguard_source_checks
             },
             automation_payloads=final_activation_payloads,
             automation_renderer=_automation_toml_text,
@@ -3284,25 +2665,14 @@ def _install_codex_integration_impl(
                     "survivors_must_remain_paused": bool(defer_automation_restore),
                 },
             )
-        # The final managed-runtime transaction can replace Skill trees after
-        # the pre-assurance refresh. Refresh and check again at the true end.
-        final_router = _refresh_and_verify_skillguard_global_router(home)
-        global_router_refresh = dict(final_router.get("refresh") or {})
-        global_router_live_freshness = dict(
-            final_router.get("live_freshness") or {}
-        )
         if upgrade_attempt_id:
             _record_upgrade_attempt(
                 home,
                 upgrade_attempt_id,
-                phase="final_router_current",
+                phase="final_consumer_projection_current",
                 status="ready_for_install_check",
                 details={
-                    "global_router_refresh": global_router_refresh,
-                    "global_router_live_freshness": global_router_live_freshness,
-                    "global_router_surface": final_router.get(
-                        "surface_after_check", {}
-                    ),
+                    "consumer_projection_independent": True,
                     "survivors_must_remain_paused": bool(defer_automation_restore),
                 },
             )
@@ -3352,10 +2722,8 @@ def _install_codex_integration_impl(
         "automations": automations,
         "installed_automation_statuses": installed_automation_statuses,
         "automation_restore_deferred": bool(defer_automation_restore),
-        "skillguard_validation_toolchain": validation_toolchain,
         "flowguard_validation_toolchain": flowguard_toolchain,
         "logicguard_validation_toolchain": logicguard_toolchain,
-        "skillguard_source_checks": skillguard_source_checks,
         "install_transaction": transaction,
         "paused_install_transaction": paused_transaction,
         "history_migration_required": bool(safe_upgrade),
@@ -3368,9 +2736,6 @@ def _install_codex_integration_impl(
         ),
         "upgrade_assurance_required": bool(require_upgrade_assurance),
         "upgrade_assurance": upgrade_assurance,
-        "global_router_refresh": global_router_refresh,
-        "global_router_live_freshness": global_router_live_freshness,
-        "pre_assurance_global_router": pre_assurance_global_router,
         "upgrade_attempt": (
             latest_upgrade_attempt(home) if upgrade_attempt_id else {}
         ),
@@ -3491,30 +2856,12 @@ def install_codex_integration(
         else b""
     )
     obsolete_update_state_settled = False
-    validation_toolchain: dict[str, Any] = {}
-    skillguard_ephemeral_root: Path | None = None
     try:
         snapshot_parent = (
             _upgrade_attempt_dir(home, attempt_id) / "validation-toolchain"
             if attempt_id
             else home / ".khaos-brain-install" / "fixture-validation-toolchain"
         )
-        short_skillguard_parent = Path(
-            tempfile.mkdtemp(prefix="khaos-sg-")
-        ).resolve()
-        skillguard_ephemeral_root = short_skillguard_parent
-        try:
-            validation_toolchain = _freeze_skillguard_validation_toolchain(
-                home,
-                short_skillguard_parent
-                / "canonical-repository"
-                / ".agents"
-                / "skills"
-                / "skillguard",
-            )
-        except Exception:
-            shutil.rmtree(short_skillguard_parent, ignore_errors=True)
-            raise
         flowguard_toolchain = _freeze_flowguard_validation_toolchain(
             snapshot_parent / "python" / "flowguard"
         )
@@ -3528,16 +2875,12 @@ def install_codex_integration(
                 phase="validation_toolchain_frozen",
                 status="in_progress",
                 details={
-                    "skillguard_validation_toolchain": validation_toolchain,
                     "flowguard_validation_toolchain": flowguard_toolchain,
                     "logicguard_validation_toolchain": logicguard_toolchain,
+                    "consumer_skills_require_author_toolchain": False,
                     "survivors_must_remain_paused": True,
                 },
             )
-        previous_validation_root = os.environ.get(SKILLGUARD_VALIDATION_ROOT_ENV)
-        previous_validation_digest = os.environ.get(
-            SKILLGUARD_VALIDATION_DIGEST_ENV
-        )
         previous_flowguard_root = os.environ.get(FLOWGUARD_VALIDATION_ROOT_ENV)
         previous_flowguard_digest = os.environ.get(
             FLOWGUARD_VALIDATION_DIGEST_ENV
@@ -3562,16 +2905,7 @@ def install_codex_integration(
         os.environ[INSTALLATION_IDENTITY_PYTHONPATH_VALUE_ENV] = (
             previous_pythonpath or ""
         )
-        os.environ[INSTALLATION_IDENTITY_PYTHON_EXECUTABLE_ENV] = str(
-            validation_toolchain.get("installation_python_executable")
-            or sys.executable
-        )
-        os.environ[SKILLGUARD_VALIDATION_ROOT_ENV] = str(
-            validation_toolchain["snapshot_root"]
-        )
-        os.environ[SKILLGUARD_VALIDATION_DIGEST_ENV] = str(
-            validation_toolchain["manifest"]["digest"]
-        )
+        os.environ[INSTALLATION_IDENTITY_PYTHON_EXECUTABLE_ENV] = sys.executable
         flowguard_root = Path(str(flowguard_toolchain["snapshot_root"])).resolve()
         os.environ[FLOWGUARD_VALIDATION_ROOT_ENV] = str(flowguard_root)
         os.environ[FLOWGUARD_VALIDATION_DIGEST_ENV] = str(
@@ -3611,23 +2945,10 @@ def install_codex_integration(
                 ),
                 defer_automation_restore=defer_automation_restore,
                 upgrade_attempt_id=attempt_id,
-                skillguard_validation_toolchain=validation_toolchain,
                 flowguard_validation_toolchain=flowguard_toolchain,
                 logicguard_validation_toolchain=logicguard_toolchain,
             )
         finally:
-            if previous_validation_root is None:
-                os.environ.pop(SKILLGUARD_VALIDATION_ROOT_ENV, None)
-            else:
-                os.environ[SKILLGUARD_VALIDATION_ROOT_ENV] = (
-                    previous_validation_root
-                )
-            if previous_validation_digest is None:
-                os.environ.pop(SKILLGUARD_VALIDATION_DIGEST_ENV, None)
-            else:
-                os.environ[SKILLGUARD_VALIDATION_DIGEST_ENV] = (
-                    previous_validation_digest
-                )
             if previous_flowguard_root is None:
                 os.environ.pop(FLOWGUARD_VALIDATION_ROOT_ENV, None)
             else:
@@ -3677,9 +2998,9 @@ def install_codex_integration(
         payload["automations_paused_before_migration"] = paused_before_migration
         payload["pause_before_migration"] = pause_before_migration
         if run_history_migration:
-            from local_kb.software_update import canonicalize_obsolete_update_state
+            from local_kb.software_update import migrate_obsolete_update_state
 
-            obsolete_update_state_migration = canonicalize_obsolete_update_state(
+            obsolete_update_state_migration = migrate_obsolete_update_state(
                 root,
                 install_receipt=_committed_install_receipt_projection(
                     dict(payload.get("install_transaction") or {})
@@ -3726,30 +3047,17 @@ def install_codex_integration(
                 details={
                     "post_install_check_ok": True,
                     "install_transaction": payload.get("install_transaction", {}),
-                    "global_router_refresh": payload.get(
-                        "global_router_refresh", {}
-                    ),
-                    "global_router_live_freshness": payload.get(
-                        "global_router_live_freshness", {}
-                    ),
+                    "consumer_projection_independent": True,
                     "survivors_must_remain_paused": bool(
                         defer_automation_restore
                     ),
                 },
             )
             payload["upgrade_attempt"] = upgrade_attempt
-        payload["skillguard_validation_toolchain_cleanup"] = (
-            _cleanup_ephemeral_skillguard_validation_toolchain(
-                skillguard_ephemeral_root
-            )
-        )
         manifest_path = save_install_state(payload, home)
         payload["install_state_path"] = str(manifest_path)
         return payload
     except Exception as exc:
-        cleanup = _cleanup_ephemeral_skillguard_validation_toolchain(
-            skillguard_ephemeral_root
-        )
         if run_history_migration:
             _restore_exact_file_snapshot(
                 obsolete_update_state_file,
@@ -3770,7 +3078,6 @@ def install_codex_integration(
                         "recovery_action": (
                             "Rerun the idempotent installer after the reported hard gate is repaired."
                         ),
-                        "skillguard_validation_toolchain_cleanup": cleanup,
                     },
                 )
         raise
@@ -4020,16 +3327,7 @@ def build_installation_check(
             issues.append(
                 "The update-state file is not in the sole current schema; the versioned upgrade must rewrite it before installation can be healthy."
             )
-        obsolete_update_state_settled = not bool(
-            str(current_update_state.get("status") or "") == "failed"
-            and str(current_update_state.get("error") or "")
-            == "SkillGuard installation identity is not current"
-        )
-        if not obsolete_update_state_settled:
-            issues.append(
-                "The exact retired SkillGuard installation-identity failure remains in update state; "
-                "the versioned upgrade must settle it before installation can be healthy."
-            )
+        obsolete_update_state_settled = True
         from local_kb.maintenance_migration import check_migration
 
         history_migration_check = check_migration(expected_repo_root)
@@ -4069,93 +3367,6 @@ def build_installation_check(
                 str(item) for item in upgrade_assurance.get("failed_checks", [])
             )
         )
-    manifest_router_refresh = (
-        manifest.get("global_router_refresh", {})
-        if isinstance(manifest.get("global_router_refresh"), dict)
-        else {}
-    )
-    manifest_router_live = (
-        manifest.get("global_router_live_freshness", {})
-        if isinstance(manifest.get("global_router_live_freshness"), dict)
-        else {}
-    )
-    attempt_router_refresh = (
-        active_upgrade_attempt.get("global_router_refresh", {})
-        if isinstance(active_upgrade_attempt.get("global_router_refresh"), Mapping)
-        else {}
-    )
-    pre_assurance_router = (
-        active_upgrade_attempt.get("pre_assurance_global_router", {})
-        if isinstance(active_upgrade_attempt.get("pre_assurance_global_router"), Mapping)
-        else {}
-    )
-    pre_assurance_refresh = (
-        pre_assurance_router.get("refresh", {})
-        if isinstance(pre_assurance_router.get("refresh"), Mapping)
-        else {}
-    )
-    attempt_is_at_least_as_current = bool(
-        active_upgrade_attempt
-        and str(active_upgrade_attempt.get("updated_at") or "")
-        >= str(manifest.get("installed_at") or "")
-    )
-    global_router_refresh = (
-        dict(attempt_router_refresh or pre_assurance_refresh)
-        if attempt_is_at_least_as_current
-        else dict(manifest_router_refresh)
-    )
-    global_router_refresh_receipt_ok = bool(
-        not history_migration_required
-        or str(global_router_refresh.get("decision") or "") == "pass"
-    )
-    final_router_phase_bound = bool(
-        not history_migration_required
-        or (
-            bool(attempt_router_refresh)
-            and str(active_upgrade_attempt.get("phase") or "")
-            in {
-                "final_router_current",
-                "post_install_check_passed",
-            }
-        )
-        or (
-            not attempt_is_at_least_as_current
-            and bool(manifest_router_refresh)
-            and bool(manifest_router_live.get("ok"))
-        )
-    )
-    if not global_router_refresh_receipt_ok:
-        issues.append(
-            "SkillGuard global-router refresh receipt is missing or failed for the current upgrade attempt."
-        )
-    elif not final_router_phase_bound:
-        issues.append(
-            "SkillGuard router has only a pre-assurance refresh receipt; a final refresh after the "
-            "last managed Skill transaction is still required."
-        )
-    if history_migration_required and global_router_refresh_receipt_ok:
-        global_router_live_freshness = _verify_skillguard_global_router(
-            home, global_router_refresh
-        )
-        global_router_live_freshness_ok = bool(
-            global_router_live_freshness.get("ok") and final_router_phase_bound
-        )
-    else:
-        global_router_live_freshness = {
-            "ok": not history_migration_required,
-            "status": "fixture_skipped" if not history_migration_required else "not_run",
-        }
-        global_router_live_freshness_ok = bool(not history_migration_required)
-    if not global_router_live_freshness_ok:
-        issues.append(
-            "Current SkillGuard global registry and managed prompt are not both fresh against "
-            "the active Skill trees after the final refresh."
-        )
-    global_router_refresh_ok = bool(
-        global_router_refresh_receipt_ok
-        and final_router_phase_bound
-        and global_router_live_freshness_ok
-    )
     canonical_interface_checks: list[dict[str, Any]] = []
 
     def add_canonical_interface_check(check_id: str, path: Path, markers: tuple[str, ...]) -> None:
@@ -4275,52 +3486,37 @@ def build_installation_check(
                     f"Installed maintenance skill {skill_name} default prompt should mention ${skill_name}."
                 )
         source_manifest = tree_manifest(source_dir) if source_dir.exists() else {}
+        try:
+            expected_consumer_manifest = (
+                consumer_skill_manifest(source_dir) if source_dir.exists() else {}
+            )
+        except RuntimeError as exc:
+            expected_consumer_manifest = {}
+            issues_for_skill.append(str(exc))
         install_manifest = tree_manifest(install_dir) if install_dir.exists() else {}
-        if source_manifest and install_manifest and source_manifest.get("digest") != install_manifest.get("digest"):
-            issues_for_skill.append(
-                f"Installed maintenance skill {skill_name} complete tree differs from repository source."
-            )
-        for authority_file in (
-            ".skillguard/contract-source.json",
-            ".skillguard/compiled-contract.json",
-            ".skillguard/check-manifest.json",
+        if (
+            expected_consumer_manifest
+            and install_manifest
+            and expected_consumer_manifest.get("digest") != install_manifest.get("digest")
         ):
-            if not (source_dir / authority_file).is_file():
-                issues_for_skill.append(f"Repository current SkillGuard authority is missing: {source_dir / authority_file}")
-            if not (install_dir / authority_file).is_file():
-                issues_for_skill.append(f"Installed current SkillGuard authority is missing: {install_dir / authority_file}")
-        automation_prompt = next(
-            (
-                str(item.get("prompt") or "")
-                for item in REPO_AUTOMATION_SPECS
-                if str(item.get("skill_name") or "") == skill_name
-            ),
-            "",
-        )
-        source_completion_findings = validate_completion_surface(
-            skill_name,
-            repo_root=expected_repo_root,
-            automation_prompt=automation_prompt,
-            skill_text=source_skill_text,
-            compiled_contract=_load_json_object(source_dir / ".skillguard" / "compiled-contract.json"),
-            check_manifest=_load_json_object(source_dir / ".skillguard" / "check-manifest.json"),
-        )
-        installed_completion_findings = validate_completion_surface(
-            skill_name,
-            repo_root=expected_repo_root,
-            automation_prompt=automation_prompt,
-            skill_text=skill_text,
-            compiled_contract=_load_json_object(install_dir / ".skillguard" / "compiled-contract.json"),
-            check_manifest=_load_json_object(install_dir / ".skillguard" / "check-manifest.json"),
-        )
-        for finding in source_completion_findings:
             issues_for_skill.append(
-                f"Repository automation SkillGuard completion contract failed: {finding.get('code')}:{finding.get('detail')}"
+                f"Installed maintenance skill {skill_name} differs from the clean consumer projection."
             )
-        for finding in installed_completion_findings:
-            issues_for_skill.append(
-                f"Installed automation SkillGuard completion contract failed: {finding.get('code')}:{finding.get('detail')}"
-            )
+        consumer_projection_findings: list[str] = []
+        if (install_dir / ".skillguard").exists():
+            consumer_projection_findings.append("installed-author-control-directory-present")
+        for path in install_dir.rglob("*") if install_dir.exists() else ():
+            if not path.is_file():
+                continue
+            try:
+                text = path.read_text(encoding="utf-8").lower()
+            except (OSError, UnicodeDecodeError):
+                continue
+            if any(token in text for token in ("skillguard", ".skillguard", "skillguard.py")):
+                consumer_projection_findings.append(
+                    f"installed-author-control-token:{path.relative_to(install_dir).as_posix()}"
+                )
+        issues_for_skill.extend(consumer_projection_findings)
         if issues_for_skill:
             issues.extend(issues_for_skill)
         maintenance_skill_checks.append(
@@ -4332,9 +3528,11 @@ def build_installation_check(
                 "openai_exists": install_openai_path.exists(),
                 "automation_id": spec["automation_id"],
                 "source_manifest_digest": str(source_manifest.get("digest") or ""),
+                "expected_consumer_manifest_digest": str(
+                    expected_consumer_manifest.get("digest") or ""
+                ),
                 "install_manifest_digest": str(install_manifest.get("digest") or ""),
-                "source_completion_findings": source_completion_findings,
-                "installed_completion_findings": installed_completion_findings,
+                "consumer_projection_findings": consumer_projection_findings,
                 "issues": issues_for_skill,
             }
         )
@@ -4362,8 +3560,11 @@ def build_installation_check(
                     f"Automation {expected['id']} should be named {expected['name']}."
                 )
             payload_status = str(payload.get("status", "") or "")
-            user_paused = bool(payload.get("user_paused")) and payload_status == "PAUSED"
-            preserved_pause_allowed = user_paused
+            # PAUSED is a valid user-visible Codex state. The application
+            # normalizes unknown Khaos metadata such as ``user_paused`` away,
+            # so current health reads the supported status field and binds
+            # pause ownership/policy to the install and upgrade receipts.
+            preserved_pause_allowed = payload_status == "PAUSED"
             deferred_pause_allowed = bool(
                 allow_deferred_automation_restore
                 and restore_deferred
@@ -4381,14 +3582,6 @@ def build_installation_check(
                 issues_for_automation.append(
                     f"Automation {expected['id']} should use rrule {expected['rrule']}."
                 )
-            if str(payload.get("schedule_policy", "") or "") != expected["schedule_policy"]:
-                issues_for_automation.append(
-                    f"Automation {expected['id']} should record schedule_policy={expected['schedule_policy']}."
-                )
-            if str(payload.get("schedule_window", "") or "") != expected["schedule_window"]:
-                issues_for_automation.append(
-                    f"Automation {expected['id']} should record schedule_window={expected['schedule_window']}."
-                )
             if str(payload.get("model", "") or "") != expected["model"]:
                 issues_for_automation.append(
                     f"Automation {expected['id']} should use model={expected['model']} from policy={expected['model_policy']}."
@@ -4396,15 +3589,6 @@ def build_installation_check(
             if str(payload.get("reasoning_effort", "") or "") != expected["reasoning_effort"]:
                 issues_for_automation.append(
                     f"Automation {expected['id']} should use reasoning_effort={expected['reasoning_effort']} from policy={expected['reasoning_effort_policy']}."
-                )
-            if str(payload.get("model_policy", "") or "") != expected["model_policy"]:
-                issues_for_automation.append(
-                    f"Automation {expected['id']} should record model_policy={expected['model_policy']}."
-                )
-            if str(payload.get("reasoning_effort_policy", "") or "") != expected["reasoning_effort_policy"]:
-                issues_for_automation.append(
-                    "Automation "
-                    f"{expected['id']} should record reasoning_effort_policy={expected['reasoning_effort_policy']}."
                 )
             if str(payload.get("execution_environment", "") or "") != expected["execution_environment"]:
                 issues_for_automation.append(
@@ -4428,13 +3612,10 @@ def build_installation_check(
             required_prompt_markers = (
                 ".agents/skills/local-kb-retrieve",
                 "PROJECT_SPEC.md",
-                "scripts/run_kb_guarded_automation.py",
-                SKILLGUARD_PARTIAL_MARKER,
-                SKILLGUARD_COMPLETION_MARKER,
+                "scripts/run_kb_automation.py",
                 "immutable",
-                "Fixture or capability evidence cannot close a scheduled run",
-                "portable receipt-root reference",
-                "installed runtime fingerprint",
+                "target-owned runner",
+                "native terminal receipt",
             )
             for marker in required_prompt_markers:
                 if marker not in prompt_text:
@@ -4569,9 +3750,8 @@ def build_installation_check(
 
     automation_issue_map = {item["id"]: item["issues"] for item in automation_checks}
     maintenance_skill_ok = all(not item["issues"] for item in maintenance_skill_checks)
-    automation_skillguard_completion_ok = bool(maintenance_skill_checks) and all(
-        not item.get("source_completion_findings")
-        and not item.get("installed_completion_findings")
+    maintenance_consumer_independence_ok = bool(maintenance_skill_checks) and all(
+        not item.get("consumer_projection_findings")
         for item in maintenance_skill_checks
     )
     global_skill_present = skill_path.exists() and launcher_path.exists() and openai_path.exists()
@@ -4618,7 +3798,7 @@ def build_installation_check(
     )
     kb_sleep_ok = not automation_issue_map.get("kb-sleep")
     kb_dream_ok = not automation_issue_map.get("kb-dream")
-    system_update_ok = not automation_issue_map.get("khaos-brain-system-update")
+    system_update_retired_ok = not automation_toml_path("khaos-brain-system-update", home).exists()
     kb_org_contribute_ok = not automation_issue_map.get("kb-org-contribute")
     kb_org_maintenance_ok = not automation_issue_map.get("kb-org-maintenance")
     automation_check_map = {item["id"]: item for item in automation_checks}
@@ -4638,7 +3818,7 @@ def build_installation_check(
     retired_surfaces_absent = active_retired_absent and source_retired_absent
     if not retired_surfaces_absent:
         issues.append(
-            "Retired Architect surfaces remain active: "
+            "Retired managed Skill or automation surfaces remain active: "
             + ", ".join(
                 str(path)
                 for path in retired_paths
@@ -4674,7 +3854,7 @@ def build_installation_check(
         and obsolete_update_state_settled
         and update_state_source_current
         and maintenance_skill_ok
-        and automation_skillguard_completion_ok
+        and maintenance_consumer_independence_ok
     )
     checklist = [
         _checklist_item(
@@ -4816,11 +3996,11 @@ def build_installation_check(
             "; ".join(f"{item['name']}={item['install_path']}" for item in maintenance_skill_checks),
         ),
         _checklist_item(
-            "automation_skillguard_completion_contracts",
-            "Every retained background automation has current target-specific runtime receipts and the sole enforced SkillGuard declared-check contract",
-            automation_skillguard_completion_ok,
+            "maintenance_consumer_independence",
+            "Every installed maintenance skill is the exact clean consumer projection and carries no author-side control",
+            maintenance_consumer_independence_ok,
             "; ".join(
-                f"{item['name']}=source:{len(item.get('source_completion_findings', []))},installed:{len(item.get('installed_completion_findings', []))}"
+                f"{item['name']}=consumer_findings:{len(item.get('consumer_projection_findings', []))}"
                 for item in maintenance_skill_checks
             ),
         ),
@@ -4847,35 +4027,8 @@ def build_installation_check(
             f"status={current_update_state.get('status', '')}; error={current_update_state.get('error', '')}",
         ),
         _checklist_item(
-            "skillguard_global_router_refresh_receipt",
-            "A durable final SkillGuard router-refresh receipt is bound after the last managed Skill transaction",
-            bool(global_router_refresh_receipt_ok and final_router_phase_bound),
-            (
-                f"registry={global_router_refresh.get('registry_path', '')}; "
-                f"registry_hash={global_router_refresh.get('registry_hash', '')}; "
-                f"agents_file={global_router_refresh.get('agents_file', '')}; "
-                f"decision={global_router_refresh.get('decision', '')}"
-            ),
-        ),
-        _checklist_item(
-            "skillguard_global_router_live_freshness",
-            "Current registry and managed prompt both match the active Skill trees after final refresh",
-            global_router_live_freshness_ok,
-            (
-                f"registry={global_router_live_freshness.get('registry_path', '')}; "
-                f"registry_decision={global_router_live_freshness.get('registry_check', {}).get('decision', '')}; "
-                f"prompt_decision={global_router_live_freshness.get('prompt_check', {}).get('decision', '')}"
-            ),
-        ),
-        _checklist_item(
-            "skillguard_global_router_refresh",
-            "Global SkillGuard routing is durably refreshed and currently fresh without the retired Architect Skill",
-            global_router_refresh_ok,
-            str(global_router_refresh.get("registry_path") or ""),
-        ),
-        _checklist_item(
             "chaos_brain_aggregate_assurance",
-            "Current model, SkillGuard, retirement, retrieval, and full-regression gates passed before restore",
+            "Current target-owned model, retirement, retrieval, and regression gates passed before restore",
             upgrade_assurance_ok,
             (
                 f"required={upgrade_assurance_required}; "
@@ -4895,15 +4048,15 @@ def build_installation_check(
             f"path={automation_toml_path('kb-dream', home)}",
         ),
         _checklist_item(
-            "retired_architect_surfaces",
-            "Retired Architect Skill and automation surfaces are absent",
+            "retired_managed_surfaces",
+            "Retired Architect and automatic system-update surfaces are absent",
             retired_surfaces_absent,
             "; ".join(str(path) for path in [*retired_paths, *retired_source_paths]),
         ),
         _checklist_item(
-            "khaos_brain_system_update_automation",
-            "Khaos Brain system update automation is installed and matches the repository spec",
-            system_update_ok,
+            "khaos_brain_system_update_retired",
+            "Khaos Brain automatic system-update task is absent",
+            system_update_retired_ok,
             f"path={automation_toml_path('khaos-brain-system-update', home)}",
         ),
         _checklist_item(
@@ -4983,11 +4136,6 @@ def build_installation_check(
         "current_update_state": current_update_state,
         "upgrade_assurance_required": upgrade_assurance_required,
         "upgrade_assurance": upgrade_assurance,
-        "global_router_refresh": global_router_refresh,
-        "global_router_refresh_receipt_ok": global_router_refresh_receipt_ok,
-        "global_router_final_phase_bound": final_router_phase_bound,
-        "global_router_live_freshness": global_router_live_freshness,
-        "global_router_live_freshness_ok": global_router_live_freshness_ok,
         "upgrade_attempt": active_upgrade_attempt,
         "install_transaction": install_transaction,
         "retired_paths": [str(path) for path in retired_paths],

@@ -39,16 +39,8 @@ class KhaosLogicGuardReadinessTests(unittest.TestCase):
     def test_standalone_owner_binds_completed_install_toolchains(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            skillguard = root / "skillguard"
             flowguard = root / "python" / "flowguard"
             logicguard = root / "python" / "logicguard"
-            (skillguard / "scripts").mkdir(parents=True)
-            (skillguard / "scripts" / "skillguard.py").write_text(
-                "# current\n", encoding="utf-8"
-            )
-            (skillguard / "scripts" / "skillguard_compile.py").write_text(
-                "# current\n", encoding="utf-8"
-            )
             flowguard.mkdir(parents=True)
             (flowguard / "__init__.py").write_text("SCHEMA_VERSION='1.0'\n", encoding="utf-8")
             logicguard.mkdir(parents=True)
@@ -61,10 +53,6 @@ class KhaosLogicGuardReadinessTests(unittest.TestCase):
                 "status": "completed",
                 "phase": "post_install_check_passed",
                 "updated_at": "2026-07-15T00:00:00Z",
-                "skillguard_validation_toolchain": {
-                    "snapshot_root": str(skillguard),
-                    "manifest": tree_manifest(skillguard),
-                },
                 "flowguard_validation_toolchain": {
                     "snapshot_root": str(flowguard),
                     "manifest": tree_manifest(flowguard),

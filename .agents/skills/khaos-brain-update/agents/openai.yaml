@@ -1,7 +1,7 @@
 interface:
   display_name: "Khaos Brain Update"
-  short_description: "Apply a clean Khaos Brain software update"
-  default_prompt: "Use $khaos-brain-update to apply one authorized clean software update for this repository."
+  short_description: "Apply an explicitly requested manual update"
+  default_prompt: "Use $khaos-brain-update only because I explicitly requested a Khaos Brain update in this conversation; run the guarded manual route with no scheduler or persisted authorization."
 
 policy:
   allow_implicit_invocation: false

@@ -73,7 +73,7 @@ def _gate(repo_root: Path) -> dict:
     }
 
 
-def test_activation_gate_requires_exact_current_aggregate_and_five_terminals() -> None:
+def test_activation_gate_requires_exact_current_aggregate_and_four_scheduled_terminals() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         repo_root = root / "repo"

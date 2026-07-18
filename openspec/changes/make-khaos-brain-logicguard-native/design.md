@@ -133,7 +133,7 @@ Existing facades extend rather than duplicate:
 
 ### 8. Direct-to-current migration is the only legacy reader
 
-The migration inventories all managed YAML cards and lifecycle states, freezes LogicGuard/FlowGuard/SkillGuard toolchain identities, pauses the five retained automations while preserving user pause intent, and locks all managed writers. For each card it:
+The migration inventories all managed YAML cards and lifecycle states, freezes LogicGuard and FlowGuard toolchain identities, pauses the four retained automations while preserving user pause intent, and locks all managed writers. Author-side skill contract checking remains a separate maintainer action. For each card it:
 
 1. snapshots and hashes legacy input;
 2. deterministically constructs a scoped LogicGuard model with explicit gaps;
@@ -186,7 +186,7 @@ Lifecycle status, Sleep/Dream scheduling, active-index publication, and desktop 
 6. Extend Dream with exact-revision model experiments and Sleep-only handoffs.
 7. Add graph-first desktop projection and privacy/redaction tests.
 8. Implement the versioned direct-to-current migrator, rollback, resume, zero-residual audit, and installer gate.
-9. Update managed Skills/prompts, SkillGuard current authority, PROJECT_SPEC, README, runbooks, and install checklist.
+9. Update managed Skills/prompts, source-only author contracts, clean consumer projections, PROJECT_SPEC, README, runbooks, and install checklist.
 10. Run focused affected checks, then freeze sources/toolchains and run exactly one final aggregate owner; verify install/migration on representative fresh/old/private/concurrent fixtures.
 
 Rollback before final commit restores the prior YAML/index/lifecycle generation and removes only transaction-created model/mesh revisions or abandons them as unreachable immutable artifacts. Automations remain paused on any failed migration or assurance gate. There is no rollback into a dual-runtime compatibility mode.

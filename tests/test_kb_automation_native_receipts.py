@@ -140,17 +140,17 @@ def test_organization_maintenance_noop_performs_only_participation_gate() -> Non
     )
 
 
-def test_all_legal_update_noops_perform_only_system_gate() -> None:
+def test_all_legal_update_noops_perform_only_manual_gate() -> None:
     skill_id = "khaos-brain-update"
-    for reason in ("no-update", "waiting-for-user", "ui-running"):
+    for reason in ("no-update",):
         payload = {
             "ok": True,
             "status": "no-op",
             "run_id": f"update-{reason}",
             "reason": reason,
-            "system_check": {"ok": True, "apply_ready": False, "reason": reason},
+            "manual_check": {"ok": True, "apply_ready": False, "reason": reason},
             "terminal_gate": {
-                "gate_id": "system-update-check",
+                "gate_id": "manual-update-check",
                 "evaluated": True,
                 "applicable": False,
                 "reason": reason,
@@ -178,7 +178,7 @@ def test_update_operational_blockers_cannot_close_as_successful_noops() -> None:
     skill_id = "khaos-brain-update"
     for reason in (
         "already-upgrading",
-        "failed-awaiting-user",
+        "previous-update-failed",
         "concurrent-update",
     ):
         payload = {
@@ -186,9 +186,9 @@ def test_update_operational_blockers_cannot_close_as_successful_noops() -> None:
             "status": "no-op",
             "run_id": f"update-{reason}",
             "reason": reason,
-            "system_check": {"ok": True, "apply_ready": False, "reason": reason},
+            "manual_check": {"ok": True, "apply_ready": False, "reason": reason},
             "terminal_gate": {
-                "gate_id": "system-update-check",
+                "gate_id": "manual-update-check",
                 "evaluated": True,
                 "applicable": False,
                 "reason": reason,

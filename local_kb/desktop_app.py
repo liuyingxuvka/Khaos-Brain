@@ -4,6 +4,7 @@ import ctypes
 import math
 import sys
 import textwrap
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -48,9 +49,8 @@ from local_kb.settings import (
     save_desktop_settings,
 )
 from local_kb.software_update import (
+    check_remote_update,
     load_update_state,
-    set_update_request,
-    update_badge_clickable,
     update_badge_label,
 )
 from local_kb.store import resolve_repo_root
@@ -200,6 +200,8 @@ UI_TEXT = {
         "settings": "Settings / 设置",
         "about": "About / 关于",
         "search": "Search",
+        "cards_loading": "Loading cards...",
+        "cards_load_failed": "Cards could not be loaded.",
         "no_cards": "No cards in this view.",
         "confidence": "confidence",
         "close": "Close",
@@ -265,7 +267,6 @@ UI_TEXT = {
         "read_only": "Read-only",
         "recent_history": "Recent history",
         "search_title": "Search",
-        "update_prepared_hint": "Update is prepared and will run automatically after the UI is closed.",
         "about_body": (
             "A local predictive memory library for Codex.\n\n"
             "Latest version:\n{github_url}\n\n"
@@ -296,6 +297,8 @@ UI_TEXT = {
         "settings": "设置 / Settings",
         "about": "关于 / About",
         "search": "搜索",
+        "cards_loading": "正在加载卡片...",
+        "cards_load_failed": "卡片加载失败。",
         "no_cards": "当前视图没有卡片。",
         "confidence": "置信度",
         "close": "关闭",
@@ -361,7 +364,6 @@ UI_TEXT = {
         "read_only": "只读",
         "recent_history": "最近历史",
         "search_title": "搜索",
-        "update_prepared_hint": "升级已准备好；关闭 UI 后系统会自动执行。",
         "about_body": (
             "一个给 Codex 使用的本地预测记忆库。\n\n"
             "最新版本：\n{github_url}\n\n"
@@ -904,7 +906,14 @@ class KbDesktopApp(tk.Tk):
         self.nav_hitboxes: list[tuple[int, int, int, int, str, str]] = []
         self.footer_hitboxes: list[tuple[int, int, int, int, str]] = []
         self.card_hitboxes: list[tuple[int, int, int, int, int]] = []
-        self.update_badge_hitbox: tuple[int, int, int, int] | None = None
+        self._update_status_check_started = False
+        self._update_status_check_done = False
+        self._update_status_check_thread: threading.Thread | None = None
+        self._initial_route_loading = True
+        self._initial_route_load_done = False
+        self._initial_route_load_payload: dict[str, Any] | None = None
+        self._initial_route_load_error = ""
+        self._initial_route_load_thread: threading.Thread | None = None
         self._main_width = 0
         self._main_height = 0
         self._card_selected_by_user = False
@@ -925,9 +934,100 @@ class KbDesktopApp(tk.Tk):
         self._load_image_assets()
 
         self._build_layout()
-        self.load_route("")
+        self._route_heading = self._text("all_cards")
+        self._route_subtitle = self._text("cards_loading")
+        self.search_entry.configure(state="disabled")
+        self._render_sidebar()
+        self._render_main()
+        self.after(1, self._start_initial_route_load)
+        self.after(80, self._start_update_status_check)
         self.after_idle(self._maximize_initial_window)
         self.after(160, self._maximize_initial_window)
+
+    def _start_update_status_check(self) -> None:
+        if self._update_status_check_started:
+            return
+        self._update_status_check_started = True
+        self._update_status_check_done = False
+
+        def inspect_upstream() -> None:
+            try:
+                check_remote_update(self.repo_root)
+            finally:
+                self._update_status_check_done = True
+
+        worker = threading.Thread(
+            target=inspect_upstream,
+            name="khaos-brain-update-status",
+            daemon=True,
+        )
+        self._update_status_check_thread = worker
+        worker.start()
+        self.after(100, self._poll_update_status_check)
+
+    def _start_initial_route_load(self) -> None:
+        if self._initial_route_load_thread is not None:
+            return
+
+        def load_initial_route() -> None:
+            try:
+                self._initial_route_load_payload = build_route_view_payload(
+                    self.repo_root,
+                    route="",
+                    language=self.language,
+                    organization_sources=self._active_organization_sources(),
+                )
+            except Exception as exc:  # The main thread renders the visible failure.
+                self._initial_route_load_error = str(exc) or exc.__class__.__name__
+            finally:
+                self._initial_route_load_done = True
+
+        worker = threading.Thread(
+            target=load_initial_route,
+            name="khaos-brain-initial-route",
+            daemon=True,
+        )
+        self._initial_route_load_thread = worker
+        worker.start()
+        self.after(100, self._poll_initial_route_load)
+
+    def _poll_initial_route_load(self) -> None:
+        if not self._initial_route_load_done:
+            worker = self._initial_route_load_thread
+            if worker is not None and worker.is_alive():
+                self.after(100, self._poll_initial_route_load)
+                return
+        self._complete_initial_route_load()
+
+    def _complete_initial_route_load(self) -> None:
+        payload = self._initial_route_load_payload
+        self._initial_route_loading = False
+        self.search_entry.configure(state="normal")
+        if self._initial_route_load_error or not isinstance(payload, dict):
+            self._route_subtitle = self._text("cards_load_failed")
+            self._render_main()
+            return
+        self.children_by_route[""] = navigation_children(payload)
+        self.expanded_routes.add("")
+        self.deck = payload.get("deck", [])
+        self.selected_index = -1
+        self._card_selected_by_user = False
+        self.hovered_index = -1
+        self._route_heading = _route_title("", self.language, self.repo_root)
+        self._route_subtitle = self._text("predictive_memory_cards")
+        self._render_sidebar()
+        self._render_main()
+
+    def _poll_update_status_check(self) -> None:
+        if self._update_status_check_done:
+            self._render_main()
+            return
+        worker = self._update_status_check_thread
+        if worker is not None and worker.is_alive():
+            self.after(100, self._poll_update_status_check)
+            return
+        self._update_status_check_done = True
+        self._render_main()
 
     def _load_image_assets(self) -> None:
         if APP_ICON_PATH.exists():
@@ -1709,6 +1809,8 @@ class KbDesktopApp(tk.Tk):
         self.nav_hitboxes.append((x1 - u(10), y1 - u(4), x2, y2 + u(4), "route", route))
 
     def _on_sidebar_click(self, event: tk.Event[Any]) -> None:
+        if self._initial_route_loading:
+            return
         y = int(self.sidebar.canvasy(event.y))
         for x1, y1, x2, y2, action, value in self.nav_hitboxes:
             if x1 <= event.x <= x2 and y1 <= y <= y2:
@@ -1899,7 +2001,6 @@ class KbDesktopApp(tk.Tk):
         self.main.delete("all")
         self._card_surface_photos.clear()
         self.card_hitboxes.clear()
-        self.update_badge_hitbox = None
         u = self._u
         f = self._f
         width = max(self._main_width, int(self.main.winfo_width()), u(760))
@@ -2009,7 +2110,12 @@ class KbDesktopApp(tk.Tk):
             header_bottom = route_y2 + u(34)
 
         if not self.deck:
-            self.main.create_text(content_left, header_bottom, text=self._text("no_cards"), anchor="nw", fill=MUTED, font=("Segoe UI", f(13)))
+            empty_label = (
+                self._text("cards_loading")
+                if self._initial_route_loading
+                else self._text("no_cards")
+            )
+            self.main.create_text(content_left, header_bottom, text=empty_label, anchor="nw", fill=MUTED, font=("Segoe UI", f(13)))
             self.main.configure(scrollregion=(0, 0, width, max(self._main_height, u(680))))
             return
 
@@ -2060,8 +2166,10 @@ class KbDesktopApp(tk.Tk):
         status = str(state.get("status") or "")
         if status == "available":
             fill, outline, text_fill = "#ff2d55", "#ff2d55", "#ffffff"
-        elif status == "prepared":
-            fill, outline, text_fill = "#ffe8ee", "#ff2d55", "#c51643"
+        elif status == "local_ahead":
+            fill, outline, text_fill = "#eef7ff", "#6aa7d8", "#245f8d"
+        elif status == "diverged":
+            fill, outline, text_fill = "#fff1e6", "#e36414", "#a54000"
         elif status == "upgrading":
             fill, outline, text_fill = "#171717", "#171717", "#ffffff"
         elif status == "failed":
@@ -2075,10 +2183,8 @@ class KbDesktopApp(tk.Tk):
             (y1 + y2) / 2,
             text=label,
             fill=text_fill,
-            font=self._font(11, "bold" if status in {"available", "prepared", "upgrading"} else "normal"),
+            font=self._font(11, "bold" if status in {"available", "upgrading"} else "normal"),
         )
-        if update_badge_clickable(state):
-            self.update_badge_hitbox = (x1, y1, x2, y2)
 
     def _main_grid_layout(self, width: int) -> dict[str, int]:
         u = self._u
@@ -2262,10 +2368,6 @@ class KbDesktopApp(tk.Tk):
         return None
 
     def _on_card_motion(self, event: tk.Event[Any]) -> None:
-        if self._hit_update_badge(event):
-            if self.main.cget("cursor") != "hand2":
-                self.main.configure(cursor="hand2")
-            return
         index = self._hit_card(event)
         if index != self.hovered_index:
             self.hovered_index = -1 if index is None else index
@@ -2282,9 +2384,6 @@ class KbDesktopApp(tk.Tk):
             self.main.configure(cursor="")
 
     def _on_card_click(self, event: tk.Event[Any]) -> None:
-        if self._hit_update_badge(event):
-            self._toggle_update_request()
-            return
         index = self._hit_card(event)
         if index is None:
             return
@@ -2292,20 +2391,6 @@ class KbDesktopApp(tk.Tk):
         self._card_selected_by_user = True
         self.hovered_index = index
         self.open_selected_detail()
-
-    def _hit_update_badge(self, event: tk.Event[Any]) -> bool:
-        if self.update_badge_hitbox is None:
-            return False
-        x = int(self.main.canvasx(event.x))
-        y = int(self.main.canvasy(event.y))
-        x1, y1, x2, y2 = self.update_badge_hitbox
-        return x1 <= x <= x2 and y1 <= y <= y2
-
-    def _toggle_update_request(self) -> None:
-        state = load_update_state(self.repo_root)
-        requested = str(state.get("status") or "") != "prepared"
-        set_update_request(self.repo_root, requested)
-        self._render_main()
 
     def _move_selection(self, delta: int) -> None:
         if not self.deck:

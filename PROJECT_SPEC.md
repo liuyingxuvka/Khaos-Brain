@@ -1126,19 +1126,23 @@ Dream mode is therefore not a second consolidation pass or a model writer. It
 is an immutable argument-verification lane whose outputs remain provisional
 until Sleep admits evidence and publishes a new exact generation.
 
-### 10.11 Automatic convergence, system maintenance, and upgrade migration
+### 10.11 Automatic convergence, manual software update, and upgrade migration
 
 The scheduled Architect lane is retired. There is no replacement self-modifying
 mechanism-maintenance agent and no human review queue in the core lifecycle.
 Ordinary prompt, Skill, installer, or product changes remain explicit development
 work with OpenSpec, FlowGuard, SkillGuard, tests, and release evidence as applicable.
 
-The fully automatic local maintenance roles are:
+The four fully automatic local maintenance roles are:
 
 - `KB Sleep` at 12:00: the only owner of observation disposition, candidate creation and terminal outcomes, promotion, downgrade, merge, confidence calibration, Dream-handoff acknowledgement, and atomic LogicGuard model/mesh/projection/index generation publication
 - `KB Dream` at 13:00: exact immutable model simulations and at-most-once typed Sleep model-gap handoffs; no direct model, mesh, projection, candidate, observation, or central-history writes
-- `Khaos Brain System Update` at 14:00: a narrow software-update check using `python scripts/khaos_brain_update.py --system-check --json`; it is not a general architecture or mechanism-maintenance lane
 - organization contribution and organization maintenance in their stable repository-derived windows
+
+Software update is not a fifth role and has no scheduled task. The desktop UI
+only shows the exact configured upstream status. An update begins only when the
+user explicitly asks AI in the current conversation, which invokes the manual
+`$khaos-brain-update` route.
 
 Sleep acknowledges a Dream handoff only after the selected disposition and any staged candidate/model projection commit to the current LogicGuard generation. Admission or disposition alone is not acknowledgement authority. A recovered dead Sleep owner without a completed receipt reopens only its own uncommitted acknowledgements so the next run can retry them idempotently.
 
@@ -1149,48 +1153,37 @@ debt. The desktop card viewer is optional: no human-readable file review or UI
 interaction is required for admission, disposition, promotion, migration, or
 completion.
 
-Each of the five scheduled roles is independently guarded by SkillGuard. Every
-role has its own target route, obligation set, exact declared checks, and immutable
-native run artifact bound to one run id and content hash. Capability tests prove
-that a version can perform the behavior; they are never accepted as proof that a
-particular scheduled run completed. A real terminal succeeds only when the current
-installed runtime executes and reconciles the target's exact check inventory and
-the sole `enforced` closure consumes that exact declared-check receipt plus every
-required target-owned artifact. Intake, planning, partial native work, or a shared
-aggregate green result cannot satisfy a task's terminal claim.
+Each of the four scheduled roles and the separate manual-update Skill is one
+independent consumer unit. Every unit owns one native route, one non-overlapping
+obligation set, its own exact checks, and an immutable native run artifact bound
+to one run id and content hash. Capability tests prove that a version can perform
+the behavior; they are never accepted as proof that a particular run completed.
+Intake, planning, partial native work, another Skill's receipt, or a shared
+aggregate green result cannot satisfy a unit's terminal claim.
 
-SkillGuard owns declared-check execution, receipt reconciliation, installation
-binding, currentness replay, and the single closure. Each target Skill remains the
-sole owner of domain obligations, applicability, native terminal construction,
-positive/shallow fixture meaning, finalization, and failure judgment. The positive
-fixture must satisfy the target obligations; the shallow fixture must be rejected
-for one named important target gap. Capability/JUnit evidence and fixture evidence
-remain separate from `scheduled_production` evidence tied to the exact scheduler
-execution, current installation receipt, and installed runtime fingerprint.
+SkillGuard exists only in the maintainer repository. It compiles and audits one
+source Skill at a time, checking that the Skill states its promises, maps them to
+target-owned checks, passes its positive fixture, and rejects its named shallow
+gap. SkillGuard does not appear in installed Skill trees, choose a consumer
+domain route, execute consumer work, authorize a manual update, close a native
+run, or supply a receipt to another Skill.
 
-System update uses one non-terminal authorization stage and one closure profile.
-For a prepared update, the first request emits a declared-check authorization
-receipt with `overall_complete=false` and no closure. While all five automations
-remain PAUSED, the updater binds that receipt, the native receipt, preserved status
-and `user_paused`, exact source/target hashes, and the deferred install check into
-an immutable staged-restoration artifact. A fresh composed authorize+finalize run
-must obtain the sole `enforced` closure before native restore, readback, the normal
-install check, activation receipt, and CURRENT. The legal no-op branches skip
-restoration but still need a target-owned terminal receipt and the same enforced
-closure. Any authorization-stage closure, alternate profile, missing declared
-check, repeated check, stale runtime, caller-authored pass flag, or proposal-only
-receipt is an explicit failure.
+The manual-update unit binds the explicit current-conversation request and exact
+manual execution id. It has no scheduler or trigger identity. Its one native
+transaction keeps all four automations paused while it validates the update,
+builds the exact restoration plan, applies and reads back that plan, runs the
+ordinary installed-state check, emits its own terminal receipt, and marks
+`CURRENT`. `no-update` is its only successful no-op; operational blockers remain
+unfinished. No external authorization, composed finalization, or second
+activation ceremony exists.
 
- The former SkillGuard runtime pair for each retained task is not allowed to
-The former SkillGuard runtime pair for each retained task is not allowed to
-remain as a parallel closure route. Once the current contract, target-native
-positive calibration, intentionally shallow blocker, native owner/route/check
-binding, and portable contract-depth report pass, the repository keeps only the
-current contract source, compiled contract, and exact check manifest.
-Installation and upgrades delete the exact former work contract, underscore
-check manifest, flat run records, and empty former runtime directories. No
-compatibility, conversion, renewal, retirement-receipt, alias, or fallback
-runtime survives; any reintroduced residual blocks installation and readiness.
+The maintainer source tree keeps each unit's current `.skillguard/contract-source.json`,
+`.skillguard/compiled-contract.json`, and `.skillguard/check-manifest.json` only
+as author evidence. The consumer projection contains none of them. Installation
+and upgrades reject any `.skillguard` directory, SkillGuard command/import,
+router reference, author receipt, or cross-unit receipt dependency in a staged
+consumer tree. No compatibility, converter, renewal path, alias, or fallback
+runtime survives.
 
 Fresh installation and every supported upgrade provision only
 `kb-sleep-maintenance`, `kb-dream-pass`, `kb-organization-contribute`,
@@ -1201,67 +1194,25 @@ has missing or stale install manifests; similarly named user assets remain
 untouched. Historical Architect records are inert provenance and may remain only
 in integrity-checked cold history.
 
-Installation is one whole-tree transaction. It stages complete Skill and
-automation trees, compiles and checks the current SkillGuard authority, compares
-source, stage, installed, and post-operation manifests, detects concurrent source
-drift, rejects any unvalidated or incomplete incoming hard authority, creates rollback
-copies, activates all managed trees, validates the result, and commits a versioned
-durable receipt with immutable replay evidence. Interruption recovery restores
-any incomplete transaction before a new one begins. Every surviving automation
-retains both its exact prior runtime status and independent `user_paused` value.
-Failed aggregate validation leaves all five migration-paused survivors paused.
+Installation is one whole-tree transaction. It first compiles a clean consumer
+projection from each source Skill, then compares staged, installed, and
+post-operation manifests, detects concurrent source drift, rejects an incomplete
+or contaminated incoming tree, creates rollback copies, activates all managed
+trees, validates the result, and commits a versioned durable receipt with
+immutable replay evidence. Source-only tests, fixtures, models, notes, and
+`.skillguard` author evidence are not installation inputs. Interruption recovery
+restores any incomplete transaction before a new one begins. Every surviving
+automation retains both its exact prior runtime status and independent
+`user_paused` value. Failed aggregate validation leaves all four survivors
+paused.
 
-The target-owned contract generator, complete current SkillGuard executable
-tree, complete current FlowGuard package tree, and each managed Skill source
-tree must retain one content identity from immediately before through
-immediately after the validation that issues its receipt. The upgrader copies
-the complete Guard sources into immutable snapshots before long assurance. The
-SkillGuard/global-router pair then passes through the official SkillGuard
-transaction installer inside an attempt-local directory whose Codex home is an
-isolated `.codex`; the upgrader captures and replays the official current
-installation receipt there. Every child check consumes that installed isolated
-identity through the exact Python launch path captured at installation and
-also proves that path still resolves to the same interpreter binary. This keeps
-Linux executable aliases from changing command identity while rejecting a real
-interpreter replacement; FlowGuard checks consume their frozen package snapshot.
-No child
-rediscovers, installs, or rewrites the user's mutable global SkillGuard. A
-temporary live-tree replacement therefore cannot split one run across tool
-versions, but a genuinely different source or isolated installed identity at
-final currentness fails the upgrade while all surviving automations remain
-paused. A later automatic attempt may start only from newly frozen identities.
-
-Installed supervision never imports that frozen snapshot together with its
-runtime receipts or interpreter caches. It creates a short, repository-local,
-content-addressed behavior projection containing the frozen SkillGuard program
-and current global-router sibling, excluding `.sg-runtime`, `__pycache__`,
-`.pyc`, and `.pyo`, and requires its official fingerprint to equal the verified
-installed runtime identity. The five exact installed control files use a second
-short exact-byte projection. Neither projection is nested below a deep scheduled
-run root, so Windows path length cannot silently decide whether the same current
-installation is executable. A missing router, identity mismatch, or residual
-runtime state fails closed; it does not switch to live source or a fallback.
-
-For each concrete scheduled Sleep, Dream, organization, or update execution,
-the guarded entrypoint establishes one official persistent supervision session
-before invoking the native owner. That session freezes and retains the sealed
-verified installation context, exact SkillGuard behavior projection, exact
-installed target-control projection, and six-field scheduled identity. The
-same authority builds any target-native terminal and closes the run after the
-native owner finishes; it never reopens live global SkillGuard currentness at
-the end of a long task. A newer global SkillGuard or target Skill version is
-eligible only for the next execution. Updating a supervised target Skill does
-not itself authorize or require reinstalling global SkillGuard.
-
-The frozen session separates immutable authority from evidence that is born
-after native execution. SkillGuard code, the installation context, the behavior
-projection, and installed target control never change within the run. The native
-receipt path/hash, run id, scheduled identity, fixture gate, and update
-finalization receipt cross into that retained session only through the exact
-seven declared dynamic keys. Missing declared keys clear inherited values and
-undeclared keys cannot become evidence. This prevents both stale-run closure and
-the false conclusion that a missing receipt requires a global SkillGuard
-reinstall.
+The current FlowGuard and LogicGuard packages used by assurance keep exact
+content identities for the checks that consume them. Consumer runners keep
+their own command and interpreter identities. No installation or runtime path
+rediscovers, snapshots, installs, imports, verifies, or rewrites SkillGuard or
+its global router. A SkillGuard upgrade affects future author-side maintenance
+only; it cannot stale an already installed consumer Skill or one of that
+Skill's native receipts.
 
 Aggregate assurance also separates resource owners. The repository-wide suite
 runs first, ordinary read-oriented children may then run in parallel,
@@ -1293,11 +1244,12 @@ installed authority.
 
 The portable installer continues to preserve each machine's pre-upgrade runtime
 status and independent user-pause choice. This machine has a separate explicit
-operator override: all five surviving automations remain `PAUSED` with
-`user_paused=true` after installation and final assurance. The closeout stages
-and hash-binds that whole five-member state, reads every result back, writes an
-immutable machine receipt, and blocks if any member becomes active or loses its
-user-pause bit.
+operator override: after installation and final assurance, all four surviving
+automations return to `ACTIVE` with `user_paused=false`, while the exact retired
+Architect and system-update tasks remain absent. The closeout stages and
+hash-binds that whole four-member state, reads every result back, writes an
+immutable machine receipt, and blocks if any member is missing, paused, or has a
+true user-pause bit.
 
 Aggregate-assurance installer fixtures are also isolated from the live Codex
 shell-tools directory and user PATH, not only from migration and automation
@@ -1319,30 +1271,24 @@ rebuild, real retrieval-threshold evaluation, and a fresh migration check must
 all be current together. Non-convergence is a recoverable PAUSED attempt, never
 a partial success.
 
-The five exact repository-managed automation Skill paths use a currentness-bound
-whole-tree replacement policy. The incoming tree must pass the current compiler,
-target-owned contract generation, native depth calibration, complete manifest,
-and source/stage parity before activation. A current installed tree is compared
-for semantic hard-authority loss by projecting checks onto covered
-obligations, evidence classes, and mandatory owners. Check identifiers may be renamed, merged,
-split, or removed when the incoming semantic projection remains a superset;
-check-id, native-route, and depth-dimension subset preservation are not
-capability evidence. A conditional depth wrapper may move to its unchanged
-independent hard owner only with an exact closure-preserving reorganization
-proof, while any lost obligation, evidence class, or owner remains a hard downgrade. An absent or non-current
-managed tree is never interpreted or converted and is used only as the rollback backup before the
-validated incoming tree replaces it. Unknown, partial, shrunk, or tampered
-incoming trees fail before activation and preserve the paused old tree.
+The five exact repository-managed Skill paths use a currentness-bound whole-tree
+replacement policy. The incoming source unit must pass its author-side contract
+and depth checks before installation begins. The compiler then builds a
+self-contained consumer tree containing only the target Skill's runtime
+materials. Installation assurance proves exact source-to-consumer inventory,
+absence of author-only or cross-unit material, complete staged/installed parity,
+and target-native smoke currentness. An absent or non-current installed tree is
+used only as the rollback backup before the clean incoming tree replaces it.
+Unknown, partial, shrunk, contaminated, or tampered incoming trees fail before
+activation and preserve the paused old tree.
 
 Every attempt also writes a durable checkpoint journal outside the
-last-known-good install manifest. Router refresh is run and journaled before
-aggregate assurance, then run again after the last transaction that can replace
-a managed Skill tree. Final success requires the current official global
-registry and managed-prompt checks to match the live SkillGuard/global-router
-surface fingerprints and the current transaction. If assurance or any later
-post-commit check fails, the previous successful manifest is preserved, the
-failed attempt remains explicitly retryable, and all five tasks remain or return
-to `PAUSED`.
+last-known-good install manifest. Final success requires all five installed
+consumer trees to match their staged manifests and pass the clean-consumer
+assurance; it does not refresh or consult a SkillGuard router. If assurance or
+any later post-commit check fails, the previous successful manifest is
+preserved, the failed attempt remains explicitly retryable, and all four tasks
+remain or return to `PAUSED`.
 
 The history migration lock must be interruption-safe too. A current holder
 publishes a versioned owner token, process id, and heartbeat. A live owner or a
@@ -1406,9 +1352,10 @@ linearly with lifecycle event count rather than rescanning every prior key.
 An older partially completed per-item attempt must resume through stable
 idempotency keys and candidate identities without duplicate cards or events.
 
-Software update coordination uses `.local/khaos_brain_update_state.json`. The
-desktop UI may display update state, but the machine interface and automation use
-canonical encoding-stable JSON. `$khaos-brain-update` remains recovery-oriented:
+Software update status uses `.local/khaos_brain_update_state.json` schema v2. The
+desktop UI reads this status but never writes authorization or launches an updater;
+the machine interface uses canonical encoding-stable JSON. `$khaos-brain-update`
+remains recovery-oriented:
 it preserves local KB and organization state, updates only through the supported
 Git path, runs the maintenance migration and transactional installer, removes
 retired surfaces, requires exact LogicGuard authority and zero residuals, and
@@ -1423,21 +1370,20 @@ graph. They do not relaunch overlapping pytest or model commands. Reuse is valid
 only while source, normalized command, environment, verifier, inventory revision,
 terminal status, skips, and proof-artifact hashes remain exact and current.
 
-The updater uses a strict two-stage SkillGuard boundary. Its first route
-authorizes the completed native update work. While all five live automations are
-still `PAUSED`, the updater then builds a no-mutation restoration plan that binds
-each source hash, target hash, prior status, `user_paused` value, and desired
-state. A composed authorization-plus-finalization route must close that exact
-plan before activation. Only then may the updater apply the five writes, read
-back every state and hash, run the ordinary install check, publish an immutable
-activation receipt, and mark the software state `CURRENT`. Drift or failure at
-any point re-pauses all five and leaves the state `FAILED`.
+The updater has one target-native transaction. While all four surviving
+automations are still `PAUSED`, it builds a no-mutation restoration plan that
+binds each source hash, target hash, prior status, `user_paused` value, and
+desired state. The same native owner validates that exact plan, applies the four
+writes, reads back every state and hash, runs the ordinary install check,
+publishes its immutable terminal receipt, and marks the software state
+`CURRENT`. Drift or failure at any point re-pauses all four and leaves the state
+`FAILED`.
 
-The update gate has exactly three successful no-op branches: `no-update`,
-`waiting-for-user`, and `ui-running`. States such as `already-upgrading`,
-`failed-awaiting-user`, `concurrent-update`, and unknown operational blockers
-remain blocked or retryable and must not be converted into completed native or
-SkillGuard receipts.
+The update gate has exactly one successful no-op branch: `no-update`. Missing
+current-conversation authorization, an open UI, missing upstream, fetch failure,
+dirty tracked work, local-ahead or diverged topology, prior failed update,
+concurrent execution, and unknown operational states remain blocked and unfinished;
+they must not be converted into completed native receipts.
 
 The install check should also verify that the global predictive KB defaults
 name both skill/plugin usage lessons and subagent/delegation usage lessons as
@@ -1489,11 +1435,11 @@ sequence. A later change must preserve this ownership order.
 2. Convert directly to current models, meshes, projections, index, and pointer.
 3. Remove legacy semantic authority and require zero residuals.
 4. Keep the transaction rollbackable and every retained automation paused until
-   installation, SkillGuard, migration, and aggregate readiness gates pass.
+   installation, clean-consumer, migration, and aggregate readiness gates pass.
 
 ### Phase 6 — Validate one frozen snapshot
 
-1. Freeze one TestMesh/SkillGuard execution-owner plan.
+1. Freeze one TestMesh execution-owner plan with one owner per exact check.
 2. Run affected model, migration, retrieval, UI, privacy, and automation checks.
 3. Run the aggregate readiness owner exactly once on the stable snapshot.
 4. Reuse its immutable receipts rather than relaunching equivalent checks.
@@ -1523,7 +1469,8 @@ The version is done only when all of the following are true:
 - Sleep is the sole normal-runtime canonical generation publisher
 - Dream simulations do not advance or rewrite canonical authority
 - the versioned migration is idempotent, rollbackable, direct-to-current, and proves zero legacy semantic residuals
-- SkillGuard current contracts and install projections are exact and current
+- all author-side SkillGuard contracts are current, unit-specific, and excluded
+  from exact installed consumer projections
 - the unique aggregate readiness owner passes the frozen model/test contract
 - no embeddings, external database, graph database, compatibility reader, or opaque fallback is required
 

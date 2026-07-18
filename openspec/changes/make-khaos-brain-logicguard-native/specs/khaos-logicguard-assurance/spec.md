@@ -1,63 +1,52 @@
 ## ADDED Requirements
 
-### Requirement: Executable FlowGuard model owns the authority-cutover behavior
-The repository SHALL contain a current executable FlowGuard child model for the LogicGuard authority cutover, with every FunctionBlock represented as `Input x State -> Set(Output x State)`, exact existing-owner handoffs, and known-bad variants that reject duplicate search/Sleep authority and partial or fallback publication.
+### Requirement: Executable FlowGuard models own behavior assurance
+The repository SHALL keep current executable FlowGuard models for LogicGuard
+authority, migration, projection, retrieval, and maintained-skill consumer
+independence. Known-bad variants SHALL reject parallel authority, fallback
+authority, author-control leakage, shared cross-skill evidence, and partial
+publication.
 
-#### Scenario: Correct child model is checked
-- **WHEN** the model runs with current package and artifact identities
-- **THEN** model checks, scenario/conformance obligations, progress/closure checks, and declared known-bad calibrations SHALL produce current terminal receipts
+#### Scenario: Current behavior models run
+- **WHEN** the FlowGuard suite runs against the frozen current source
+- **THEN** required scenarios, contracts, progress checks, and known-bad calibrations reach terminal results
 
-#### Scenario: Parallel controller or partial generation is modeled
-- **WHEN** a variant adds a second retrieval/Sleep owner, publishes projection before model authority, lets Dream mutate authority, or retains YAML fallback
-- **THEN** the model SHALL reject the variant for the declared invariant or ownership reason
+### Requirement: LogicGuard and installed skills remain consumer-native
+LogicGuard SHALL remain the product reasoning dependency. Installed Sleep,
+Dream, retrieval, update, organization, and preflight skills SHALL state and
+execute their own domain routes without SkillGuard files, imports, commands,
+receipts, router dependencies, or project writes.
 
-### Requirement: Model, code contracts, fields, and tests are bidirectionally aligned
-Every required authority, maintenance, retrieval, UI, privacy, and migration obligation SHALL bind exactly one primary external code owner, behavior-bearing field projections, current source-audit evidence where applicable, and current tests for happy, failure, negative, replay, conflict, and rollback paths.
+#### Scenario: Source is projected to an installed skill
+- **WHEN** the installer builds the clean consumer projection
+- **THEN** author-side contract material is excluded and the installed manifest equals the projected source manifest
 
-#### Scenario: Required obligation lacks a code/test binding
-- **WHEN** the alignment inventory finds an orphan model obligation, duplicate owner, missing field disposition, stale test, internal-only assertion, or missing known-bad target
-- **THEN** completion SHALL be blocked or explicitly scoped and the gap SHALL be routed to its native owner
+### Requirement: Author contracts are separate maintenance evidence
+Each maintained skill SHALL have one source-only maintenance unit and unique
+target-owned depth evidence. The author contract audit MAY use SkillGuard to
+check current compilation and depth, but this audit SHALL remain separate from
+LogicGuard runtime, installed currentness, and consumer completion.
 
-### Requirement: Validation uses one frozen final execution owner
-The final assurance campaign SHALL freeze source, test, model, prompt, skill, package, environment, and inventory identities; run every required child suite under exactly one parent execution owner; and publish immutable terminal child and parent receipts. Consumer checks MUST verify or project those receipts and MUST NOT rerun the same owner command.
+#### Scenario: Final readiness runs
+- **WHEN** the aggregate evaluates the stable source snapshot
+- **THEN** the author contract audit reports separately and no consumer check consumes its runtime or router
 
-#### Scenario: LogicGuard editable-install target drifts after freeze
-- **WHEN** the live LogicGuard import target changes after the final campaign freezes its complete package tree
-- **THEN** every child SHALL continue from the exact frozen digest, the campaign SHALL reject any import outside that snapshot, and the later normal-runtime install check SHALL fail visibly if the live target is no longer current
+### Requirement: Model, code, fields, and target-owned tests align
+Every important behavior SHALL bind a model owner, code owner, and current
+target-owned test. Test nodes MUST be unique across maintained skill units.
+Infrastructure checks MAY be shared as implementation utilities but MUST NOT
+be claimed as another skill's completion evidence.
 
-#### Scenario: Focused development validation precedes final assurance
-- **WHEN** an affected module changes before the frozen snapshot
-- **THEN** the agent MAY run the minimum affected focused suite, but those provisional runs SHALL NOT be presented as the final aggregate receipt
+#### Scenario: Cross-unit test overlap is discovered
+- **WHEN** one test node appears in two maintenance units
+- **THEN** model-test alignment blocks and identifies both owners
 
-#### Scenario: Final launcher times out or is interrupted
-- **WHEN** the final owner does not produce a terminal receipt
-- **THEN** the result SHALL be non-reusable, every descendant process SHALL be confirmed terminated before another owner starts, and completion SHALL remain blocked
+### Requirement: Final validation has one stable execution snapshot
+The final campaign SHALL freeze source and tool identities, run affected
+owners once, keep resource-sensitive LogicGuard checks on an exclusive lane,
+confirm process-tree cleanup after interruption, and publish terminal evidence.
+It MUST NOT use an installed SkillGuard runtime as a product toolchain.
 
-### Requirement: Resource-sensitive validation owners run on exclusive lanes
-The aggregate SHALL run repository-wide regression first, ordinary read-oriented children in the bounded parallel pool, LogicGuard performance validation next on an exclusive lane, and real installed scheduled production last on a separate exclusive lane.
-
-#### Scenario: LogicGuard performance validation competes with sibling checks
-- **WHEN** representative LogicGuard runtime budgets would be measured while another aggregate child is consuming the same machine resources
-- **THEN** the aggregate SHALL defer the performance owner until the ordinary parallel pool is terminal
-
-#### Scenario: Real scheduled production begins
-- **WHEN** installed Sleep, Dream, organization, or update execution is selected for aggregate evidence
-- **THEN** it SHALL begin only after LogicGuard performance validation and every ordinary child are terminal, with no sibling aggregate owner active
-
-### Requirement: Skills, prompts, UI, installer, and documentation state the same architecture
-Managed Sleep, Dream, retrieval, update, organization, and preflight Skills/prompts; SkillGuard current contracts; PROJECT_SPEC; README; UI text; installer manifests; and runbooks SHALL consistently state that LogicGuard models are canonical, YAML is projection, Sleep writes, Dream validates/hands off, retrieval is model-native, and legacy authority is upgrade-only.
-
-#### Scenario: Installed skill tree differs from source authority
-- **WHEN** normalized source and installed managed Skills, contracts, or prompt projections differ for a behavior-bearing component
-- **THEN** readiness SHALL block until the current SkillGuard-supervised installation projection is refreshed and validated
-
-### Requirement: Performance, privacy, migration, and package evidence are release gates
-Broad completion SHALL require current LogicGuard package/API identity, representative scale/performance evidence, public/private isolation tests, direct migration matrix coverage, rollback/resume/concurrency evidence, UI model-view evidence, and zero legacy authority readers/residuals.
-
-#### Scenario: Lifecycle replay count is bounded but one replay is quadratic
-- **WHEN** a representative current lifecycle ledger shows duplicate-key work growing faster than event count even though Sleep uses only the declared replay count
-- **THEN** performance readiness and the FlowGuard scale obligation SHALL fail until replay membership is indexed and current real-corpus evidence is terminal
-
-#### Scenario: A required release-only child is missing or stale
-- **WHEN** the final parent inventory includes a failed, stale, skipped, timed-out, running, progress-only, or absent required child receipt
-- **THEN** the aggregate SHALL remain blocked and SHALL expose the child status without converting it to a pass
+#### Scenario: A required child is missing or stale
+- **WHEN** a child receipt is failed, stale, skipped, timed out, running, or absent
+- **THEN** the final aggregate remains blocked and reports that exact status

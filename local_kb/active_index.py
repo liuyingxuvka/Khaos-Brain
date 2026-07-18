@@ -5,6 +5,7 @@ import json
 import os
 from datetime import date, datetime
 from pathlib import Path
+from threading import RLock
 from time import perf_counter
 from typing import Any, Iterable, Mapping
 from uuid import uuid4
@@ -37,6 +38,9 @@ ACTIVE_INDEX_AUTHORITY_PATH = Path("kb") / "indexes" / "active-authority.json"
 ACTIVE_INDEX_INVALIDATION_PATH = Path("kb") / "indexes" / "active-invalidated.json"
 INDEX_SCOPES = ("public", "private", "candidates")
 TERMINAL_STATUSES = {"merged", "rejected", "superseded", "parked", "retired", "deprecated", "history_only"}
+_INDEXED_SOURCE_VALIDATION_CACHE_LIMIT = 32
+_INDEXED_SOURCE_VALIDATION_CACHE: dict[tuple[Any, ...], tuple[str, ...]] = {}
+_INDEXED_SOURCE_VALIDATION_CACHE_LOCK = RLock()
 
 
 def active_index_path(repo_root: Path) -> Path:
@@ -140,6 +144,80 @@ def _invalidation_token(repo_root: Path) -> str | None:
     return token or "invalid-invalidation-marker"
 
 
+def _clear_active_index_validation_cache() -> None:
+    with _INDEXED_SOURCE_VALIDATION_CACHE_LOCK:
+        _INDEXED_SOURCE_VALIDATION_CACHE.clear()
+
+
+def _indexed_source_content_signature(
+    repo_root: Path,
+    payload: Mapping[str, Any],
+) -> tuple[tuple[str, str, str, str], ...]:
+    """Hash only indexed source bytes to bind a process-local validation reuse.
+
+    The expensive LogicGuard projection check may be reused only while every
+    returnable source, the active index, the invalidation marker, and the sole
+    authority pointer remain identical. Raw source hashing is intentionally
+    repeated before and after the query snapshot so a source write cannot hide
+    behind filesystem timestamp granularity.
+    """
+
+    root = Path(repo_root).resolve()
+    rows: list[tuple[str, str, str, str]] = []
+    records = payload.get("records", []) if isinstance(payload.get("records"), list) else []
+    for record in records:
+        if not isinstance(record, Mapping):
+            rows.append(("", "", "", "invalid-record"))
+            continue
+        entry_id = str(record.get("entry_id") or "")
+        scope = str(record.get("scope") or "")
+        relative = str(record.get("path") or "")
+        if scope not in INDEX_SCOPES:
+            rows.append((entry_id, scope, relative, "unsupported-scope"))
+            continue
+        try:
+            path = (root / relative).resolve(strict=True)
+            path.relative_to((root / "kb" / scope).resolve(strict=False))
+            content_digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        except (OSError, ValueError):
+            content_digest = "missing-or-outside-scope"
+        rows.append((entry_id, scope, relative, content_digest))
+    return tuple(sorted(rows))
+
+
+def _validate_indexed_sources_cached(
+    repo_root: Path,
+    payload: Mapping[str, Any],
+    *,
+    invalidation_token: str | None,
+    authority: Mapping[str, Any],
+    authority_generation: Mapping[str, Any],
+    source_signature: tuple[tuple[str, str, str, str], ...],
+) -> list[str]:
+    key: tuple[Any, ...] = (
+        str(Path(repo_root).resolve()),
+        int(payload.get("generation") or 0),
+        str(payload.get("content_digest") or ""),
+        str(invalidation_token or ""),
+        str(authority.get("authority_digest") or ""),
+        str(authority_generation.get("pointer_digest") or ""),
+        source_signature,
+    )
+    with _INDEXED_SOURCE_VALIDATION_CACHE_LOCK:
+        cached = _INDEXED_SOURCE_VALIDATION_CACHE.get(key)
+    if cached is not None:
+        return list(cached)
+
+    issues = _validate_indexed_sources_fast(repo_root, payload)
+    if issues:
+        return issues
+    with _INDEXED_SOURCE_VALIDATION_CACHE_LOCK:
+        if len(_INDEXED_SOURCE_VALIDATION_CACHE) >= _INDEXED_SOURCE_VALIDATION_CACHE_LIMIT:
+            _INDEXED_SOURCE_VALIDATION_CACHE.clear()
+        _INDEXED_SOURCE_VALIDATION_CACHE[key] = ()
+    return issues
+
+
 def invalidate_active_index(
     repo_root: Path,
     *,
@@ -164,6 +242,7 @@ def invalidate_active_index(
     }
     payload["marker_digest"] = _digest(payload)
     _atomic_write(active_index_invalidation_path(repo_root), payload)
+    _clear_active_index_validation_cache()
     return payload
 
 
@@ -377,6 +456,7 @@ def _validate_active_index_fast_payload(
     started = perf_counter()
     initial_marker = _invalidation_token(repo_root)
     initial_authority = _read_json_object(active_index_authority_path(repo_root))
+    initial_source_signature = _indexed_source_content_signature(repo_root, payload)
     issues: list[str] = []
     try:
         authority_generation = load_authority_generation(repo_root)
@@ -399,15 +479,27 @@ def _validate_active_index_fast_payload(
             )
         )
         issues.extend(_authority_issues(initial_authority, payload))
-        issues.extend(_validate_indexed_sources_fast(repo_root, payload))
+        issues.extend(
+            _validate_indexed_sources_cached(
+                repo_root,
+                payload,
+                invalidation_token=initial_marker,
+                authority=initial_authority,
+                authority_generation=authority_generation,
+                source_signature=initial_source_signature,
+            )
+        )
     final_marker = _invalidation_token(repo_root)
     final_authority = _read_json_object(active_index_authority_path(repo_root))
+    final_source_signature = _indexed_source_content_signature(repo_root, payload)
     if final_marker != initial_marker:
         issues.append("active index invalidation changed during the query snapshot")
     if str(final_authority.get("authority_digest") or "") != str(
         initial_authority.get("authority_digest") or ""
     ):
         issues.append("active index authority changed during the query snapshot")
+    if final_source_signature != initial_source_signature:
+        issues.append("indexed source content changed during the query snapshot")
     return {
         "ok": not issues,
         "mode": "fast-authority",
@@ -451,6 +543,7 @@ def _activate_built_index(
         authority = _authority_payload(payload)
         _atomic_write(active_index_authority_path(repo_root), authority)
         active_index_invalidation_path(repo_root).unlink(missing_ok=True)
+        _clear_active_index_validation_cache()
         return authority
 
 

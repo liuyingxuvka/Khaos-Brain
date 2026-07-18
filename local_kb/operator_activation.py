@@ -10,7 +10,6 @@ from typing import Any, Mapping
 
 from local_kb.automation_runtime import content_hash
 from local_kb.install import (
-    MAINTENANCE_SKILL_NAMES,
     REPO_AUTOMATION_SPECS,
     _write_text_atomic,
     apply_repo_automation_restoration_plan,
@@ -67,7 +66,7 @@ def validate_activation_readiness(
     codex_home: Path,
     readiness_receipt_path: Path,
 ) -> dict[str, Any]:
-    """Verify the exact pre-restore aggregate and five scheduled completions."""
+    """Verify the exact pre-restore aggregate and four scheduled completions."""
 
     repo_root = Path(repo_root).resolve()
     codex_home = Path(codex_home).resolve()
@@ -133,7 +132,9 @@ def validate_activation_readiness(
         if isinstance(installed_report, Mapping)
         else {}
     )
-    expected_skills = set(MAINTENANCE_SKILL_NAMES)
+    expected_skills = {
+        str(spec["skill_name"]) for spec in REPO_AUTOMATION_SPECS
+    }
     if not isinstance(skills, Mapping) or set(skills) != expected_skills:
         issues.append("scheduled-production-skill-set-mismatch")
         skills = {}
@@ -222,7 +223,9 @@ def validate_operator_activation_receipt(
     ):
         issues.append("operator-activation-evidence-manifest-stale")
     scheduled_refs = readiness_binding.get("scheduled_production_refs", {})
-    expected_skills = set(MAINTENANCE_SKILL_NAMES)
+    expected_skills = {
+        str(spec["skill_name"]) for spec in REPO_AUTOMATION_SPECS
+    }
     if not isinstance(scheduled_refs, Mapping) or set(scheduled_refs) != expected_skills:
         issues.append("operator-activation-scheduled-proof-set-mismatch")
         scheduled_refs = {}
@@ -413,7 +416,7 @@ def activate_all_for_current_machine(
         "final_install_check_hash": content_hash(final_check),
         "claim_boundary": (
             "This receipt authorizes only the user's explicit all-active, user_paused=false "
-            "override on this Codex home after the bound aggregate and five scheduled "
+            "override on this Codex home after the bound aggregate and four scheduled "
             "SkillGuard completions. Portable installers still preserve each machine's prior state."
         ),
     }
