@@ -1,8 +1,8 @@
 ## Context
 
-Khaos Brain already has mature owners for observation/candidate lifecycle, active-index publication, Sleep watermarking, Dream handoff, canonical-versus-localized interfaces, desktop card rendering, maintenance lanes, and transactional upgrade. Existing FlowGuard/BCL lookup identifies `kb_convergence_upgrade_model.LifecycleConvergenceBlock` as the current retrieval/lifecycle owner and `khaos_brain_governance_flow.GovernanceBlock` as the Sleep/Dream governance owner. LogicGuard is a new argument-runtime dependency, not a replacement lifecycle scheduler.
+Khaos Brain already has mature owners for observation/candidate lifecycle, active-index publication, Sleep watermarking, Dream handoff, canonical-versus-localized interfaces, desktop card rendering, maintenance lanes, and transactional upgrade. Existing FlowGuard/BCL lookup identifies `kb_convergence_upgrade_model.LifecycleConvergenceBlock` as the current retrieval/lifecycle owner and `khaos_brain_governance_flow.GovernanceBlock` as the Sleep/Dream governance owner. The public ResearchGuard package's `researchguard.logic` member is the argument-runtime dependency, not a replacement lifecycle scheduler.
 
-The current YAML card shape (`if`, `action`, `predict`, `use`, `related_cards`) is useful for humans but structurally shallow. LogicGuard 0.17.4 supplies immutable `FileModelStore` revisions, canonical `ArgumentBlock`s, typed provenance, exact revision identities, `FileModelMeshStore`, mesh memberships/cross-model edges, materialization, structural evaluation, and sparse simulation. The upgrade must use those public APIs and preserve their revision/CAS semantics.
+The current YAML card shape (`if`, `action`, `predict`, `use`, `related_cards`) is useful for humans but structurally shallow. ResearchGuard v0.1.1 exposes immutable `FileModelStore` revisions, canonical `ArgumentBlock`s, typed provenance, exact revision identities, `FileModelMeshStore`, mesh memberships/cross-model edges, materialization, structural evaluation, and sparse simulation through `researchguard.logic`. The upgrade must use those public APIs and preserve their revision/CAS semantics.
 
 The repository contains a large dirty worktree from earlier authorized work. This change must preserve unrelated and prior in-scope changes, add isolated modules, extend existing public entrypoints, and never recover an earlier green state by resetting peer/user files.
 
@@ -20,8 +20,8 @@ The repository contains a large dirty worktree from earlier authorized work. Thi
 
 **Non-Goals:**
 
-- Do not replace LogicGuard with a Khaos-specific graph format or mini framework.
-- Do not make LogicGuard own observation admission, candidate decisions, Sleep scheduling, Dream scheduling, retrieval policy, privacy policy, or desktop UI policy.
+- Do not replace ResearchGuard's logic member with a Khaos-specific graph format or mini framework.
+- Do not make ResearchGuard logic own observation admission, candidate decisions, Sleep scheduling, Dream scheduling, retrieval policy, privacy policy, or desktop UI policy.
 - Do not merge every card into one enormous `LogicModel`; the global structure is a mesh of small revisioned models.
 - Do not invent evidence, warrants, rebuttals, or causal claims during migration. Unknown support becomes an explicit gap.
 - Do not add a graph database, vector database, service daemon, or background-agent orchestration.
@@ -118,7 +118,7 @@ This is stricter than tagging nodes inside one shared store and makes accidental
 
 New cohesive modules:
 
-- `local_kb.logicguard_models`: current LogicGuard dependency preflight; scoped store paths; canonical model construction/validation; exact model/mesh reads; CAS commit helpers. It owns no lifecycle decision.
+- `local_kb.logicguard_models`: current ResearchGuard package and `researchguard.logic` member dependency preflight; scoped store paths; canonical model construction/validation; exact model/mesh reads; CAS commit helpers. It owns no lifecycle decision.
 - `local_kb.model_projection`: canonical projection creation, digesting, exact binding validation, projection reads/writes, and active-index row construction.
 - `local_kb.model_maintenance`: model/mesh change-plan execution selected by Sleep; gap/evaluation/simulation adapters; typed receipts. It exposes no second scheduler or search API.
 
@@ -133,7 +133,7 @@ Existing facades extend rather than duplicate:
 
 ### 8. Direct-to-current migration is the only legacy reader
 
-The migration inventories all managed YAML cards and lifecycle states, freezes LogicGuard and FlowGuard toolchain identities, pauses the four retained automations while preserving user pause intent, and locks all managed writers. Author-side skill contract checking remains a separate maintainer action. For each card it:
+The migration inventories all managed YAML cards, lifecycle states, and retired LogicGuard authority artifacts; freezes the complete ResearchGuard logic and FlowGuard toolchain identities; pauses the four retained automations while preserving user pause intent; and locks all managed writers. Author-side skill contract checking remains a separate maintainer action. For each card it:
 
 1. snapshots and hashes legacy input;
 2. deterministically constructs a scoped LogicGuard model with explicit gaps;
@@ -146,11 +146,34 @@ The migration inventories all managed YAML cards and lifecycle states, freezes L
 9. proves every eligible card is model-bound and every retired authority field/path has zero normal-runtime readers;
 10. commits one migration receipt or restores the full prior generation.
 
-The journal is resumable and idempotent by source digest and card id. Concurrent source changes produce an evidence-bound replan or blocker, never silent overwrite. After successful migration, normal runtime has no old-card reader.
+For an existing `logicguard.model-store.v1` /
+`logicguard.model-mesh.v1` authority, the same transaction first records every
+artifact's count, bytes, scope, schema, and content hash, binds one whole-tree
+digest into the plan, removes that authority only after its rollback snapshot
+is durable, and rebuilds all cards into
+`researchguard.logic.model-store.v1` /
+`researchguard.logic.model-mesh.v1`. The post-cutover receipt records a second
+complete inventory and requires zero old-schema occurrences. Any source,
+inventory, publication, or validation failure restores the exact pre-cutover
+tree digest.
+
+The journal is resumable and idempotent by source digest and card id. Concurrent source changes produce an evidence-bound replan or blocker, never silent overwrite. After successful migration, normal runtime has no old-card or retired-store reader.
 
 ### 9. Validation is a parent/child mesh with one final execution owner
 
 Focused suites are partitioned by the FlowGuard child model boundaries: authority/projection, Sleep/Dream maintenance, retrieval/UI, migration/privacy, and skills/install/docs. Development runs only affected suites. One final readiness script owns the frozen full execution exactly once, writes immutable child receipts and a parent receipt, and is the only aggregate command consumed by OpenSpec. Timeouts/interruptions require zero descendant processes before retry.
+
+### 10. FlowGuard stays an external development toolchain
+
+Khaos Brain is an ordinary FlowGuard-adopted project, not a FlowGuard Skill
+distribution. The repository keeps its FlowGuard project record and executable
+Khaos-specific models, but it does not vendor the FlowGuard member Skills into
+`.agents/skills`, create a project suite map, or retain the old
+`verify_skill_suite_markers.py` compatibility entrypoint. An upgrade removes a
+previous shadow suite only through its exact ownership manifest and unchanged
+file hashes. Khaos-owned Skills remain untouched. Codex may route directly to
+the globally installed FlowGuard Skills while the project executes the one
+pinned FlowGuard Python package used by current model and validation receipts.
 
 ## FlowGuard ownership and FunctionBlocks
 
@@ -173,13 +196,13 @@ Lifecycle status, Sleep/Dream scheduling, active-index publication, and desktop 
 - [Scope-separated stores limit private-to-public graph links] -> Prefer privacy over convenient mixed graphs; merge authorized retrieval results at the facade only.
 - [Model/mesh/projection/index transaction spans several stores] -> Use generation staging, CAS, idempotency keys, a journal, and atomic final authority pointer; prior generation remains valid until complete publication.
 - [Current aggregate validation is already slow] -> Use TestMesh child suites and one frozen final aggregate owner; never hide timeout/not-run evidence inside a green summary.
-- [LogicGuard or installed Skills may drift] -> Freeze package and skill identities in receipts and fail closed on final live mismatch.
+- [ResearchGuard logic or installed Skills may drift] -> Freeze the complete package/member and skill identities in receipts and fail closed on final live mismatch.
 - [UI graph becomes overwhelming] -> Default to one recommended bounded graph centered on the selected claim with expandable evidence/gap details.
 
 ## Migration Plan
 
 1. Freeze OpenSpec, FlowGuard ownership model, field lifecycle inventory, module structure, validation inventory, and package APIs.
-2. Implement current LogicGuard dependency preflight plus scoped model/mesh adapters and focused unit tests.
+2. Implement current ResearchGuard package / `researchguard.logic` dependency preflight plus scoped model/mesh adapters and focused unit tests.
 3. Implement canonical card-model construction and exact projection validation.
 4. Extend active index and retrieval to require exact bindings and return bounded neighborhoods.
 5. Extend Sleep to plan/commit model and mesh revisions before projection/index publication.

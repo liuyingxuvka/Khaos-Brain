@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+from importlib import metadata as importlib_metadata
+from importlib import util as importlib_util
 import json
 import os
 import re
+import sys
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -13,7 +16,7 @@ from uuid import uuid4
 from local_kb.common import normalize_string_list, normalize_text, safe_float, utc_now_iso
 
 
-MIN_LOGICGUARD_VERSION = "0.18.0"
+MIN_RESEARCHGUARD_VERSION = "0.1.1"
 LOGICGUARD_AUTHORITY_SCHEMA = "khaos-brain.logicguard-authority.v1"
 AUTHORITY_GENERATION_POINTER_SCHEMA = "khaos-brain.logicguard-authority-generation.v1"
 LOGICGUARD_AUTHORITY_ROOT = Path(".local") / "khaos-brain" / "logicguard-authority"
@@ -185,41 +188,178 @@ def _version_tuple(value: str) -> tuple[int, ...]:
     return tuple(int(item) for item in re.findall(r"\d+", str(value))[:3])
 
 
-def _logicguard_module() -> Any:
+def _researchguard_logic_module() -> Any:
     try:
-        import logicguard
+        from researchguard import logic as research_logic
     except Exception as exc:  # pragma: no cover - exercised by installer subprocess tests
-        raise LogicGuardDependencyError(f"LogicGuard import failed: {type(exc).__name__}: {exc}") from exc
-    return logicguard
+        raise LogicGuardDependencyError(
+            f"ResearchGuard logic member import failed: {type(exc).__name__}: {exc}"
+        ) from exc
+    return research_logic
 
 
-def logicguard_dependency_preflight(*, strict: bool = True) -> dict[str, Any]:
+def retired_standalone_logicguard_residuals() -> dict[str, Any]:
+    """Inspect retired distribution/import authority without importing it."""
+
+    issues: list[str] = []
+    distribution: dict[str, Any] = {
+        "present": False,
+        "version": "",
+        "location": "",
+        "direct_url": {},
+    }
     try:
-        logicguard = _logicguard_module()
-        origin = str(getattr(logicguard, "__file__", "") or "")
-        version = str(getattr(logicguard, "__version__", "") or "")
-        missing = tuple(name for name in REQUIRED_LOGICGUARD_SYMBOLS if not hasattr(logicguard, name))
+        installed = importlib_metadata.distribution("logicguard")
+    except importlib_metadata.PackageNotFoundError:
+        installed = None
+    except Exception as exc:
+        installed = None
+        issues.append(
+            "retired LogicGuard distribution lookup failed: "
+            f"{type(exc).__name__}: {exc}"
+        )
+    if installed is not None:
+        direct_url: dict[str, Any] = {}
+        try:
+            raw_direct_url = installed.read_text("direct_url.json")
+            parsed_direct_url = (
+                json.loads(raw_direct_url)
+                if raw_direct_url
+                else {}
+            )
+            if isinstance(parsed_direct_url, Mapping):
+                direct_url = dict(parsed_direct_url)
+        except (OSError, json.JSONDecodeError, TypeError):
+            direct_url = {}
+        distribution = {
+            "present": True,
+            "version": str(installed.version or ""),
+            "location": str(Path(installed.locate_file("")).resolve()),
+            "direct_url": json_safe(direct_url),
+        }
+        issues.append("retired standalone LogicGuard distribution is installed")
+
+    import_resolution: dict[str, Any] = {
+        "present": False,
+        "origin": "",
+        "locations": [],
+        "error": "",
+    }
+    try:
+        spec = importlib_util.find_spec("logicguard")
+    except Exception as exc:
+        spec = None
+        import_resolution["error"] = f"{type(exc).__name__}: {exc}"
+        issues.append(
+            "retired LogicGuard import resolution could not be proven absent"
+        )
+    if spec is not None:
+        locations = [
+            str(Path(item).resolve())
+            for item in (spec.submodule_search_locations or ())
+        ]
+        import_resolution = {
+            "present": True,
+            "origin": str(getattr(spec, "origin", "") or ""),
+            "locations": locations,
+            "error": "",
+        }
+        issues.append("retired standalone LogicGuard import origin is resolvable")
+
+    runtime_modules = sorted(
+        name
+        for name in sys.modules
+        if name == "logicguard" or name.startswith("logicguard.")
+    )
+    if runtime_modules:
+        issues.append("retired standalone LogicGuard modules are loaded")
+    return {
+        "schema_version": (
+            "khaos-brain.retired-standalone-logicguard-residuals.v1"
+        ),
+        "ok": not issues,
+        "distribution": distribution,
+        "import_resolution": import_resolution,
+        "runtime_modules": runtime_modules,
+        "issues": issues,
+        "claim_boundary": (
+            "This check proves only that the active Python environment has no "
+            "standalone LogicGuard distribution, import origin, or loaded "
+            "module. The retained Codex logicguard member Skill is a separate "
+            "ResearchGuard consumer projection."
+        ),
+    }
+
+
+def researchguard_logic_dependency_preflight(
+    *,
+    strict: bool = True,
+    require_no_retired_standalone: bool = False,
+) -> dict[str, Any]:
+    try:
+        research_logic = _researchguard_logic_module()
+        origin = str(getattr(research_logic, "__file__", "") or "")
+        version = str(getattr(research_logic, "__version__", "") or "")
+        missing = tuple(
+            name
+            for name in REQUIRED_LOGICGUARD_SYMBOLS
+            if not hasattr(research_logic, name)
+        )
         issues: list[str] = []
         if not origin:
-            issues.append("LogicGuard resolved to an empty namespace instead of the installed package")
-        if _version_tuple(version) < _version_tuple(MIN_LOGICGUARD_VERSION):
-            issues.append(f"LogicGuard {MIN_LOGICGUARD_VERSION}+ is required; found {version or 'unknown'}")
+            issues.append(
+                "ResearchGuard logic member resolved to an empty namespace "
+                "instead of the installed package"
+            )
+        if _version_tuple(version) < _version_tuple(MIN_RESEARCHGUARD_VERSION):
+            issues.append(
+                f"ResearchGuard {MIN_RESEARCHGUARD_VERSION}+ is required; "
+                f"found {version or 'unknown'}"
+            )
         if missing:
-            issues.append("LogicGuard public API is incomplete: " + ", ".join(missing))
-        if str(getattr(logicguard, "SCHEMA_VERSION", "")) != "logicguard.model-store.v1":
-            issues.append("LogicGuard model-store schema is unsupported")
-        if str(getattr(logicguard, "MESH_SCHEMA_VERSION", "")) != "logicguard.model-mesh.v1":
-            issues.append("LogicGuard ModelMesh schema is unsupported")
+            issues.append(
+                "ResearchGuard logic public API is incomplete: " + ", ".join(missing)
+            )
+        if (
+            str(getattr(research_logic, "SCHEMA_VERSION", ""))
+            != "researchguard.logic.model-store.v1"
+        ):
+            issues.append("ResearchGuard logic model-store schema is unsupported")
+        if (
+            str(getattr(research_logic, "MESH_SCHEMA_VERSION", ""))
+            != "researchguard.logic.model-mesh.v1"
+        ):
+            issues.append("ResearchGuard logic ModelMesh schema is unsupported")
+        retired_standalone = retired_standalone_logicguard_residuals()
+        if (
+            require_no_retired_standalone
+            and not retired_standalone.get("ok")
+        ):
+            issues.extend(
+                f"retired-standalone:{item}"
+                for item in retired_standalone.get("issues", [])
+            )
         payload = {
             "ok": not issues,
             "version": version,
             "origin": origin,
-            "model_store_schema": str(getattr(logicguard, "SCHEMA_VERSION", "")),
-            "mesh_schema": str(getattr(logicguard, "MESH_SCHEMA_VERSION", "")),
-            "mesh_store_tool_fingerprint": str(getattr(logicguard, "MESH_STORE_TOOL_FINGERPRINT", "")),
-            "mesh_evaluator_fingerprint": str(getattr(logicguard, "MESH_EVALUATOR_FINGERPRINT", "")),
-            "mesh_simulator_fingerprint": str(getattr(logicguard, "MESH_SIMULATOR_FINGERPRINT", "")),
+            "model_store_schema": str(
+                getattr(research_logic, "SCHEMA_VERSION", "")
+            ),
+            "mesh_schema": str(
+                getattr(research_logic, "MESH_SCHEMA_VERSION", "")
+            ),
+            "mesh_store_tool_fingerprint": str(
+                getattr(research_logic, "MESH_STORE_TOOL_FINGERPRINT", "")
+            ),
+            "mesh_evaluator_fingerprint": str(
+                getattr(research_logic, "MESH_EVALUATOR_FINGERPRINT", "")
+            ),
+            "mesh_simulator_fingerprint": str(
+                getattr(research_logic, "MESH_SIMULATOR_FINGERPRINT", "")
+            ),
             "missing_symbols": list(missing),
+            "retired_standalone_logicguard": retired_standalone,
             "issues": issues,
         }
     except LogicGuardDependencyError as exc:
@@ -233,6 +373,9 @@ def logicguard_dependency_preflight(*, strict: bool = True) -> dict[str, Any]:
             "mesh_evaluator_fingerprint": "",
             "mesh_simulator_fingerprint": "",
             "missing_symbols": list(REQUIRED_LOGICGUARD_SYMBOLS),
+            "retired_standalone_logicguard": (
+                retired_standalone_logicguard_residuals()
+            ),
             "issues": [str(exc)],
         }
     if strict and not payload["ok"]:
@@ -295,7 +438,7 @@ def build_authority_generation_payload(
             raise ValueError(f"Authority generation has an incomplete mesh binding for {normalized}")
     if not normalized_meshes and int(projection_count) != 0:
         raise ValueError("A non-empty authority generation requires at least one scoped mesh")
-    preflight = logicguard_dependency_preflight()
+    preflight = researchguard_logic_dependency_preflight()
     payload = {
         "schema_version": AUTHORITY_GENERATION_POINTER_SCHEMA,
         "generation_id": str(generation_id),
@@ -305,10 +448,12 @@ def build_authority_generation_payload(
         "scope_meshes": normalized_meshes,
         "projection_manifest_digest": str(projection_manifest_digest),
         "projection_count": int(projection_count),
-        "logicguard_version": preflight["version"],
-        "logicguard_model_store_schema": preflight["model_store_schema"],
-        "logicguard_mesh_schema": preflight["mesh_schema"],
-        "logicguard_mesh_store_tool_fingerprint": preflight["mesh_store_tool_fingerprint"],
+        "researchguard_version": preflight["version"],
+        "researchguard_logic_model_store_schema": preflight["model_store_schema"],
+        "researchguard_logic_mesh_schema": preflight["mesh_schema"],
+        "researchguard_logic_mesh_store_tool_fingerprint": preflight[
+            "mesh_store_tool_fingerprint"
+        ],
     }
     unsigned = {key: value for key, value in payload.items() if key not in {"activated_at", "pointer_digest"}}
     payload["pointer_digest"] = "sha256:" + canonical_digest(unsigned)
@@ -400,8 +545,8 @@ def mesh_store_root(repo_root: Path, scope: str) -> Path:
 
 
 def open_model_store(repo_root: Path, scope: str) -> Any:
-    logicguard = _logicguard_module()
-    logicguard_dependency_preflight()
+    logicguard = _researchguard_logic_module()
+    researchguard_logic_dependency_preflight()
     return logicguard.FileModelStore(model_store_root(repo_root, scope))
 
 
@@ -450,7 +595,7 @@ def open_mesh_store(
     *,
     model_store: Any | None = None,
 ) -> Any:
-    logicguard = _logicguard_module()
+    logicguard = _researchguard_logic_module()
     normalized = normalize_authority_scope(scope)
     return logicguard.FileModelMeshStore(
         mesh_store_root(repo_root, normalized),
@@ -606,7 +751,7 @@ def _provenance_record(
     source_date: str = "",
     actor: str,
 ) -> Any:
-    logicguard = _logicguard_module()
+    logicguard = _researchguard_logic_module()
     return logicguard.ProvenanceRecord(
         origin_kind=origin_kind,
         content_hash="sha256:" + canonical_digest(content),
@@ -725,8 +870,8 @@ def build_predictive_argument_model(
     source_reference: str = "",
     actor: str = "khaos-brain-model-builder",
 ) -> Any:
-    logicguard = _logicguard_module()
-    logicguard_dependency_preflight()
+    logicguard = _researchguard_logic_module()
+    researchguard_logic_dependency_preflight()
     scope = normalize_authority_scope(authority_scope)
     card_id = str(card.get("id") or "").strip()
     if not card_id:
@@ -1109,7 +1254,7 @@ def _qualified_node_ref(logicguard: Any, binding: LogicGuardBinding) -> Any:
 
 
 def _grounding_records(records: Iterable[Mapping[str, Any]]) -> tuple[Any, ...]:
-    logicguard = _logicguard_module()
+    logicguard = _researchguard_logic_module()
     coerced = logicguard.coerce_provenance(records)
     if not coerced:
         raise UngroundedRelationshipError("A cross-model relation requires provenance")
@@ -1141,7 +1286,7 @@ def commit_scope_mesh(
     memberships: Sequence[GroundedMembership] = (),
     unresolved_relationships: Sequence[Mapping[str, Any]] = (),
 ) -> MeshCommitResult:
-    logicguard = _logicguard_module()
+    logicguard = _researchguard_logic_module()
     scope = normalize_authority_scope(authority_scope)
     if not model_bindings:
         raise ValueError("A scope mesh requires at least one exact model binding")
@@ -1314,7 +1459,7 @@ def materialize_bound_neighborhood(
     model_snapshot: Any | None = None,
     mesh_view: Any | None = None,
 ) -> ModelNeighborhood:
-    logicguard = _logicguard_module()
+    logicguard = _researchguard_logic_module()
     current_model_store = model_store or open_model_store(
         repo_root, binding.authority_scope
     )
@@ -1559,7 +1704,7 @@ def simulate_bound_mesh(
     model_limit: int = 20,
     byte_limit: int = 2_000_000,
 ) -> Any:
-    logicguard = _logicguard_module()
+    logicguard = _researchguard_logic_module()
     snapshot = read_exact_mesh(repo_root, binding)
     if str(delta.base_mesh_id) != str(snapshot.mesh_id) or str(delta.base_mesh_revision) != str(snapshot.revision):
         raise ExactBindingError("Dream simulation delta does not pin the bound exact mesh revision")
@@ -1587,7 +1732,7 @@ def simulate_bound_mesh(
 
 def scope_authority_status(repo_root: Path, scope: str) -> dict[str, Any]:
     normalized = normalize_authority_scope(scope)
-    preflight = logicguard_dependency_preflight(strict=False)
+    preflight = researchguard_logic_dependency_preflight(strict=False)
     if not preflight["ok"]:
         return {"ok": False, "scope": normalized, "issues": list(preflight["issues"])}
     issues: list[str] = []

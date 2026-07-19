@@ -183,22 +183,28 @@ def _flowguard_toolchain_identity(flowguard_module: Any) -> dict[str, Any]:
     }
 
 
-def _logicguard_toolchain_identity(logicguard_module: Any) -> dict[str, Any]:
+def _researchguard_logic_toolchain_identity(
+    researchguard_module: Any,
+    research_logic_module: Any,
+) -> dict[str, Any]:
     configured = os.environ.get(
-        "KHAOS_BRAIN_LOGICGUARD_VALIDATION_ROOT", ""
+        "KHAOS_BRAIN_RESEARCHGUARD_LOGIC_VALIDATION_ROOT", ""
     ).strip()
-    imported_root = Path(logicguard_module.__file__).resolve().parent
+    imported_root = Path(researchguard_module.__file__).resolve().parent
+    imported_logic_root = Path(research_logic_module.__file__).resolve().parent
     root = Path(configured).resolve() if configured else imported_root
     try:
         imported_root.relative_to(root)
+        imported_logic_root.relative_to(root)
     except ValueError as exc:
         raise RuntimeError(
-            "Imported LogicGuard resolved outside the frozen validation toolchain"
+            "Imported ResearchGuard logic member resolved outside the frozen "
+            "validation toolchain"
         ) from exc
     manifest = tree_manifest(root) if root.is_dir() else {}
     digest = str(manifest.get("digest") or "")
     expected = os.environ.get(
-        "KHAOS_BRAIN_LOGICGUARD_VALIDATION_DIGEST", ""
+        "KHAOS_BRAIN_RESEARCHGUARD_LOGIC_VALIDATION_DIGEST", ""
     ).strip()
     required_symbols = (
         "FileModelStore",
@@ -206,37 +212,52 @@ def _logicguard_toolchain_identity(logicguard_module: Any) -> dict[str, Any]:
         "MeshNodeOverride",
         "simulate_mesh",
     )
-    missing = [name for name in required_symbols if not hasattr(logicguard_module, name)]
+    missing = [
+        name
+        for name in required_symbols
+        if not hasattr(research_logic_module, name)
+    ]
     if (
         not digest
         or not (root / "__init__.py").is_file()
         or missing
-        or str(getattr(logicguard_module, "SCHEMA_VERSION", ""))
-        != "logicguard.model-store.v1"
-        or str(getattr(logicguard_module, "MESH_SCHEMA_VERSION", ""))
-        != "logicguard.model-mesh.v1"
+        or str(getattr(research_logic_module, "SCHEMA_VERSION", ""))
+        != "researchguard.logic.model-store.v1"
+        or str(getattr(research_logic_module, "MESH_SCHEMA_VERSION", ""))
+        != "researchguard.logic.model-mesh.v1"
     ):
-        raise RuntimeError("Current LogicGuard validation toolchain is unavailable")
+        raise RuntimeError(
+            "Current ResearchGuard logic validation toolchain is unavailable"
+        )
     if expected and digest != expected:
         raise RuntimeError(
-            "Frozen LogicGuard validation toolchain digest does not match its declared identity"
+            "Frozen ResearchGuard logic validation toolchain digest does not "
+            "match its declared identity"
         )
     return {
         "digest": digest,
         "file_count": int(manifest.get("file_count") or 0),
         "root": str(root),
-        "version": str(getattr(logicguard_module, "__version__", "")),
-        "model_store_schema": str(getattr(logicguard_module, "SCHEMA_VERSION", "")),
-        "mesh_schema": str(getattr(logicguard_module, "MESH_SCHEMA_VERSION", "")),
+        "version": str(getattr(research_logic_module, "__version__", "")),
+        "model_store_schema": str(
+            getattr(research_logic_module, "SCHEMA_VERSION", "")
+        ),
+        "mesh_schema": str(
+            getattr(research_logic_module, "MESH_SCHEMA_VERSION", "")
+        ),
     }
 
 
 def _verifier_fingerprint() -> dict[str, Any]:
     import flowguard
-    import logicguard
+    import researchguard
+    from researchguard import logic as research_logic
 
     flowguard_identity = _flowguard_toolchain_identity(flowguard)
-    logicguard_identity = _logicguard_toolchain_identity(logicguard)
+    researchguard_logic_identity = _researchguard_logic_toolchain_identity(
+        researchguard,
+        research_logic,
+    )
     payload = {
         "python_executable": str(Path(sys.executable).resolve()),
         "python_version": platform.python_version(),
@@ -245,7 +266,7 @@ def _verifier_fingerprint() -> dict[str, Any]:
         "flowguard_schema_version": str(flowguard.SCHEMA_VERSION),
         "flowguard_package_digest": str(flowguard_identity["digest"]),
         "flowguard_toolchain": flowguard_identity,
-        "logicguard_toolchain": logicguard_identity,
+        "researchguard_logic_toolchain": researchguard_logic_identity,
     }
     body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     payload["digest"] = hashlib.sha256(body).hexdigest()
@@ -254,17 +275,23 @@ def _verifier_fingerprint() -> dict[str, Any]:
 
 def _environment_contract(repo_root: Path) -> dict[str, str]:
     import flowguard
-    import logicguard
+    import researchguard
+    from researchguard import logic as research_logic
 
     flowguard_identity = _flowguard_toolchain_identity(flowguard)
-    logicguard_identity = _logicguard_toolchain_identity(logicguard)
+    researchguard_logic_identity = _researchguard_logic_toolchain_identity(
+        researchguard,
+        research_logic,
+    )
     return {
         "cwd": str(repo_root.resolve()),
         "KHAOS_BRAIN_ASSURANCE_ACTIVE": "1",
         "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
         "python_executable": str(Path(sys.executable).resolve()),
         "flowguard_toolchain_digest": str(flowguard_identity["digest"]),
-        "logicguard_toolchain_digest": str(logicguard_identity["digest"]),
+        "researchguard_logic_toolchain_digest": str(
+            researchguard_logic_identity["digest"]
+        ),
     }
 
 

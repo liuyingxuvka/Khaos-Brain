@@ -9,11 +9,14 @@ from pathlib import Path
 from local_kb.active_index import load_active_index, validate_active_index
 from local_kb.logicguard_models import (
     ExactBindingError,
+    authority_root,
+    canonical_digest,
     load_authority_generation,
     open_mesh_store,
     read_exact_mesh,
 )
 from local_kb.maintenance_migration import (
+    authority_schema_inventory,
     migrate_legacy_card_generation,
     plan_logicguard_native_migration,
     record_upgrade_ai_disposition,
@@ -75,6 +78,55 @@ def tree_digest(root: Path, relative_roots: tuple[str, ...]) -> str:
             digest.update(path.read_bytes())
             digest.update(b"\n")
     return digest.hexdigest()
+
+
+def rewrite_authority_as_retired_logicguard_schema(root: Path) -> dict:
+    """Create an upgrade-only retired-schema fixture without a legacy reader."""
+
+    target = authority_root(root)
+    for path in sorted(item for item in target.rglob("*") if item.is_file()):
+        data = path.read_bytes().replace(
+            b"researchguard.logic.model-",
+            b"logicguard.model-",
+        )
+        path.write_bytes(data)
+
+    pointer_paths = [
+        target / "current-generation.json",
+        *sorted((target / "generations").glob("*.json")),
+    ]
+    for path in pointer_paths:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        dependency_fields = {
+            "researchguard_version": "logicguard_version",
+            "researchguard_logic_model_store_schema": (
+                "logicguard_model_store_schema"
+            ),
+            "researchguard_logic_mesh_schema": "logicguard_mesh_schema",
+            "researchguard_logic_mesh_store_tool_fingerprint": (
+                "logicguard_mesh_store_tool_fingerprint"
+            ),
+        }
+        for current_name, retired_name in dependency_fields.items():
+            if current_name in payload:
+                payload[retired_name] = payload.pop(current_name)
+        unsigned = {
+            key: value
+            for key, value in payload.items()
+            if key not in {"activated_at", "pointer_digest"}
+        }
+        payload["pointer_digest"] = "sha256:" + canonical_digest(unsigned)
+        path.write_text(
+            json.dumps(
+                payload,
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+    return authority_schema_inventory(root)
 
 
 class KhaosLogicGuardMigrationTests(unittest.TestCase):
@@ -394,6 +446,144 @@ class KhaosLogicGuardMigrationTests(unittest.TestCase):
                 with self.assertRaises(ExactBindingError):
                     load_authority_generation(root)
                 self.assertIn("then", load_yaml_file(root / "kb" / "public" / "public-a.yaml"))
+
+    def test_retired_logicguard_authority_is_directly_cut_over_once(self) -> None:
+        tracked = (
+            "kb/public",
+            "kb/private",
+            "kb/candidates",
+            "kb/indexes",
+            ".local/khaos-brain/logicguard-authority",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_fixture(root)
+            initial = migrate_legacy_card_generation(root)
+            self.assertTrue(initial["ok"], initial)
+            initial_generation = load_authority_generation(root)
+            projections_before = {
+                scope: load_yaml_file(root / "kb" / scope / f"{card_id}.yaml")
+                for scope, card_id in (
+                    ("public", "public-a"),
+                    ("private", "private-a"),
+                    ("candidates", "candidate-a"),
+                )
+            }
+
+            retired_inventory = rewrite_authority_as_retired_logicguard_schema(root)
+            self.assertGreater(retired_inventory["file_count"], 0)
+            self.assertGreater(
+                retired_inventory["legacy_schema_occurrence_count"],
+                0,
+            )
+            self.assertEqual(
+                retired_inventory["current_schema_occurrence_count"],
+                0,
+            )
+
+            plan = plan_logicguard_native_migration(root)
+            self.assertTrue(plan["ok"], plan["issues"])
+            self.assertTrue(plan["schema_cutover_required"])
+            self.assertEqual(plan["schema_cutover_card_count"], 3)
+            self.assertEqual(
+                plan["authority_schema_before"]["inventory_digest"],
+                retired_inventory["inventory_digest"],
+            )
+
+            migrated = migrate_legacy_card_generation(root)
+            self.assertTrue(migrated["ok"], migrated)
+            self.assertEqual(migrated["status"], "committed")
+            self.assertNotEqual(
+                migrated["receipt"]["generation_id"],
+                initial_generation["generation_id"],
+            )
+            self.assertEqual(
+                migrated["receipt"]["authority_schema_before"][
+                    "inventory_digest"
+                ],
+                retired_inventory["inventory_digest"],
+            )
+            current_inventory = migrated["receipt"]["authority_schema_after"]
+            self.assertEqual(
+                current_inventory["legacy_schema_occurrence_count"],
+                0,
+            )
+            self.assertGreater(
+                current_inventory["current_schema_occurrence_count"],
+                0,
+            )
+            self.assertFalse(current_inventory["mixed_schema"])
+
+            validation = validate_logicguard_native_authority(
+                root,
+                require_full_schema_inventory=True,
+            )
+            self.assertTrue(validation["ok"], validation)
+            self.assertEqual(validation["card_count"], 3)
+            self.assertTrue(
+                validation["zero_legacy_authority_schema_residuals"]
+            )
+            for scope, card_id in (
+                ("public", "public-a"),
+                ("private", "private-a"),
+                ("candidates", "candidate-a"),
+            ):
+                projection = load_yaml_file(
+                    root / "kb" / scope / f"{card_id}.yaml"
+                )
+                self.assertEqual(
+                    projection["id"],
+                    projections_before[scope]["id"],
+                )
+                self.assertTrue(validate_card_projection(root, projection)["ok"])
+
+            after_first = tree_digest(root, tracked)
+            second = migrate_legacy_card_generation(root)
+            self.assertTrue(second["ok"], second)
+            self.assertEqual(second["status"], "no_delta")
+            self.assertEqual(tree_digest(root, tracked), after_first)
+
+    def test_retired_schema_cutover_failure_restores_exact_old_authority(self) -> None:
+        tracked = (
+            "kb/public",
+            "kb/private",
+            "kb/candidates",
+            "kb/indexes",
+            ".local/khaos-brain/logicguard-authority",
+        )
+        for phase in ("models-meshes", "projections", "index", "pointer"):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                write_fixture(root)
+                self.assertTrue(migrate_legacy_card_generation(root)["ok"])
+                retired_inventory = rewrite_authority_as_retired_logicguard_schema(root)
+                before = tree_digest(root, tracked)
+
+                result = migrate_legacy_card_generation(
+                    root,
+                    fail_after_phase=phase,
+                )
+                self.assertFalse(result["ok"])
+                self.assertEqual(result["status"], "rolled_back")
+                self.assertTrue(result["rollback"]["ok"])
+                self.assertEqual(tree_digest(root, tracked), before)
+                restored_inventory = authority_schema_inventory(root)
+                self.assertEqual(
+                    restored_inventory["inventory_digest"],
+                    retired_inventory["inventory_digest"],
+                )
+                self.assertGreater(
+                    restored_inventory["legacy_schema_occurrence_count"],
+                    0,
+                )
+                self.assertEqual(
+                    restored_inventory["current_schema_occurrence_count"],
+                    0,
+                )
+                self.assertEqual(
+                    load_authority_generation(root)["generation_id"],
+                    result["plan"]["current_generation_ids"][0],
+                )
 
     def test_malformed_legacy_card_blocks_before_any_authority_write(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

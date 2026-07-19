@@ -9,7 +9,7 @@
 
 ## 2. Add current LogicGuard authority adapters
 
-- [x] 2.1 Add a dependency preflight that verifies the imported LogicGuard version, public API symbols, package origin, schema versions, and required P0/P1 tool fingerprints; fail visibly without a substitute framework.
+- [x] 2.1 Add a dependency preflight that verifies the imported public ResearchGuard package and exact `researchguard.logic` member version, public API symbols, package origin, schema versions, and required P0/P1 tool fingerprints; fail visibly without a standalone LogicGuard package or substitute framework.
 - [x] 2.2 Implement scoped public/private/candidate model-store and mesh-store roots, exact identity parsing, stable card-to-model ids, store recovery, writer boundaries, and cross-scope rejection in `local_kb.logicguard_models`.
 - [x] 2.3 Implement deterministic predictive ArgumentBlock construction for new observations/candidates and conservative legacy input, including typed context, method/action, root claim, available warrant/evidence/provenance, assumptions, rebuttals, qualifiers, limitations, and explicit role gaps.
 - [x] 2.4 Implement exact model validation and CAS/idempotent commit helpers with immutable receipt projection and tests for first commit, update, conflict, idempotent replay, corruption, missing revision, head substitution, and recovery.
@@ -60,7 +60,8 @@
 - [x] 7.4 Add zero-residual audits proving normal runtime has no legacy semantic reader/writer, unbound eligible card, projection mismatch, stale revision, retired relation authority, alternate store/model, compatibility alias, or fallback success path.
 - [x] 7.5 Implement rollback/resume/interruption/concurrent-change handling that restores one complete prior generation or completes the current one and keeps all four retained automations paused on failure.
 - [x] 7.6 Integrate the migration and structured model-authority checklist into `scripts/install_codex_kb.py` install/upgrade/check paths, including fresh clone bootstrap and moved-repository behavior.
-- [x] 7.7 Add migration matrix tests for fresh, already-current, mixed legacy/current input, sparse cards, bad relations, private cards, malformed input, missing LogicGuard, interruption at each publication boundary, resume, repeat, concurrency, rollback, Windows paths, and zero residuals.
+- [x] 7.7 Add migration matrix tests for fresh, already-current, mixed legacy/current input, sparse cards, bad relations, private cards, malformed input, missing ResearchGuard logic, interruption at each publication boundary, resume, repeat, concurrency, rollback, Windows paths, and zero residuals.
+- [x] 7.8 Direct-migrate complete retired `logicguard.model-store.v1` / `logicguard.model-mesh.v1` authority into current ResearchGuard logic schemas with frozen full-tree inventories, before/after counts and hashes, zero old-schema residuals, exact card/scope coverage, and failure-injection rollback at every publication boundary.
 
 ## 8. Align Skills, prompts, author contracts, consumer projections, UI copy, and documentation
 
@@ -68,7 +69,8 @@
 - [x] 8.2 Use author-side SkillGuard maintenance supervision to compile each single-skill source inventory into current `.skillguard/contract-source.json`, `.skillguard/compiled-contract.json`, and `.skillguard/check-manifest.json`; validate unique target-owned depth without creating a consumer dependency.
 - [ ] 8.3 Refresh clean installed Skill and automation projections transactionally, exclude author-control material, verify consumer-projection parity, and preserve user pause state.
 - [x] 8.4 Rewrite PROJECT_SPEC as the authoritative LogicGuard-native design, update README architecture/use/upgrade sections, AGENTS managed guidance, migration/recovery runbooks, UI help/status text, and release notes without retaining YAML-as-authority language.
-- [x] 8.5 Add static and behavior tests that fail on stale architecture wording, missing LogicGuard dependency declarations, Dream write authority, flat retrieval fallback, legacy schema guidance, author-control leakage, cross-unit test overlap, or installed-projection drift.
+- [x] 8.5 Add static and behavior tests that fail on stale architecture wording, missing ResearchGuard logic dependency declarations, Dream write authority, flat retrieval fallback, legacy schema guidance, author-control leakage, cross-unit test overlap, or installed-projection drift.
+- [x] 8.6 Remove the repository-local FlowGuard shadow Skill suite only through its exact ownership manifest, retire the compatibility verifier and suite-control paths, preserve all Khaos-owned project Skills, and enforce the ordinary-project boundary in current-runtime readiness.
 
 ## 9. Run layered verification and close the change
 
@@ -76,6 +78,6 @@
 - [ ] 9.2 Run the current FlowGuard child model, all calibrated known-bad variants, field lifecycle review, parent ModelMesh reattachment/closure, Model-Test Alignment, UI flow validation, and TestMesh inventory checks; consume current evidence ids in the parent process review.
 - [x] 9.3 Run strict OpenSpec validation and verify every required obligation maps bidirectionally to one code owner, current test evidence, and the frozen child-suite inventory.
 - [ ] 9.4 Freeze source, tests, models, prompts, Skills, package/toolchain, environment, and inventory identities; confirm no active writer/child process exists; execute `python scripts/check_khaos_logicguard_native_readiness.py --json` exactly once as the final full owner.
-- [ ] 9.5 Verify the terminal parent receipt consumes current terminal child receipts for LogicGuard package/API, model/projection, Sleep/Dream, retrieval/UI, migration/privacy, scale/performance, clean installer projection, zero residuals, and existing Chaos Brain regressions; keep the author contract audit separate.
-- [ ] 9.6 Run `python scripts/install_codex_kb.py --json` and `python scripts/install_codex_kb.py --check --json` on the stable integration snapshot; prove FlowGuard and LogicGuard are each frozen to one exact digest for long-assurance children, confirm clean installed skills and all four retained automations' intended pause state, and rerun only the explicitly invalidated installation projection if packaging changed.
+- [ ] 9.5 Verify the terminal parent receipt consumes current terminal child receipts for the complete ResearchGuard package / exact logic-member API, model/projection, Sleep/Dream, retrieval/UI, migration/privacy, scale/performance, clean installer projection, zero residuals, and existing Chaos Brain regressions; keep the author contract audit separate.
+- [ ] 9.6 Run `python scripts/install_codex_kb.py --json` and `python scripts/install_codex_kb.py --check --json` on the stable integration snapshot; prove FlowGuard and ResearchGuard logic are each frozen to one exact digest for long-assurance children, confirm clean installed skills and all four retained automations' intended pause state, and rerun only the explicitly invalidated installation projection if packaging changed.
 - [ ] 9.7 Perform the explicit KB postflight, record mistake-first reusable lessons or route/card weaknesses as structured observations, update FlowGuard adoption evidence, and report any deliberately scoped release gaps without marking the OpenSpec change complete.

@@ -6,13 +6,59 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 from typing import Any
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+RETIRED_FLOWGUARD_SHADOW_MEMBER_IDS = (
+    "model-first-function-flow",
+    "flowguard-agent-workflow-rehearsal",
+    "flowguard-architecture-reduction",
+    "flowguard-behavior-commitment-ledger",
+    "flowguard-code-structure-recommendation",
+    "flowguard-contract-exhaustion-mesh",
+    "flowguard-development-process-flow",
+    "flowguard-existing-model-preflight",
+    "flowguard-field-lifecycle-mesh",
+    "flowguard-model-mesh",
+    "flowguard-model-miss-review",
+    "flowguard-model-test-alignment",
+    "flowguard-model-topology-hazard-review",
+    "flowguard-plan-detailing-compiler",
+    "flowguard-structure-mesh",
+    "flowguard-test-mesh",
+    "flowguard-ui-flow-structure",
+)
+REQUIRED_PROJECT_SKILL_IDS = (
+    "kb-dream-pass",
+    "kb-organization-contribute",
+    "kb-organization-maintenance",
+    "kb-sleep-maintenance",
+    "khaos-brain-open-ui",
+    "khaos-brain-update",
+    "local-kb-retrieve",
+    "organization-review",
+)
+RETIRED_FLOWGUARD_SHADOW_CONTROL_PATHS = (
+    ".agents/skills/.flowguard-skill-suite-ownership.json",
+    ".skillguard/flowguard-suite/suite-map.json",
+    "scripts/verify_skill_suite_markers.py",
+)
+
 
 FORBIDDEN_BY_FILE: dict[str, tuple[str, ...]] = {
+    "local_kb/logicguard_models.py": (
+        "from logicguard",
+        "import logicguard",
+        'import_module("logicguard")',
+        "import_module('logicguard')",
+    ),
+    "local_kb/dream.py": (
+        "from logicguard",
+        "import logicguard",
+    ),
     "local_kb/search.py": (
         "load_filtered_entries_scan",
         "from local_kb.store import load_entries",
@@ -26,6 +72,11 @@ FORBIDDEN_BY_FILE: dict[str, tuple[str, ...]] = {
     "local_kb/install.py": (
         "AUTOMATION_FALLBACK_MODEL",
         "AUTOMATION_FALLBACK_REASONING_EFFORT",
+        "LOGICGUARD_VALIDATION_ROOT_ENV",
+        "LOGICGUARD_VALIDATION_DIGEST_ENV",
+        "_freeze_logicguard_validation_toolchain",
+        "_require_live_logicguard_matches_snapshot",
+        'import_module("logicguard")',
         'glob("*/current.json")',
         "compact_upgrade_attempt_projection",
         'UPGRADE_ATTEMPT_SCHEMA = "khaos-brain.upgrade-attempt.v1"',
@@ -101,8 +152,8 @@ REQUIRED_BY_FILE: dict[str, tuple[str, ...]] = {
         "authority_generation_id",
     ),
     "local_kb/logicguard_models.py": (
-        'MIN_LOGICGUARD_VERSION = "0.18.0"',
-        "logicguard_dependency_preflight",
+        'MIN_RESEARCHGUARD_VERSION = "0.1.1"',
+        "researchguard_logic_dependency_preflight",
         "AUTHORITY_GENERATION_WRITERS",
         "read_exact_model",
         "read_exact_mesh",
@@ -202,7 +253,7 @@ REQUIRED_BY_FILE: dict[str, tuple[str, ...]] = {
     ),
     "local_kb/maintenance_migration.py": (
         '"canonicalize-runtime"',
-        'MIGRATION_ID = "kb-maintenance-standard-v4-logicguard-native"',
+        'MIGRATION_ID = "kb-maintenance-standard-v5-researchguard-logic-native"',
         '"migrate-logicguard-authority"',
         "migrate_legacy_card_generation",
         "validate_logicguard_native_authority",
@@ -304,6 +355,76 @@ def check_current_runtime_only(
             + ",".join(direct_card_store_readers)
         )
 
+    retired_standalone_logicguard_import_refs: list[str] = []
+    retired_import_pattern = re.compile(
+        r"(?m)^\s*(?:from\s+logicguard(?:\.|\s)|"
+        r"import\s+logicguard(?:\.|\s|$))|"
+        r"importlib(?:\.util)?\.import_module\(\s*['\"]logicguard['\"]"
+    )
+    for source_root in ("local_kb", "scripts"):
+        for path in sorted((root / source_root).rglob("*.py")):
+            if retired_import_pattern.search(path.read_text(encoding="utf-8")):
+                retired_standalone_logicguard_import_refs.append(
+                    path.relative_to(root).as_posix()
+                )
+    if retired_standalone_logicguard_import_refs:
+        issues.append(
+            "retired-standalone-logicguard-import-refs:"
+            + ",".join(retired_standalone_logicguard_import_refs)
+        )
+
+    retired_standalone_logicguard_dependency_refs: list[str] = []
+    for relative in ("requirements.txt", "requirements-dev.txt"):
+        path = root / relative
+        if not path.is_file():
+            continue
+        if any(
+            re.match(
+                r"(?i)^logicguard(?:\s|@|==|>=|<=|~=|!=|>|<|;|\[)",
+                line.strip(),
+            )
+            for line in path.read_text(encoding="utf-8").splitlines()
+        ):
+            retired_standalone_logicguard_dependency_refs.append(relative)
+    if retired_standalone_logicguard_dependency_refs:
+        issues.append(
+            "retired-standalone-logicguard-dependency-refs:"
+            + ",".join(retired_standalone_logicguard_dependency_refs)
+        )
+
+    retired_flowguard_shadow_skill_residuals: list[str] = []
+    missing_project_skill_surfaces: list[str] = []
+    retired_flowguard_shadow_control_residuals: list[str] = []
+    project_skills_root = root / ".agents" / "skills"
+    if not consumer_install and project_skills_root.is_dir():
+        retired_flowguard_shadow_skill_residuals = [
+            f".agents/skills/{member_id}"
+            for member_id in RETIRED_FLOWGUARD_SHADOW_MEMBER_IDS
+            if (project_skills_root / member_id).exists()
+        ]
+        missing_project_skill_surfaces = [
+            f".agents/skills/{skill_id}/SKILL.md"
+            for skill_id in REQUIRED_PROJECT_SKILL_IDS
+            if not (project_skills_root / skill_id / "SKILL.md").is_file()
+        ]
+        retired_flowguard_shadow_control_residuals = [
+            relative
+            for relative in RETIRED_FLOWGUARD_SHADOW_CONTROL_PATHS
+            if (root / relative).exists()
+        ]
+        issues.extend(
+            "retired-flowguard-shadow-skill-residual:" + relative
+            for relative in retired_flowguard_shadow_skill_residuals
+        )
+        issues.extend(
+            "missing-project-skill-surface:" + relative
+            for relative in missing_project_skill_surfaces
+        )
+        issues.extend(
+            "retired-flowguard-shadow-control-residual:" + relative
+            for relative in retired_flowguard_shadow_control_residuals
+        )
+
     return {
         "ok": not issues,
         "policy_id": "chaos-brain.current-runtime-only.v1",
@@ -312,11 +433,26 @@ def check_current_runtime_only(
         "governed_digest": _digest(rows),
         "obsolete_update_state_migrator_refs": production_refs,
         "normal_runtime_direct_card_store_readers": direct_card_store_readers,
+        "retired_standalone_logicguard_import_refs": (
+            retired_standalone_logicguard_import_refs
+        ),
+        "retired_standalone_logicguard_dependency_refs": (
+            retired_standalone_logicguard_dependency_refs
+        ),
+        "retired_flowguard_shadow_skill_residuals": (
+            retired_flowguard_shadow_skill_residuals
+        ),
+        "missing_project_skill_surfaces": missing_project_skill_surfaces,
+        "retired_flowguard_shadow_control_residuals": (
+            retired_flowguard_shadow_control_residuals
+        ),
         "issues": issues,
         "files": rows,
         "claim_boundary": (
-            "Static source gate for the enumerated retired runtime authorities. "
-            "Migration behavior and installed-machine residual counts require their separate current receipts."
+            "Static source gate for the enumerated retired runtime authorities "
+            "and the ordinary-project skill surface. Migration behavior and "
+            "installed-machine residual counts require their separate current "
+            "receipts."
         ),
     }
 

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from logicguard import (
+from researchguard.logic import (
     MeshNodeOverride,
     MeshSimulationDelta,
     ModelPinReplacement,

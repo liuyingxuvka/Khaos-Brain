@@ -32,6 +32,7 @@ from local_kb.search import (  # noqa: E402
 
 DEFAULT_CASES = REPO_ROOT / "tests" / "fixtures" / "kb_retrieval_eval_cases.json"
 DEFAULT_RECEIPT = REPO_ROOT / ".local" / "assurance" / "kb_retrieval_evaluation.json"
+EVALUATION_CASES_SCHEMA_VERSION = 1
 BASE_REQUIRED_KINDS = {"lexical", "direct_id", "route_expansion", "no_card"}
 TOPOLOGY_REQUIRED_KINDS = {"related_traversal"}
 TERMINAL_STATUSES = {"merged", "rejected", "superseded", "parked", "retired", "deprecated", "history_only"}
@@ -50,8 +51,15 @@ def _percentile_95(values: list[float]) -> float:
 
 def _load_cases(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict) or int(payload.get("schema_version") or 0) != 1:
-        raise ValueError("retrieval evaluation cases require schema_version 1")
+    schema_version = payload.get("schema_version") if isinstance(payload, dict) else None
+    if (
+        not isinstance(payload, dict)
+        or type(schema_version) is not int
+        or schema_version != EVALUATION_CASES_SCHEMA_VERSION
+    ):
+        raise ValueError(
+            "retrieval evaluation cases require exact integer schema_version 1"
+        )
     return payload
 
 

@@ -37,13 +37,15 @@ system update remain absent.
 - **THEN** all survivors remain or return paused and the upgrade fails visibly
 
 ### Requirement: Validation toolchains are product-native
-Long assurance SHALL freeze the current FlowGuard and LogicGuard package
-identities. It MUST NOT require, freeze, install, or recheck SkillGuard as a
-consumer validation toolchain. The author contract audit resolves its compiler
-only on the maintainer computer and remains outside the installed product.
+Long assurance SHALL freeze the current FlowGuard package and the complete
+public ResearchGuard package that owns the exact `researchguard.logic` member.
+It MUST NOT install or consult the retired standalone LogicGuard package, and
+it MUST NOT require, freeze, install, or recheck SkillGuard as a consumer
+validation toolchain. The author contract audit resolves its compiler only on
+the maintainer computer and remains outside the installed product.
 
 #### Scenario: Installed SkillGuard is absent
-- **WHEN** consumer readiness runs with current FlowGuard, LogicGuard, clean installed skills, and target-native tests
+- **WHEN** consumer readiness runs with current FlowGuard, ResearchGuard logic, clean installed skills, and target-native tests
 - **THEN** absence of SkillGuard does not block consumer readiness
 
 ### Requirement: Upgrade completion uses current independent evidence

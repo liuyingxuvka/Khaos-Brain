@@ -40,12 +40,12 @@ class KhaosLogicGuardReadinessTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             flowguard = root / "python" / "flowguard"
-            logicguard = root / "python" / "logicguard"
+            researchguard = root / "python" / "researchguard"
             flowguard.mkdir(parents=True)
             (flowguard / "__init__.py").write_text("SCHEMA_VERSION='1.0'\n", encoding="utf-8")
-            logicguard.mkdir(parents=True)
-            (logicguard / "__init__.py").write_text(
-                "SCHEMA_VERSION='logicguard.model-store.v1'\n",
+            researchguard.mkdir(parents=True)
+            (researchguard / "__init__.py").write_text(
+                "__version__='0.1.1'\n",
                 encoding="utf-8",
             )
             attempt = {
@@ -57,9 +57,9 @@ class KhaosLogicGuardReadinessTests(unittest.TestCase):
                     "snapshot_root": str(flowguard),
                     "manifest": tree_manifest(flowguard),
                 },
-                "logicguard_validation_toolchain": {
-                    "snapshot_root": str(logicguard),
-                    "manifest": tree_manifest(logicguard),
+                "researchguard_logic_validation_toolchain": {
+                    "snapshot_root": str(researchguard),
+                    "manifest": tree_manifest(researchguard),
                 },
             }
             env_keys = [
@@ -87,11 +87,16 @@ class KhaosLogicGuardReadinessTests(unittest.TestCase):
                     )
                     self.assertEqual(binding["attempt_id"], "upgrade-current")
                     self.assertEqual(
-                        os.environ["KHAOS_BRAIN_LOGICGUARD_VALIDATION_ROOT"],
-                        str(logicguard.resolve()),
+                        os.environ[
+                            "KHAOS_BRAIN_RESEARCHGUARD_LOGIC_VALIDATION_ROOT"
+                        ],
+                        str(researchguard.resolve()),
                     )
                     self.assertIn(str(flowguard.parent.resolve()), os.environ["PYTHONPATH"])
-                    self.assertIn(str(logicguard.parent.resolve()), readiness.sys.path)
+                    self.assertIn(
+                        str(researchguard.parent.resolve()),
+                        readiness.sys.path,
+                    )
                     self.assertEqual(
                         os.environ[
                             readiness._INSTALLATION_IDENTITY_PYTHONPATH_PRESENT_ENV

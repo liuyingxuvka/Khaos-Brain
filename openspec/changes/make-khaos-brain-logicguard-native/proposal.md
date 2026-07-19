@@ -15,7 +15,7 @@ LogicGuard now provides immutable single-model revisions, revision-pinned ModelM
 - Add a graph-first desktop projection that explains the selected claim, local support/rebuttal/boundary nodes, model membership, revision, and open gaps without exposing private-scope nodes on public surfaces.
 - **BREAKING** Add a versioned, resumable, rollbackable direct-to-current migration that consumes old YAML authority only inside the upgrade transaction, creates canonical LogicGuard models and meshes, rewrites YAML as projections, proves zero old-authority residuals, and otherwise rolls back while maintenance automations remain paused.
 - Partition canonical model and mesh stores by privacy scope. Cross-scope canonical edges are forbidden; multi-scope retrieval merges separately authorized results without materializing a mixed authority graph.
-- Update Sleep, Dream, retrieval, update, and organization Skills/prompts; the installer; README; PROJECT_SPEC; UI copy; validation models; and source-only author contracts so the dependency on LogicGuard and the consumer boundary are explicit.
+- Update Sleep, Dream, retrieval, update, and organization Skills/prompts; the installer; README; PROJECT_SPEC; UI copy; validation models; and source-only author contracts so the dependency on ResearchGuard's `researchguard.logic` member and the consumer boundary are explicit.
 
 ## Capabilities
 
@@ -25,7 +25,7 @@ LogicGuard now provides immutable single-model revisions, revision-pinned ModelM
 - `khaos-logicguard-model-maintenance`: Sleep-owned ModelMesh consolidation and Dream-owned revision-pinned validation/handoff without duplicate mutation authority.
 - `khaos-logicguard-retrieval`: Model-bound active indexing, exact-node retrieval, bounded graph navigation, explainable UI projection, and fail-closed no-fallback behavior.
 - `khaos-logicguard-migration`: Direct-to-current migration from legacy card authority, zero residuals, concurrency control, resumability, rollback, and installer integration.
-- `khaos-logicguard-assurance`: Executable FlowGuard ownership model, model/code/test alignment, disjoint target-owned evidence, LogicGuard dependency checks, clean consumer projection, performance/privacy gates, and documentation parity.
+- `khaos-logicguard-assurance`: Executable FlowGuard ownership model, model/code/test alignment, disjoint target-owned evidence, ResearchGuard logic dependency checks, clean consumer projection, performance/privacy gates, and documentation parity.
 
 ### Modified Capabilities
 
@@ -36,5 +36,5 @@ LogicGuard now provides immutable single-model revisions, revision-pinned ModelM
 - Core modules: `local_kb.store`, `local_kb.active_index`, `local_kb.search`, `local_kb.lifecycle`, `local_kb.dream`, `local_kb.maintenance_migration`, desktop view models, and new LogicGuard model/projection/maintenance adapters.
 - Persistent state: scoped LogicGuard model stores, scoped ModelMesh stores, model evaluation/simulation receipts, YAML card projections, active-index records, migration journal/backup, and Sleep/Dream receipts.
 - Public contracts: current card projection schema, retrieval result payloads, desktop detail/graph surfaces, maintenance receipts, installer checklist, and upgrade readiness.
-- Dependencies: editable/installed LogicGuard must be the current package and expose the required P0/P1 APIs; FlowGuard and official OpenSpec remain external assurance/process owners. SkillGuard is used only for source-side maintenance of the repository's own skills and is not a product-runtime authority.
+- Dependencies: the public ResearchGuard package must be pinned to one exact current source identity and its `researchguard.logic` member must expose the required P0/P1 APIs, current schemas, and fingerprints. The retired standalone LogicGuard package is not installed or consulted. FlowGuard and official OpenSpec remain external assurance/process owners. SkillGuard is used only for source-side maintenance of the repository's own skills and is not a product-runtime authority.
 - Compatibility: no normal-runtime dual reader, alias, fallback search, alternate model, or silent downgrade is permitted. Legacy card authority is bounded upgrade input only.

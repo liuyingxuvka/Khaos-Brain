@@ -32,9 +32,9 @@ from local_kb.install import (
     _record_upgrade_attempt,
     _automation_spec_payload,
     _freeze_flowguard_validation_toolchain,
-    _freeze_logicguard_validation_toolchain,
+    _freeze_researchguard_logic_validation_toolchain,
     _require_live_flowguard_matches_snapshot,
-    _require_live_logicguard_matches_snapshot,
+    _require_live_researchguard_logic_matches_snapshot,
     _restore_exact_file_snapshot,
     _run_pre_restore_upgrade_assurance,
 )
@@ -97,6 +97,21 @@ class CodexInstallTests(unittest.TestCase):
         )
         self._update_state_migration.start()
         self.addCleanup(self._update_state_migration.stop)
+        self._retired_standalone_logicguard = patch(
+            "local_kb.logicguard_models.retired_standalone_logicguard_residuals",
+            return_value={
+                "schema_version": (
+                    "khaos-brain.retired-standalone-logicguard-residuals.v1"
+                ),
+                "ok": True,
+                "distribution": {"present": False},
+                "import_resolution": {"present": False},
+                "runtime_modules": [],
+                "issues": [],
+            },
+        )
+        self._retired_standalone_logicguard.start()
+        self.addCleanup(self._retired_standalone_logicguard.stop)
 
     def test_upgrade_attempt_current_projection_is_bounded_and_event_backed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -122,10 +137,10 @@ class CodexInstallTests(unittest.TestCase):
                         "checks": huge_checks,
                         "failed_checks": [],
                     },
-                    "logicguard_validation_toolchain": {
+                    "researchguard_logic_validation_toolchain": {
                         "ok": True,
                         "status": "frozen",
-                        "snapshot_root": str(Path(tmp) / "logicguard"),
+                        "snapshot_root": str(Path(tmp) / "researchguard"),
                         "manifest": {
                             "digest": "A" * 64,
                             "file_count": 2,
@@ -146,7 +161,7 @@ class CodexInstallTests(unittest.TestCase):
             self.assertNotIn("checks", first["upgrade_assurance"])
             self.assertNotIn(
                 "files",
-                first["logicguard_validation_toolchain"]["manifest"],
+                first["researchguard_logic_validation_toolchain"]["manifest"],
             )
             event_path = (
                 current_path.parent
@@ -367,7 +382,7 @@ class CodexInstallTests(unittest.TestCase):
                 {"frozen", "inherited_frozen"},
             )
             self.assertIn(
-                payload["logicguard_validation_toolchain"]["status"],
+                payload["researchguard_logic_validation_toolchain"]["status"],
                 {"frozen", "inherited_frozen"},
             )
             self.assertLess(
@@ -602,6 +617,12 @@ class CodexInstallTests(unittest.TestCase):
             (live / "__init__.py").write_text(
                 "SCHEMA_VERSION = 'test'\n", encoding="utf-8"
             )
+            logic = live / "logic"
+            logic.mkdir()
+            (logic / "__init__.py").write_text(
+                "SCHEMA_VERSION = 'researchguard.logic.model-store.v1'\n",
+                encoding="utf-8",
+            )
             (live / "engine.py").write_text("VALUE = 1\n", encoding="utf-8")
             destination = root / "receipts" / "python" / "flowguard"
             with patch.dict(
@@ -623,24 +644,30 @@ class CodexInstallTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "identity changed"):
                 _require_live_flowguard_matches_snapshot(receipt)
 
-    def test_logicguard_validation_toolchain_is_a_stable_snapshot(self) -> None:
+    def test_researchguard_logic_validation_toolchain_is_a_stable_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            live = root / "live" / "logicguard"
+            live = root / "live" / "researchguard"
             live.mkdir(parents=True)
             (live / "__init__.py").write_text(
                 "SCHEMA_VERSION = 'test'\n", encoding="utf-8"
             )
+            logic = live / "logic"
+            logic.mkdir()
+            (logic / "__init__.py").write_text(
+                "SCHEMA_VERSION = 'researchguard.logic.model-store.v1'\n",
+                encoding="utf-8",
+            )
             (live / "engine.py").write_text("VALUE = 1\n", encoding="utf-8")
-            destination = root / "receipts" / "python" / "logicguard"
+            destination = root / "receipts" / "python" / "researchguard"
             with patch.dict(
                 os.environ,
                 {
-                    "KHAOS_BRAIN_LOGICGUARD_VALIDATION_ROOT": "",
-                    "KHAOS_BRAIN_LOGICGUARD_VALIDATION_DIGEST": "",
+                    "KHAOS_BRAIN_RESEARCHGUARD_LOGIC_VALIDATION_ROOT": "",
+                    "KHAOS_BRAIN_RESEARCHGUARD_LOGIC_VALIDATION_DIGEST": "",
                 },
             ):
-                receipt = _freeze_logicguard_validation_toolchain(
+                receipt = _freeze_researchguard_logic_validation_toolchain(
                     destination, source_root=live
                 )
             self.assertEqual(receipt["status"], "frozen")
@@ -650,15 +677,15 @@ class CodexInstallTests(unittest.TestCase):
             shutil.rmtree(live)
             self.assertTrue((destination / "__init__.py").is_file())
             with self.assertRaisesRegex(RuntimeError, "identity changed"):
-                _require_live_logicguard_matches_snapshot(receipt)
+                _require_live_researchguard_logic_matches_snapshot(receipt)
 
     def test_pre_restore_assurance_keeps_baseline_install_identity_environment(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             flowguard_root = root / "validation" / "python" / "flowguard"
             flowguard_root.mkdir(parents=True)
-            logicguard_root = root / "validation" / "python" / "logicguard"
-            logicguard_root.mkdir(parents=True)
+            researchguard_root = root / "validation" / "python" / "researchguard"
+            researchguard_root.mkdir(parents=True)
             baseline_pythonpath = str(root / "baseline-pythonpath")
             injected_pythonpath = os.pathsep.join(
                 (str(flowguard_root.parent), baseline_pythonpath)
@@ -689,8 +716,8 @@ class CodexInstallTests(unittest.TestCase):
                         "snapshot_root": str(flowguard_root),
                         "manifest": {"digest": "F" * 64},
                     },
-                    logicguard_validation_toolchain={
-                        "snapshot_root": str(logicguard_root),
+                    researchguard_logic_validation_toolchain={
+                        "snapshot_root": str(researchguard_root),
                         "manifest": {"digest": "L" * 64},
                     },
                 )
@@ -699,11 +726,15 @@ class CodexInstallTests(unittest.TestCase):
             environment = captured["environment"]
             self.assertEqual(environment["PYTHONPATH"], injected_pythonpath)
             self.assertEqual(
-                environment["KHAOS_BRAIN_LOGICGUARD_VALIDATION_ROOT"],
-                str(logicguard_root),
+                environment[
+                    "KHAOS_BRAIN_RESEARCHGUARD_LOGIC_VALIDATION_ROOT"
+                ],
+                str(researchguard_root),
             )
             self.assertEqual(
-                environment["KHAOS_BRAIN_LOGICGUARD_VALIDATION_DIGEST"],
+                environment[
+                    "KHAOS_BRAIN_RESEARCHGUARD_LOGIC_VALIDATION_DIGEST"
+                ],
                 "L" * 64,
             )
             self.assertEqual(
@@ -724,8 +755,8 @@ class CodexInstallTests(unittest.TestCase):
             root = Path(tmp)
             flowguard_root = root / "validation" / "python" / "flowguard"
             flowguard_root.mkdir(parents=True)
-            logicguard_root = root / "validation" / "python" / "logicguard"
-            logicguard_root.mkdir(parents=True)
+            researchguard_root = root / "validation" / "python" / "researchguard"
+            researchguard_root.mkdir(parents=True)
             payload = {
                 "ok": False,
                 "failed_checks": ["full_regression"],
@@ -790,8 +821,8 @@ class CodexInstallTests(unittest.TestCase):
                             "snapshot_root": str(flowguard_root),
                             "manifest": {"digest": "F" * 64},
                         },
-                        logicguard_validation_toolchain={
-                            "snapshot_root": str(logicguard_root),
+                        researchguard_logic_validation_toolchain={
+                            "snapshot_root": str(researchguard_root),
                             "manifest": {"digest": "L" * 64},
                         },
                     )
@@ -810,8 +841,8 @@ class CodexInstallTests(unittest.TestCase):
             root = Path(tmp)
             flowguard_root = root / "validation" / "python" / "flowguard"
             flowguard_root.mkdir(parents=True)
-            logicguard_root = root / "validation" / "python" / "logicguard"
-            logicguard_root.mkdir(parents=True)
+            researchguard_root = root / "validation" / "python" / "researchguard"
+            researchguard_root.mkdir(parents=True)
             payload = {
                 "ok": False,
                 "failed_checks": ["model_code_test_alignment"],
@@ -860,8 +891,8 @@ class CodexInstallTests(unittest.TestCase):
                         "snapshot_root": str(flowguard_root),
                         "manifest": {"digest": "F" * 64},
                     },
-                    logicguard_validation_toolchain={
-                        "snapshot_root": str(logicguard_root),
+                    researchguard_logic_validation_toolchain={
+                        "snapshot_root": str(researchguard_root),
                         "manifest": {"digest": "L" * 64},
                     },
                 )
@@ -1001,9 +1032,43 @@ class CodexInstallTests(unittest.TestCase):
             self.assertTrue(check["ok"], check["issues"])
             checklist = {item["id"]: item for item in check["checklist"]}
             self.assertTrue(checklist["retired_managed_surfaces"]["ok"])
+            self.assertTrue(
+                checklist["retired_standalone_logicguard_absent"]["ok"]
+            )
             self.assertTrue(checklist["transactional_install_receipt"]["ok"])
             self.assertTrue(checklist["repo_maintenance_skills"]["ok"])
             self.assertTrue(checklist["khaos_brain_system_update_retired"]["ok"])
+
+            with patch(
+                "local_kb.logicguard_models.retired_standalone_logicguard_residuals",
+                return_value={
+                    "schema_version": (
+                        "khaos-brain.retired-standalone-logicguard-residuals.v1"
+                    ),
+                    "ok": False,
+                    "distribution": {
+                        "present": True,
+                        "version": "0.18.0",
+                    },
+                    "import_resolution": {"present": True},
+                    "runtime_modules": ["logicguard"],
+                    "issues": [
+                        "retired standalone LogicGuard distribution is installed",
+                        "retired standalone LogicGuard import origin is resolvable",
+                        "retired standalone LogicGuard modules are loaded",
+                    ],
+                },
+            ):
+                blocked = build_installation_check(repo_root, codex_home)
+            self.assertFalse(blocked["ok"])
+            blocked_checklist = {
+                item["id"]: item for item in blocked["checklist"]
+            }
+            self.assertFalse(
+                blocked_checklist[
+                    "retired_standalone_logicguard_absent"
+                ]["ok"]
+            )
 
     def test_reinstall_preserves_pause_state_for_every_surviving_automation(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]

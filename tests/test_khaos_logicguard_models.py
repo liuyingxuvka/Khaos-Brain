@@ -2,29 +2,33 @@ from __future__ import annotations
 
 import copy
 import tempfile
+from types import SimpleNamespace
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from logicguard import MeshNodeOverride, MeshSimulationDelta, QualifiedNodeRef
-from logicguard.model_store import TransactionConflictError
+from local_kb import logicguard_models as logicguard_models_module
+from researchguard.logic import MeshNodeOverride, MeshSimulationDelta, QualifiedNodeRef
+from researchguard.logic.model_store import TransactionConflictError
 
 from local_kb.logicguard_models import (
     AuthorityScopeError,
     ExactBindingError,
     GroundedModelRelation,
     LogicGuardBinding,
-    MIN_LOGICGUARD_VERSION,
+    MIN_RESEARCHGUARD_VERSION,
     UngroundedRelationshipError,
     build_predictive_argument_model,
     canonical_digest,
     commit_card_model,
     commit_scope_mesh,
-    logicguard_dependency_preflight,
+    researchguard_logic_dependency_preflight,
     materialize_bound_neighborhood,
     model_id_for_card,
     model_store_root,
     open_model_store,
     read_exact_model,
+    retired_standalone_logicguard_residuals,
     simulate_bound_mesh,
 )
 
@@ -70,17 +74,103 @@ def grounding(label: str) -> dict:
 
 
 class KhaosLogicGuardModelsTests(unittest.TestCase):
-    def test_dependency_preflight_binds_real_current_logicguard(self) -> None:
-        result = logicguard_dependency_preflight()
+    def test_dependency_preflight_binds_real_current_researchguard_logic(self) -> None:
+        result = researchguard_logic_dependency_preflight()
         self.assertTrue(result["ok"])
         self.assertGreaterEqual(
             tuple(int(item) for item in result["version"].split(".")),
-            tuple(int(item) for item in MIN_LOGICGUARD_VERSION.split(".")),
+            tuple(int(item) for item in MIN_RESEARCHGUARD_VERSION.split(".")),
         )
-        self.assertEqual(Path(result["origin"]).parts[-2:], ("logicguard", "__init__.py"))
-        self.assertEqual(result["model_store_schema"], "logicguard.model-store.v1")
-        self.assertEqual(result["mesh_schema"], "logicguard.model-mesh.v1")
+        self.assertEqual(
+            Path(result["origin"]).parts[-2:],
+            ("logic", "__init__.py"),
+        )
+        self.assertEqual(
+            result["model_store_schema"],
+            "researchguard.logic.model-store.v1",
+        )
+        self.assertEqual(
+            result["mesh_schema"],
+            "researchguard.logic.model-mesh.v1",
+        )
         self.assertTrue(result["mesh_store_tool_fingerprint"].startswith("sha256:"))
+
+    def test_retired_standalone_logicguard_absence_is_proven_without_importing_it(
+        self,
+    ) -> None:
+        with (
+            patch.object(
+                logicguard_models_module.importlib_metadata,
+                "distribution",
+                side_effect=(
+                    logicguard_models_module.importlib_metadata.PackageNotFoundError
+                ),
+            ),
+            patch.object(
+                logicguard_models_module.importlib_util,
+                "find_spec",
+                return_value=None,
+            ),
+            patch.object(
+                logicguard_models_module,
+                "sys",
+                SimpleNamespace(modules={}),
+            ),
+        ):
+            result = retired_standalone_logicguard_residuals()
+
+        self.assertTrue(result["ok"])
+        self.assertFalse(result["distribution"]["present"])
+        self.assertFalse(result["import_resolution"]["present"])
+        self.assertEqual(result["runtime_modules"], [])
+
+    def test_retired_standalone_logicguard_any_residual_blocks_currentness(
+        self,
+    ) -> None:
+        distribution = SimpleNamespace(
+            version="0.18.0",
+            read_text=lambda _name: (
+                '{"url":"file:///C:/legacy-logicguard",'
+                '"dir_info":{"editable":true}}'
+            ),
+            locate_file=lambda _name: Path("C:/legacy-logicguard"),
+        )
+        import_spec = SimpleNamespace(
+            origin="C:/legacy-logicguard/logicguard/__init__.py",
+            submodule_search_locations=["C:/legacy-logicguard/logicguard"],
+        )
+        with (
+            patch.object(
+                logicguard_models_module.importlib_metadata,
+                "distribution",
+                return_value=distribution,
+            ),
+            patch.object(
+                logicguard_models_module.importlib_util,
+                "find_spec",
+                return_value=import_spec,
+            ),
+            patch.object(
+                logicguard_models_module,
+                "sys",
+                SimpleNamespace(
+                    modules={
+                        "logicguard": object(),
+                        "logicguard.model_store": object(),
+                    }
+                ),
+            ),
+        ):
+            result = retired_standalone_logicguard_residuals()
+
+        self.assertFalse(result["ok"])
+        self.assertTrue(result["distribution"]["present"])
+        self.assertTrue(result["import_resolution"]["present"])
+        self.assertEqual(
+            result["runtime_modules"],
+            ["logicguard", "logicguard.model_store"],
+        )
+        self.assertEqual(len(result["issues"]), 3)
 
     def test_argument_block_is_deterministic_and_missing_roles_are_explicit(self) -> None:
         source = card("model-a")

@@ -116,7 +116,9 @@ class SoftwareUpdateStateTests(unittest.TestCase):
             "history_migration": {
                 "ok": True,
                 "status": "current",
-                "migration_id": "kb-maintenance-standard-v4-logicguard-native",
+                "migration_id": (
+                    "kb-maintenance-standard-v5-researchguard-logic-native"
+                ),
                 "validation": {
                     "ok": True,
                     "residual_managed_file_count": 0,

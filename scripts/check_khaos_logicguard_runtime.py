@@ -17,7 +17,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from local_kb.logicguard_models import (  # noqa: E402
-    logicguard_dependency_preflight,
+    researchguard_logic_dependency_preflight,
     read_bound_argument_context,
 )
 from local_kb.maintenance_migration import validate_logicguard_native_authority  # noqa: E402
@@ -50,7 +50,10 @@ def _timed(call: Callable[[], Any]) -> tuple[Any, float]:
 def build_report(repo_root: Path = REPO_ROOT) -> dict[str, Any]:
     root = Path(repo_root).resolve()
     issues: list[str] = []
-    dependency = logicguard_dependency_preflight(strict=False)
+    dependency = researchguard_logic_dependency_preflight(
+        strict=False,
+        require_no_retired_standalone=True,
+    )
     if not dependency.get("ok"):
         issues.extend(f"dependency:{item}" for item in dependency.get("issues", []))
 

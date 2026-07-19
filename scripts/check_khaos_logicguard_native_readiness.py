@@ -60,9 +60,9 @@ _VALIDATION_TOOLCHAINS = (
         True,
     ),
     (
-        "logicguard_validation_toolchain",
-        "KHAOS_BRAIN_LOGICGUARD_VALIDATION_ROOT",
-        "KHAOS_BRAIN_LOGICGUARD_VALIDATION_DIGEST",
+        "researchguard_logic_validation_toolchain",
+        "KHAOS_BRAIN_RESEARCHGUARD_LOGIC_VALIDATION_ROOT",
+        "KHAOS_BRAIN_RESEARCHGUARD_LOGIC_VALIDATION_DIGEST",
         True,
     ),
 )
@@ -75,7 +75,7 @@ _INSTALLATION_IDENTITY_PYTHONPATH_VALUE_ENV = (
 def _configure_completed_install_toolchains(codex_home: Path) -> dict[str, Any]:
     """Bind standalone readiness to the successful install's frozen tools.
 
-    The installer freezes immutable FlowGuard and LogicGuard identities. A
+    The installer freezes immutable FlowGuard and ResearchGuard logic identities. A
     later standalone final-owner invocation must use those same bytes instead
     of resolving whichever packages happen to be on the ambient Python path.
     """

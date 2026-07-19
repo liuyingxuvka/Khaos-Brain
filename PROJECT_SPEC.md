@@ -1223,13 +1223,25 @@ automation retains both its exact prior runtime status and independent
 `user_paused` value. Failed aggregate validation leaves all four survivors
 paused.
 
-The current FlowGuard and LogicGuard packages used by assurance keep exact
-content identities for the checks that consume them. Consumer runners keep
-their own command and interpreter identities. No installation or runtime path
-rediscovers, snapshots, installs, imports, verifies, or rewrites SkillGuard or
-its global router. A SkillGuard upgrade affects future author-side maintenance
-only; it cannot stale an already installed consumer Skill or one of that
-Skill's native receipts.
+The current FlowGuard package and the public ResearchGuard package used by
+assurance keep exact content identities for the checks that consume them.
+Khaos Brain binds only ResearchGuard's `researchguard.logic` member and its
+current model-store, ModelMesh, and tool fingerprints; the retired standalone
+LogicGuard distribution is not another dependency or authority. Consumer
+runners keep their own command and interpreter identities. No installation or
+runtime path rediscovers, snapshots, installs, imports, verifies, or rewrites
+SkillGuard or its global router. A SkillGuard upgrade affects future
+author-side maintenance only; it cannot stale an already installed consumer
+Skill or one of that Skill's native receipts.
+
+FlowGuard is likewise an external development and validation toolchain, not a
+Khaos consumer Skill distribution. This ordinary adopted project keeps its
+project record and Khaos-specific executable models, while Codex routes through
+the current global FlowGuard Skills and the checks execute one exact pinned
+FlowGuard Python package. The repository MUST NOT carry a FlowGuard shadow Skill
+suite, ownership manifest, project suite map, or compatibility verifier. An old
+shadow suite is removed only through its installer-owned exact hashes; Khaos
+project Skills are outside that disposition and remain independently usable.
 
 Aggregate assurance also separates resource owners. The repository-wide suite
 runs first, ordinary read-oriented children may then run in parallel,
@@ -1336,13 +1348,20 @@ receipt-covered regenerable caches, sandboxes, completed workspaces, duplicate
 snapshots, and other declared derivations. It is journaled, idempotent, resumable,
 rollbackable, writer-exclusive, and must publish before/after debt and storage
 accounting plus an atomic exact model/mesh/projection/index generation receipt.
-The migration is the only code allowed to read the exact retired card format.
-It converts every valid entry directly into the current LogicGuard authority,
-removes retired semantic fields, writes the generation pointer last, and proves
-zero legacy authority residuals. An incompatible residual blocks and rolls back;
-normal runtime never gains a compatibility reader.
+The migration is the only code allowed to read the exact retired card format or
+the retired `logicguard.model-store.v1` / `logicguard.model-mesh.v1` authority.
+Before mutation it inventories every authority artifact with file/byte counts,
+artifact-schema counts, and a whole-tree content digest. It then rebuilds every
+valid current projection directly into
+`researchguard.logic.model-store.v1` /
+`researchguard.logic.model-mesh.v1`, removes the retired authority only inside
+the rollbackable transaction, writes the generation pointer last, records a
+second complete inventory, and proves zero retired-schema residuals. A source
+or inventory change invalidates the frozen plan. Any failure restores the exact
+pre-cutover authority digest; an incompatible residual blocks and rolls back,
+and normal runtime never gains a compatibility reader.
 
-Maintenance standard v3 treats the managed physical surface as a convergent
+Maintenance standard v4 treats the managed physical surface as a convergent
 boundary, not a one-time scan. Validation rescans it after long integrity work;
 late or post-commit reintroduction of old caches, sandboxes, or workspaces
 reopens the gate and runs stable receipt-backed reconciliation passes until the
@@ -1425,7 +1444,9 @@ sequence. A later change must preserve this ownership order.
 
 ### Phase 1 — Build exact argument models
 
-1. Bind the real installed LogicGuard package and fail visibly if unavailable.
+1. Bind the real installed public ResearchGuard package and its exact
+   `researchguard.logic` member; fail visibly if either identity, current schema,
+   public API, or required fingerprint is unavailable.
 2. Convert every admitted entry into a deterministic model revision with a root
    Claim, Context, Method, supported typed nodes, ArgumentBlock, and explicit gaps.
 3. Keep public, private, and candidate authority physically separated.

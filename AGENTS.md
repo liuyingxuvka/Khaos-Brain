@@ -123,10 +123,15 @@ https://github.com/liuyingxuvka/FlowGuard
 <!-- flowguard-rule:skill_suite.agent_surface -->
 
 FlowGuard agent skill suite:
-- Primary agent surface: `.agents/skills/`
-- Default entry skill: `.agents/skills/model-first-function-flow/SKILL.md`
+- Primary agent surface: the current clean consumer projection under
+  `$CODEX_HOME/skills/`
+- Default entry skill: `$CODEX_HOME/skills/flowguard/SKILL.md`
 - Complete AI-agent setup means the agent can read `AGENTS.md` and all
-  FlowGuard sibling `SKILL.md` files under `.agents/skills/`.
+  FlowGuard sibling `SKILL.md` files under `$CODEX_HOME/skills/`.
+- An ordinary target project does not copy the FlowGuard suite into its local
+  `.agents/skills/` tree and does not own the canonical suite map.
+- Project audit and upgrade verify the package-owned clean-consumer authority
+  directly against that global projection and its ownership manifest.
 - The Python `flowguard` module/CLI is executable check support, not the
   AI-agent skill installation surface.
 
@@ -140,7 +145,7 @@ Project FlowGuard record:
 <!-- flowguard-rule:project.rendered_versions -->
 
 Current adoption record:
-- FlowGuard check-engine version: `0.57.0`
+- FlowGuard check-engine version: `0.58.4`
 - FlowGuard schema version: `1.0`
 
 <!-- flowguard-rule:project.preflight_version_gate -->
@@ -279,15 +284,14 @@ the decision. TestMesh owns diagnostic accounting; relation-backed repair
 groups use ordinary primary-owner evidence and affected revalidation.
 Estimated comparison may support a preference, never a global optimum.
 
-<!-- flowguard-rule:process.spec_work_package_reconciliation -->
+<!-- flowguard-rule:process.spec_context_read_only -->
 
-When OpenSpec, Spec Kit, or another supported specification provider is in
-scope, keep provider tasks native and reconcile them bidirectionally with
-FlowGuard obligations/checks through one development-process Spec Work
-Package. Begin and close one immutable input session, reuse only exact terminal
-receipts within an explicit boundary, and block archive when mappings,
-post-snapshot evidence, provider verification, or receipt freshness is
-missing. Internal work-package fields never become product UI content.
+When official OpenSpec is in scope, FlowGuard may read only the current
+proposal, design, specifications, tasks, and task status as external planning
+context. FlowGuard must not write OpenSpec files, execute provider checks,
+create provider sessions/caches/receipts, claim provider execution ownership,
+or place provider-internal fields in product UI. OpenSpec retains validation
+and archive authority.
 
 <!-- flowguard-rule:process.post_change_scan -->
 

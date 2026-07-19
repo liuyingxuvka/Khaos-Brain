@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.6.5 - 2026-07-16
+## v0.6.5 - 2026-07-18
 
 - Retired the exact `Khaos Brain System Update` scheduled task. Fresh installs, upgrades, repairs, and repeated installs keep it absent while preserving the four scheduled Sleep, Dream, and organization automations.
 - Replaced the desktop update action with a read-only status for the exact configured Git upstream. The UI no longer writes authorization, enters a prepared state, or launches an updater.
@@ -15,6 +15,12 @@
 - Made active-task KB postflight one bounded append-and-receipt path: a caller-stable event ID is fsynced exactly once under the current writer lock, success requires one matching terminal receipt, and an interrupted event without that receipt is `timeout_unknown`. Lifecycle admission, candidate decisions, LogicGuard publication, and index rebuild remain Sleep-owned; the foreground route performs no synchronous lifecycle replay and has no alternate or fallback path.
 - Bound the committed lightweight install state to the final upgrade attempt by exact `attempt_id` and `receipt_hash`. The independent installation check now replays that binding after the installer exits, so an in-memory green check cannot hide a missing or stale durable attempt identity.
 - Streamed full lifecycle replay over the canonical JSONL ledger while preserving the exact event digest, avoiding a second in-memory copy of large event histories. Current-machine activation now restores all four automations to `PAUSED` after any apply, install-check, or receipt-validation exception, including memory exhaustion, so an unreceipted `ACTIVE` state can never close successfully. Its receipt binds a deterministic installation-authority projection while keeping full migration diagnostics as a separate required pass, so volatile diagnostics cannot invalidate an otherwise identical current installation.
+- Direct-migrated the runtime dependency from the retired standalone LogicGuard package to the public ResearchGuard v0.1.1 exact source identity. Khaos Brain imports only `researchguard.logic`; CI needs no private repository, SSH deploy key, alias, compatibility import, or alternate dependency route.
+- Added a rollbackable maintenance-standard-v5 authority cutover that inventories and hashes every retired `logicguard.model-store.v1` / `logicguard.model-mesh.v1` artifact, rebuilds all current projections into `researchguard.logic.model-store.v1` / `researchguard.logic.model-mesh.v1`, records before/after counts and digests, and requires zero retired-schema residuals. A failure at any model/mesh, projection, index, or pointer boundary restores the exact pre-cutover authority.
+- Removed the repository-local 17-member FlowGuard shadow Skill suite through its exact ownership manifest (135 unchanged owned files, zero conflicts), retired the compatibility verifier and suite-control paths, and preserved every Khaos-owned project Skill. Khaos remains an ordinary FlowGuard-adopted project that uses one pinned external package and the current global Codex Skill surface.
+- Development and CI model assurance now pin the same public FlowGuard v0.58.4 commit used by the final local readiness owner.
+- Kept the Khaos-owned retrieval evaluation fixture on its sole integer `schema_version: 1` contract and made the evaluator reject strings, floats, booleans, or other compatibility coercions. FlowGuard project adoption may update FlowGuard-owned records but cannot rewrite this target-owned artifact.
+- Direct-migrated the FlowGuard behavior ledger to the exact v0.58.4 canonical envelope by removing retired per-path migration markers; the ledger has one current parser and no compatibility fields or alternate authority.
 
 ## v0.6.4 - 2026-07-16
 

@@ -48,7 +48,7 @@ from local_kb.logicguard_models import (
     commit_scope_mesh,
     json_safe,
     load_authority_generation,
-    logicguard_dependency_preflight,
+    researchguard_logic_dependency_preflight,
     mesh_id_for_scope,
     model_id_for_card,
     open_mesh_store,
@@ -71,7 +71,7 @@ from local_kb.store import history_events_path, load_yaml_file, write_yaml_file
 
 
 MIGRATION_SCHEMA_VERSION = 1
-MIGRATION_ID = "kb-maintenance-standard-v4-logicguard-native"
+MIGRATION_ID = "kb-maintenance-standard-v5-researchguard-logic-native"
 MIGRATION_PHASES = (
     "preflight",
     "snapshot",
@@ -90,15 +90,28 @@ COLD_ROOT = Path("kb") / "history" / "cold"
 MIGRATION_LOCK_SCHEMA_VERSION = "khaos-brain.migration-lock.v1"
 MIGRATION_LOCK_HEARTBEAT_SECONDS = 1.0
 MIGRATION_LOCK_LEGACY_STALE_SECONDS = 30.0
-MODEL_AUTHORITY_MIGRATION_SCHEMA = "khaos-brain.logicguard-authority-migration.v1"
-MODEL_AUTHORITY_RECEIPT_NAME = "logicguard-authority-receipt.json"
+MODEL_AUTHORITY_MIGRATION_SCHEMA = (
+    "khaos-brain.researchguard-logic-authority-migration.v1"
+)
+MODEL_AUTHORITY_RECEIPT_NAME = "researchguard-logic-authority-receipt.json"
 CURRENT_PROJECTION_BOOTSTRAP_DISPOSITION = "direct-current-projection-bootstrap"
+RESEARCHGUARD_LOGIC_SCHEMA_CUTOVER_DISPOSITION = (
+    "direct-current-projection-to-researchguard-logic-model"
+)
 INCOMPATIBLE_CURRENT_PROJECTION_DISPOSITION = (
     "blocked-upgrade-ai-current-projection-authority"
 )
 UPGRADE_AI_DISPOSITION_SCHEMA = "khaos-brain.upgrade-ai-dispositions.v1"
 UPGRADE_AI_DIRECT_CURRENT_ACTION = (
     "direct-current-projection-to-logicguard-model"
+)
+LEGACY_LOGICGUARD_SCHEMA_PREFIX = b"logicguard.model-"
+RESEARCHGUARD_LOGIC_SCHEMA_PREFIX = b"researchguard.logic.model-"
+RESEARCHGUARD_LOGIC_MODEL_STORE_SCHEMA = (
+    "researchguard.logic.model-store.v1"
+)
+RESEARCHGUARD_LOGIC_MODEL_MESH_SCHEMA = (
+    "researchguard.logic.model-mesh.v1"
 )
 
 MANAGED_DIRECTORY_ROOTS = (
@@ -290,6 +303,74 @@ def _sha256_file(path: Path, *, chunk_size: int = 1024 * 1024) -> str:
                 break
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def authority_schema_inventory(repo_root: Path) -> dict[str, Any]:
+    """Hash every authority artifact and count old/current schema identities.
+
+    This is the version-owned upgrade inventory. Normal runtime does not use it
+    as a compatibility reader.
+    """
+
+    root = Path(repo_root).resolve()
+    target = authority_root(root)
+    rows: list[tuple[str, int, str]] = []
+    scopes: dict[str, dict[str, int]] = {}
+    artifact_schema_counts: dict[str, int] = {}
+    legacy_schema_file_count = 0
+    legacy_schema_occurrence_count = 0
+    current_schema_file_count = 0
+    current_schema_occurrence_count = 0
+    total_bytes = 0
+    if target.is_dir():
+        for path in sorted(item for item in target.rglob("*") if item.is_file()):
+            relative = path.relative_to(target).as_posix()
+            data = path.read_bytes()
+            size = len(data)
+            digest = hashlib.sha256(data).hexdigest()
+            legacy_count = data.count(LEGACY_LOGICGUARD_SCHEMA_PREFIX)
+            current_count = data.count(RESEARCHGUARD_LOGIC_SCHEMA_PREFIX)
+            legacy_schema_file_count += int(legacy_count > 0)
+            legacy_schema_occurrence_count += legacy_count
+            current_schema_file_count += int(current_count > 0)
+            current_schema_occurrence_count += current_count
+            scope = relative.split("/", 1)[0] if "/" in relative else "<root>"
+            scope_row = scopes.setdefault(scope, {"file_count": 0, "byte_count": 0})
+            scope_row["file_count"] += 1
+            scope_row["byte_count"] += size
+            total_bytes += size
+            if path.suffix.lower() == ".json":
+                try:
+                    payload = json.loads(data)
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    payload = {}
+                if isinstance(payload, Mapping):
+                    artifact_schema = str(payload.get("artifact_schema") or "")
+                    if artifact_schema:
+                        artifact_schema_counts[artifact_schema] = (
+                            artifact_schema_counts.get(artifact_schema, 0) + 1
+                        )
+            rows.append((relative, size, digest))
+    inventory = hashlib.sha256()
+    for relative, size, digest in rows:
+        inventory.update(f"{relative}\0{size}\0{digest}\n".encode("utf-8"))
+    return {
+        "schema_version": "khaos-brain.authority-schema-inventory.v1",
+        "authority_root": str(target),
+        "file_count": len(rows),
+        "byte_count": total_bytes,
+        "inventory_digest": "sha256:" + inventory.hexdigest(),
+        "scopes": scopes,
+        "artifact_schema_counts": dict(sorted(artifact_schema_counts.items())),
+        "legacy_schema_file_count": legacy_schema_file_count,
+        "legacy_schema_occurrence_count": legacy_schema_occurrence_count,
+        "current_schema_file_count": current_schema_file_count,
+        "current_schema_occurrence_count": current_schema_occurrence_count,
+        "cutover_required": legacy_schema_occurrence_count > 0,
+        "mixed_schema": bool(
+            legacy_schema_occurrence_count and current_schema_occurrence_count
+        ),
+    }
 
 
 def _path_within(path: Path, parent: Path) -> bool:
@@ -2413,9 +2494,18 @@ def plan_logicguard_native_migration(repo_root: Path) -> dict[str, Any]:
     """Inventory every managed card through the sole versioned legacy reader."""
 
     root = Path(repo_root).resolve()
-    toolchain = logicguard_dependency_preflight()
+    toolchain = researchguard_logic_dependency_preflight()
+    authority_schema_before = authority_schema_inventory(root)
     rows: list[dict[str, Any]] = []
     issues: list[str] = []
+    schema_cutover_required = bool(
+        authority_schema_before.get("cutover_required")
+    )
+    if authority_schema_before.get("mixed_schema"):
+        issues.append(
+            "authority contains mixed legacy LogicGuard and current "
+            "ResearchGuard logic schemas"
+        )
     upgrade_ai_dispositions, disposition_registry_issues = (
         _load_upgrade_ai_dispositions(root)
     )
@@ -2465,7 +2555,45 @@ def plan_logicguard_native_migration(repo_root: Path) -> dict[str, Any]:
             except (ProjectionValidationError, ExactBindingError, ValueError) as exc:
                 issues.append(f"{relative}: invalid current projection: {exc}")
                 continue
-            if projection_bootstrap_allowed:
+            active_scope_mesh = (
+                active_authority_generation.get("scope_meshes", {}).get(
+                    scope, {}
+                )
+                if isinstance(
+                    active_authority_generation.get("scope_meshes"), Mapping
+                )
+                else {}
+            )
+            pointer_authorizes_exact_mesh = bool(
+                isinstance(active_scope_mesh, Mapping)
+                and str(active_scope_mesh.get("mesh_id") or "")
+                == binding.mesh_id
+                and str(active_scope_mesh.get("mesh_revision_id") or "")
+                == binding.mesh_revision_id
+            )
+            if schema_cutover_required:
+                if (
+                    not active_generation_id
+                    or prior_generation_id != active_generation_id
+                    or not pointer_authorizes_exact_mesh
+                ):
+                    issues.append(
+                        f"{relative}: legacy schema projection is not bound "
+                        "to the exact active authority pointer"
+                    )
+                    continue
+                semantic_payload = _current_projection_bootstrap_semantics(data)
+                if not _logicguard_migratable(semantic_payload):
+                    issues.append(
+                        f"{relative}: current projection lacks the "
+                        "action/prediction required for direct ResearchGuard "
+                        "logic schema cutover"
+                    )
+                    continue
+                disposition = RESEARCHGUARD_LOGIC_SCHEMA_CUTOVER_DISPOSITION
+                binding_payload = {}
+                source_digest = "sha256:" + canonical_digest(semantic_payload)
+            elif projection_bootstrap_allowed:
                 semantic_payload = _current_projection_bootstrap_semantics(data)
                 if not _logicguard_migratable(semantic_payload):
                     issues.append(
@@ -2475,20 +2603,9 @@ def plan_logicguard_native_migration(repo_root: Path) -> dict[str, Any]:
                 disposition = CURRENT_PROJECTION_BOOTSTRAP_DISPOSITION
                 binding_payload = {}
                 source_digest = "sha256:" + canonical_digest(semantic_payload)
-            else:
-                active_scope_mesh = (
-                    active_authority_generation.get("scope_meshes", {}).get(scope, {})
-                    if isinstance(active_authority_generation.get("scope_meshes"), Mapping)
-                    else {}
-                )
-                pointer_authorizes_exact_mesh = bool(
-                    isinstance(active_scope_mesh, Mapping)
-                    and str(active_scope_mesh.get("mesh_id") or "") == binding.mesh_id
-                    and str(active_scope_mesh.get("mesh_revision_id") or "")
-                    == binding.mesh_revision_id
-                )
             if (
-                not projection_bootstrap_allowed
+                not schema_cutover_required
+                and not projection_bootstrap_allowed
                 and active_generation_id
                 and prior_generation_id != active_generation_id
                 and not pointer_authorizes_exact_mesh
@@ -2539,7 +2656,10 @@ def plan_logicguard_native_migration(repo_root: Path) -> dict[str, Any]:
                         binding_payload = {}
                         source_digest = "sha256:" + canonical_digest(semantic_payload)
                         applied_upgrade_ai_dispositions.append(dict(approved))
-            elif not projection_bootstrap_allowed:
+            elif (
+                not schema_cutover_required
+                and not projection_bootstrap_allowed
+            ):
                 disposition = "reuse-current-exact-model"
                 binding_payload = binding.to_dict()
         else:
@@ -2623,8 +2743,17 @@ def plan_logicguard_native_migration(repo_root: Path) -> dict[str, Any]:
             }
             for row in rows
         ],
-        "logicguard_version": toolchain["version"],
-        "logicguard_mesh_store_tool_fingerprint": toolchain["mesh_store_tool_fingerprint"],
+        "researchguard_version": toolchain["version"],
+        "researchguard_logic_model_store_schema": toolchain[
+            "model_store_schema"
+        ],
+        "researchguard_logic_model_mesh_schema": toolchain["mesh_schema"],
+        "researchguard_logic_mesh_store_tool_fingerprint": toolchain[
+            "mesh_store_tool_fingerprint"
+        ],
+        "authority_schema_before_digest": authority_schema_before[
+            "inventory_digest"
+        ],
         "builder_inputs": builder_inputs,
     }
     input_digest = "sha256:" + canonical_digest(identity_payload)
@@ -2644,6 +2773,12 @@ def plan_logicguard_native_migration(repo_root: Path) -> dict[str, Any]:
         "bootstrap_projection_count": sum(
             row["disposition"] == CURRENT_PROJECTION_BOOTSTRAP_DISPOSITION for row in rows
         ),
+        "schema_cutover_required": schema_cutover_required,
+        "schema_cutover_card_count": sum(
+            row["disposition"]
+            == RESEARCHGUARD_LOGIC_SCHEMA_CUTOVER_DISPOSITION
+            for row in rows
+        ),
         "upgrade_ai_work_item_count": len(upgrade_ai_work_items),
         "upgrade_ai_work_items": upgrade_ai_work_items,
         "applied_upgrade_ai_disposition_count": len(
@@ -2657,6 +2792,7 @@ def plan_logicguard_native_migration(repo_root: Path) -> dict[str, Any]:
         "current_only": current_only,
         "rows": rows,
         "toolchain": toolchain,
+        "authority_schema_before": authority_schema_before,
         "builder_inputs": builder_inputs,
         "issues": issues,
         "claim_boundary": (
@@ -2684,7 +2820,12 @@ def migrate_cards_to_models(
 
     read_stores = {
         scope: open_pinned_model_read_store(root, scope)[0]
-        for scope in rows_by_scope
+        for scope, scope_rows in rows_by_scope.items()
+        if any(
+            row.get("disposition")
+            != RESEARCHGUARD_LOGIC_SCHEMA_CUTOVER_DISPOSITION
+            for row in scope_rows
+        )
     }
     write_stores: dict[str, Any] = {}
     canonical_head_reuse_count = 0
@@ -2693,7 +2834,31 @@ def migrate_cards_to_models(
         path = root / str(row.get("path") or "")
         scope = str(row.get("scope") or "")
         data = load_yaml_file(path)
-        if row.get("disposition") == "reuse-current-exact-model":
+        if (
+            row.get("disposition")
+            == RESEARCHGUARD_LOGIC_SCHEMA_CUTOVER_DISPOSITION
+        ):
+            model_input = _current_projection_bootstrap_semantics(data)
+            model_store = write_stores.get(scope)
+            if model_store is None:
+                model_store = open_model_store(root, scope)
+                write_stores[scope] = model_store
+            committed = commit_card_model(
+                root,
+                model_input,
+                authority_scope=scope,
+                expected_revision=None,
+                idempotency_key=(
+                    f"{generation_id}:researchguard-logic-model:"
+                    f"{scope}:{data.get('id')}"
+                ),
+                actor=actor,
+                source_reference=str(row.get("path") or ""),
+                model_store=model_store,
+            )
+            binding = committed.binding
+            receipt = committed.receipt
+        elif row.get("disposition") == "reuse-current-exact-model":
             if not row.get("projection_validation", {}).get("ok"):
                 raise RuntimeError(
                     f"Current projection {row.get('card_id') or row.get('path')} lacks exact plan validation"
@@ -2753,6 +2918,12 @@ def migrate_cards_to_models(
         "ok": True,
         "generation_id": generation_id,
         "card_count": len(output_rows),
+        "schema_cutover_required": bool(
+            plan.get("schema_cutover_required")
+        ),
+        "authority_schema_before": dict(
+            plan.get("authority_schema_before") or {}
+        ),
         "canonical_head_reuse_count": canonical_head_reuse_count,
         "new_model_commit_count": len(output_rows) - canonical_head_reuse_count - sum(
             1 for row in output_rows if row.get("disposition") == "reuse-current-exact-model"
@@ -2882,7 +3053,10 @@ def commit_logicguard_native_generation(
     )
     if fail_after_phase == "pointer":
         raise RuntimeError("Injected failure after pointer")
-    validation = validate_logicguard_native_authority(root)
+    validation = validate_logicguard_native_authority(
+        root,
+        require_full_schema_inventory=True,
+    )
     if not validation.get("ok"):
         raise RuntimeError(
             "LogicGuard-native authority validation failed: "
@@ -2901,6 +3075,12 @@ def commit_logicguard_native_generation(
         "authority_generation": published,
         "active_index": index_receipt,
         "validation": validation,
+        "authority_schema_before": dict(
+            model_stage.get("authority_schema_before") or {}
+        ),
+        "authority_schema_after": dict(
+            validation.get("authority_schema_inventory") or {}
+        ),
         "claim_boundary": (
             "This receipt proves direct model/mesh/projection/index generation publication and zero legacy-card "
             "authority residuals for the captured inventory. It does not establish factual truth."
@@ -2930,7 +3110,10 @@ def migrate_legacy_card_generation(
     if plan.get("current_only") and len(plan.get("current_generation_ids", [])) == 1:
         try:
             current = load_authority_generation(root)
-            validation = validate_logicguard_native_authority(root)
+            validation = validate_logicguard_native_authority(
+                root,
+                require_full_schema_inventory=True,
+            )
         except (ExactBindingError, ProjectionValidationError, ValueError):
             current = {}
             validation = {"ok": False}
@@ -2948,6 +3131,26 @@ def migrate_legacy_card_generation(
             }
     snapshot = dict(rollback_snapshot or _backup_active_surface(root))
     try:
+        if plan.get("schema_cutover_required"):
+            frozen_before = dict(plan.get("authority_schema_before") or {})
+            current_before = authority_schema_inventory(root)
+            if (
+                not int(
+                    current_before.get("legacy_schema_occurrence_count") or 0
+                )
+                or current_before.get("mixed_schema")
+                or str(current_before.get("inventory_digest") or "")
+                != str(frozen_before.get("inventory_digest") or "")
+                or int(current_before.get("file_count") or 0)
+                != int(frozen_before.get("file_count") or 0)
+            ):
+                raise RuntimeError(
+                    "Legacy authority changed after the direct schema-cutover "
+                    "inventory was frozen"
+                )
+            existing_authority = authority_root(root)
+            if existing_authority.is_dir():
+                shutil.rmtree(existing_authority)
         model_stage = migrate_cards_to_models(root, plan)
         result = commit_logicguard_native_generation(
             root,
@@ -2973,7 +3176,11 @@ def migrate_legacy_card_generation(
         }
 
 
-def validate_logicguard_native_authority(repo_root: Path) -> dict[str, Any]:
+def validate_logicguard_native_authority(
+    repo_root: Path,
+    *,
+    require_full_schema_inventory: bool = False,
+) -> dict[str, Any]:
     root = Path(repo_root).resolve()
     issues: list[str] = []
     try:
@@ -3030,6 +3237,21 @@ def validate_logicguard_native_authority(repo_root: Path) -> dict[str, Any]:
     active_index = validate_active_index(root)
     if not active_index.get("ok"):
         issues.extend(f"active-index: {item}" for item in active_index.get("issues", []))
+    schema_inventory: dict[str, Any] = {}
+    if require_full_schema_inventory:
+        schema_inventory = authority_schema_inventory(root)
+        if int(schema_inventory.get("legacy_schema_occurrence_count") or 0):
+            issues.append(
+                "legacy LogicGuard authority schema residuals remain after "
+                "ResearchGuard logic cutover"
+            )
+        if manifest and not int(
+            schema_inventory.get("current_schema_occurrence_count") or 0
+        ):
+            issues.append(
+                "ResearchGuard logic authority schema is absent from the "
+                "current model/mesh store"
+            )
     return {
         "ok": not issues,
         "generation_id": str(generation.get("generation_id") or ""),
@@ -3038,6 +3260,13 @@ def validate_logicguard_native_authority(repo_root: Path) -> dict[str, Any]:
         "projection_manifest_digest": manifest_digest,
         "scope_count": len(scopes_seen),
         "active_index": active_index,
+        "authority_schema_inventory": schema_inventory,
+        "zero_legacy_authority_schema_residuals": bool(
+            not schema_inventory
+            or not int(
+                schema_inventory.get("legacy_schema_occurrence_count") or 0
+            )
+        ),
         "zero_legacy_projection_residuals": not issues,
         "issues": issues,
     }
@@ -3046,7 +3275,10 @@ def validate_logicguard_native_authority(repo_root: Path) -> dict[str, Any]:
 def validate_migration(repo_root: Path) -> dict[str, Any]:
     lifecycle = validate_lifecycle(repo_root)
     active_index = validate_active_index(repo_root)
-    logicguard_authority = validate_logicguard_native_authority(repo_root)
+    logicguard_authority = validate_logicguard_native_authority(
+        repo_root,
+        require_full_schema_inventory=True,
+    )
     archive_integrity_issues: list[str] = []
     verified_archive_digests: set[str] = set()
     for item in _read_jsonl(archive_manifest_path(repo_root)):

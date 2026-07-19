@@ -135,9 +135,9 @@ For many teams, a private repository is already the simplest reliable backend fo
 
 ## Install And Check
 
-The Python dependency set pins the public [LogicGuard v0.18.0](https://github.com/liuyingxuvka/LogicGuard/releases/tag/v0.18.0) source commit that owns the required ModelStore and ModelMesh APIs. LogicGuard is installed from its official GitHub repository because it is not published on PyPI.
+The Python dependency set pins one exact public [ResearchGuard v0.1.1](https://github.com/liuyingxuvka/ResearchGuard/releases/tag/v0.1.1) source commit. Khaos Brain imports only its `researchguard.logic` member, which owns the required ModelStore and ModelMesh APIs and the current `researchguard.logic.model-store.v1` / `researchguard.logic.model-mesh.v1` schemas. The retired standalone LogicGuard package is neither installed nor consulted.
 
-Repository contributors and GitHub Actions use `requirements-dev.txt`, which additionally pins the public [FlowGuard v0.56.0](https://github.com/liuyingxuvka/FlowGuard/releases/tag/v0.56.0) source commit used by model-assurance tests. CI also uses the public SkillGuard source for author-side contract compilation and depth calibration and uses official OpenSpec 1.6.0 for specification verification. Neither tool is copied into Khaos Brain's installed consumer Skills or required by their normal execution. Each native runner uses the current Python identity recorded by its own command contract; a real interpreter change invalidates that runner's evidence.
+Repository contributors and GitHub Actions use `requirements-dev.txt`, which additionally pins the public [FlowGuard v0.58.4](https://github.com/liuyingxuvka/FlowGuard/releases/tag/v0.58.4) source commit used by model-assurance tests. ResearchGuard and FlowGuard both use one exact public HTTPS source identity; there is no SSH key, private dependency, mirror, alias, compatibility import, fallback, or alternate dependency path. Khaos Brain keeps its FlowGuard project record and executable models but does not vendor a FlowGuard shadow Skill suite, ownership manifest, suite map, or compatibility verifier; Codex uses the current global FlowGuard Skill surface. CI also uses the public SkillGuard source for author-side contract compilation and depth calibration and uses official OpenSpec 1.6.0 for specification verification. Neither tool is copied into Khaos Brain's installed consumer Skills or required by their normal execution. Each native runner uses the current Python identity recorded by its own command contract; a real interpreter change invalidates that runner's evidence.
 
 - **Visible:** cards can be opened directly; source, author, confidence, status, and skill dependencies are visible.
 - **Maintainable:** incremental Sleep, convergent Dream, system update, and organization maintenance treat memory as a living system.
@@ -354,9 +354,9 @@ Candidate Skills 不会自动安装。只有带 pinned version 和 content-hash 
 
 ## 安装和检查
 
-Python 依赖会固定到公开的 [LogicGuard v0.18.0](https://github.com/liuyingxuvka/LogicGuard/releases/tag/v0.18.0) 源码提交；ModelStore 和 ModelMesh 的当前公共 API 由这个版本提供。LogicGuard 尚未发布到 PyPI，因此从它的官方 GitHub 仓库安装。
+Python 依赖只固定到一个公开的 [ResearchGuard v0.1.1](https://github.com/liuyingxuvka/ResearchGuard/releases/tag/v0.1.1) 精确源码提交。Khaos Brain 只导入其中的 `researchguard.logic` 成员；当前 ModelStore、ModelMesh API 以及 `researchguard.logic.model-store.v1` / `researchguard.logic.model-mesh.v1` schema 都由它提供。已经退役的独立 LogicGuard 包既不安装，也不参与运行。
 
-仓库开发与 GitHub Actions 使用 `requirements-dev.txt`，其中额外固定了公开的 [FlowGuard v0.56.0](https://github.com/liuyingxuvka/FlowGuard/releases/tag/v0.56.0) 源码提交，用于模型保障测试。CI 也会使用公开的 SkillGuard 源码做作者侧合同编译与深度校准，并使用官方 OpenSpec 1.6.0 做规格验证。它们都不会被复制进 Khaos Brain 的消费者安装技能，也不是这些技能日常运行的依赖。每个原生运行器只服从自己的命令合同；解释器身份真正变化时，该运行器的证据会失效。
+仓库开发与 GitHub Actions 使用 `requirements-dev.txt`，其中额外固定了公开的 [FlowGuard v0.58.4](https://github.com/liuyingxuvka/FlowGuard/releases/tag/v0.58.4) 精确源码提交，用于模型保障测试。ResearchGuard 和 FlowGuard 都只走一个公开 HTTPS 身份；没有 SSH 密钥、私有依赖、镜像、别名、兼容导入、fallback 或第二依赖路径。Khaos Brain 只保留 FlowGuard 项目记录和本项目的可执行模型，不再内置 FlowGuard 影子 Skill 套件、ownership manifest、suite map 或兼容验证器；Codex 使用当前全局 FlowGuard Skill 入口。CI 也会使用公开的 SkillGuard 源码做作者侧合同编译与深度校准，并使用官方 OpenSpec 1.6.0 做规格验证。它们都不会被复制进 Khaos Brain 的消费者安装技能，也不是这些技能日常运行的依赖。每个原生运行器只服从自己的命令合同；解释器身份真正变化时，该运行器的证据会失效。
 
 对很多团队来说，private repository 已经是最简单可靠的 memory backend。
 

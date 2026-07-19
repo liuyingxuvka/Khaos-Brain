@@ -1749,7 +1749,7 @@ def _update_evidence(payload: Mapping[str, Any], exit_code: int) -> dict[str, di
         obligation_id(skill_id, "logicguard-authority-cutover"): _evidence(
             migration.get("ok") is True
             and str(migration.get("migration_id") or "")
-            == "kb-maintenance-standard-v4-logicguard-native"
+            == "kb-maintenance-standard-v5-researchguard-logic-native"
             and logicguard_authority.get("ok") is True
             and bool(str(logicguard_authority.get("generation_id") or "")),
             "The versioned update owner published and validated one exact current LogicGuard authority generation.",
@@ -2421,7 +2421,9 @@ def build_fixture_payload(
                 "history_migration": {
                     "ok": True,
                     "status": "current",
-                    "migration_id": "kb-maintenance-standard-v4-logicguard-native",
+                    "migration_id": (
+                        "kb-maintenance-standard-v5-researchguard-logic-native"
+                    ),
                     "validation": {
                         "ok": True,
                         "residual_managed_file_count": 0,

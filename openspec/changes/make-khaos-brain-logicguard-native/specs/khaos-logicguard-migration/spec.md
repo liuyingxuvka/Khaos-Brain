@@ -1,7 +1,14 @@
 ## ADDED Requirements
 
 ### Requirement: Legacy card authority is consumed only by a versioned direct migration
-The upgrade owner SHALL be the only code allowed to interpret managed pre-model YAML fields as semantic input. It SHALL migrate them directly to the current canonical LogicGuard model/mesh and projection schemas and SHALL leave no normal-runtime legacy reader, dual writer, alias, alternate launcher/model, or fallback path.
+The upgrade owner SHALL be the only code allowed to interpret managed
+pre-model YAML fields or retired `logicguard.model-store.v1` /
+`logicguard.model-mesh.v1` authority as migration input. It SHALL migrate them
+directly to the current canonical ResearchGuard logic
+`researchguard.logic.model-store.v1` /
+`researchguard.logic.model-mesh.v1` authority and current projection schema,
+and SHALL leave no normal-runtime legacy reader, dual writer, alias, alternate
+launcher/model, or fallback path.
 
 #### Scenario: Old machine upgrade
 - **WHEN** the installer detects managed cards without current exact model bindings
@@ -37,17 +44,39 @@ Migration SHALL acquire the declared managed-writer boundary, preserve unrelated
 - **WHEN** any migrated projection, exact binding, scope audit, zero-residual check, or active-index rebuild fails
 - **THEN** migration SHALL restore the prior complete generation, record the blocker, and keep all four retained automations paused
 
+### Requirement: Retired authority schemas cut over once with complete inventory evidence
+Before deleting or rebuilding retired store authority, migration SHALL hash
+every authority artifact and record file count, byte count, per-scope counts,
+artifact-schema counts, retired/current schema occurrence counts, and one
+deterministic whole-tree inventory digest. The frozen plan MUST bind that
+inventory and the exact ResearchGuard logic toolchain. Publication SHALL record
+the complete post-cutover inventory and require zero retired schema residuals.
+The versioned upgrade transaction is the only reader of the retired schemas;
+normal runtime MUST NOT gain a converter, dual reader, alias, or fallback.
+
+#### Scenario: Existing machine contains a complete retired LogicGuard authority
+- **WHEN** projections bind the exact active pointer and the authority inventory contains only the declared retired model-store and ModelMesh schemas
+- **THEN** migration SHALL rebuild every projection directly into current ResearchGuard logic stores, preserve card/scope coverage, publish a new exact generation, and prove zero retired-schema occurrences
+
+#### Scenario: Authority changes after inventory freeze
+- **WHEN** any retired authority file, count, or whole-tree digest changes before cutover
+- **THEN** migration SHALL invalidate the plan, restore or preserve the exact old authority, and SHALL NOT reinterpret the drift through another reader
+
+#### Scenario: Cutover fails after the old authority is removed
+- **WHEN** model/mesh, projection, index, pointer, or zero-residual validation fails after transactional removal begins
+- **THEN** rollback SHALL restore the exact pre-cutover card, index, pointer, and authority-tree digest and keep all four retained automations paused
+
 ### Requirement: Installer and install check enforce current model authority
-Every fresh install and upgrade SHALL run the current model-authority migration before readiness checks. The install check SHALL expose structured signals for LogicGuard package identity, scoped store readiness, model-bound card coverage, projection parity, mesh/index validity, zero legacy authority residuals, skill/install parity, and final strong-session readiness.
+Every fresh install and upgrade SHALL run the current model-authority migration before readiness checks. The install check SHALL expose structured signals for the exact public ResearchGuard package and `researchguard.logic` member identity, scoped store readiness, model-bound card coverage, projection parity, mesh/index validity, zero legacy authority residuals, skill/install parity, and final strong-session readiness.
 
 #### Scenario: Fresh clone with bootstrap card projections
 - **WHEN** the installer runs on a repository that has no local current model store
 - **THEN** it SHALL create the current stores through the same migration owner, validate them, and SHALL NOT rely on YAML as normal runtime authority after installation
 
-#### Scenario: LogicGuard package is missing or stale
-- **WHEN** the current required LogicGuard public API or package identity cannot be verified
+#### Scenario: ResearchGuard logic dependency is missing or stale
+- **WHEN** the current required public ResearchGuard package, `researchguard.logic` API, schema, or fingerprint identity cannot be verified
 - **THEN** installation SHALL fail visibly before card migration or automation resume and SHALL NOT install a substitute mini framework
 
-#### Scenario: LogicGuard package identity changes during a long upgrade
-- **WHEN** the current LogicGuard package passes preflight and is then replaced, redirected, or edited after its immutable snapshot is committed
-- **THEN** every migration and readiness child SHALL consume only the frozen package digest, final live mismatch SHALL keep all four automations paused, and no compatibility or fallback reader SHALL be introduced
+#### Scenario: ResearchGuard package identity changes during a long upgrade
+- **WHEN** the current ResearchGuard package and logic member pass preflight and are then replaced, redirected, or edited after their immutable snapshot is committed
+- **THEN** every migration and readiness child SHALL consume only the frozen complete ResearchGuard-package digest, final live mismatch SHALL keep all four automations paused, and no standalone LogicGuard package, compatibility import, or fallback reader SHALL be introduced

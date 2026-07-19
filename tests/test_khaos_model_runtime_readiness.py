@@ -12,6 +12,23 @@ from tests.test_khaos_model_native_retrieval import activate_model_native_fixtur
 
 
 class KhaosModelRuntimeReadinessTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._retired_standalone_logicguard = patch(
+            "local_kb.logicguard_models.retired_standalone_logicguard_residuals",
+            return_value={
+                "schema_version": (
+                    "khaos-brain.retired-standalone-logicguard-residuals.v1"
+                ),
+                "ok": True,
+                "distribution": {"present": False},
+                "import_resolution": {"present": False},
+                "runtime_modules": [],
+                "issues": [],
+            },
+        )
+        self._retired_standalone_logicguard.start()
+        self.addCleanup(self._retired_standalone_logicguard.stop)
+
     def test_catalog_latency_is_measured_without_memory_instrumentation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

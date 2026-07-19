@@ -253,7 +253,10 @@ def current_rows() -> tuple[FieldLifecycleRow, ...]:
         ("migration.per_card_model_bindings", "req.migration.complete-conservative"),
         ("migration.zero_legacy_authority_residual_count", "req.migration.only-legacy-reader"),
         ("migration.rollback_generation_id", "req.migration.transactional"),
-        ("migration.logicguard_toolchain_identity", "req.migration.install"),
+        (
+            "migration.researchguard_logic_toolchain_identity",
+            "req.migration.install",
+        ),
     ):
         rows.append(
             row(

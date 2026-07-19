@@ -88,21 +88,33 @@ class ChaosBrainReadinessTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "digest"):
                     readiness._flowguard_toolchain_identity(module)
 
-    def test_logicguard_identity_is_bound_to_complete_frozen_tree(self) -> None:
+    def test_researchguard_logic_identity_is_bound_to_complete_frozen_tree(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "logicguard"
+            root = Path(temp_dir) / "researchguard"
             root.mkdir(parents=True)
             init = root / "__init__.py"
-            init.write_text("# synthetic LogicGuard package\n", encoding="utf-8")
+            init.write_text("# synthetic ResearchGuard package\n", encoding="utf-8")
             (root / "engine.py").write_text("VALUE = 1\n", encoding="utf-8")
-            module = type(
-                "LogicGuardModule",
+            logic_root = root / "logic"
+            logic_root.mkdir()
+            logic_init = logic_root / "__init__.py"
+            logic_init.write_text(
+                "# synthetic ResearchGuard logic member\n",
+                encoding="utf-8",
+            )
+            package_module = type(
+                "ResearchGuardModule",
+                (),
+                {"__file__": str(init), "__version__": "test"},
+            )()
+            logic_module = type(
+                "ResearchGuardLogicModule",
                 (),
                 {
-                    "__file__": str(init),
+                    "__file__": str(logic_init),
                     "__version__": "test",
-                    "SCHEMA_VERSION": "logicguard.model-store.v1",
-                    "MESH_SCHEMA_VERSION": "logicguard.model-mesh.v1",
+                    "SCHEMA_VERSION": "researchguard.logic.model-store.v1",
+                    "MESH_SCHEMA_VERSION": "researchguard.logic.model-mesh.v1",
                     "FileModelStore": object(),
                     "FileModelMeshStore": object(),
                     "MeshNodeOverride": object(),
@@ -112,25 +124,36 @@ class ChaosBrainReadinessTests(unittest.TestCase):
             with mock.patch.dict(
                 os.environ,
                 {
-                    "KHAOS_BRAIN_LOGICGUARD_VALIDATION_ROOT": "",
-                    "KHAOS_BRAIN_LOGICGUARD_VALIDATION_DIGEST": "",
+                    "KHAOS_BRAIN_RESEARCHGUARD_LOGIC_VALIDATION_ROOT": "",
+                    "KHAOS_BRAIN_RESEARCHGUARD_LOGIC_VALIDATION_DIGEST": "",
                 },
             ):
-                first = readiness._logicguard_toolchain_identity(module)
+                first = readiness._researchguard_logic_toolchain_identity(
+                    package_module,
+                    logic_module,
+                )
             with mock.patch.dict(
                 os.environ,
                 {
-                    "KHAOS_BRAIN_LOGICGUARD_VALIDATION_ROOT": str(root),
-                    "KHAOS_BRAIN_LOGICGUARD_VALIDATION_DIGEST": first["digest"],
+                    "KHAOS_BRAIN_RESEARCHGUARD_LOGIC_VALIDATION_ROOT": str(root),
+                    "KHAOS_BRAIN_RESEARCHGUARD_LOGIC_VALIDATION_DIGEST": first[
+                        "digest"
+                    ],
                 },
             ):
                 self.assertEqual(
                     first["digest"],
-                    readiness._logicguard_toolchain_identity(module)["digest"],
+                    readiness._researchguard_logic_toolchain_identity(
+                        package_module,
+                        logic_module,
+                    )["digest"],
                 )
                 (root / "engine.py").write_text("VALUE = 2\n", encoding="utf-8")
                 with self.assertRaisesRegex(RuntimeError, "digest"):
-                    readiness._logicguard_toolchain_identity(module)
+                    readiness._researchguard_logic_toolchain_identity(
+                        package_module,
+                        logic_module,
+                    )
 
     def _write_current_full_regression(
         self,

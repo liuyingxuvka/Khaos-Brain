@@ -65,8 +65,12 @@ RETIRED_MAINTENANCE_SKILL_IDS = ("kb-architect-pass",)
 RETIRED_AUTOMATION_IDS = ("kb-architect", "khaos-brain-system-update")
 FLOWGUARD_VALIDATION_ROOT_ENV = "KHAOS_BRAIN_FLOWGUARD_VALIDATION_ROOT"
 FLOWGUARD_VALIDATION_DIGEST_ENV = "KHAOS_BRAIN_FLOWGUARD_VALIDATION_DIGEST"
-LOGICGUARD_VALIDATION_ROOT_ENV = "KHAOS_BRAIN_LOGICGUARD_VALIDATION_ROOT"
-LOGICGUARD_VALIDATION_DIGEST_ENV = "KHAOS_BRAIN_LOGICGUARD_VALIDATION_DIGEST"
+RESEARCHGUARD_LOGIC_VALIDATION_ROOT_ENV = (
+    "KHAOS_BRAIN_RESEARCHGUARD_LOGIC_VALIDATION_ROOT"
+)
+RESEARCHGUARD_LOGIC_VALIDATION_DIGEST_ENV = (
+    "KHAOS_BRAIN_RESEARCHGUARD_LOGIC_VALIDATION_DIGEST"
+)
 INSTALLATION_IDENTITY_PYTHONPATH_PRESENT_ENV = (
     "KHAOS_BRAIN_INSTALLATION_IDENTITY_PYTHONPATH_PRESENT"
 )
@@ -1282,7 +1286,7 @@ def _upgrade_attempt_detail_projection(details: Mapping[str, Any]) -> dict[str, 
             projected[key] = nested
     for key in (
         "flowguard_validation_toolchain",
-        "logicguard_validation_toolchain",
+        "researchguard_logic_validation_toolchain",
     ):
         nested = _validation_toolchain_projection(details.get(key))
         if nested:
@@ -2104,48 +2108,68 @@ def _require_live_flowguard_matches_snapshot(receipt: Mapping[str, Any]) -> None
         )
 
 
-def _freeze_logicguard_validation_toolchain(
+def _freeze_researchguard_logic_validation_toolchain(
     destination: Path,
     *,
     source_root: Path | None = None,
     max_attempts: int = 20,
 ) -> dict[str, Any]:
-    """Freeze the exact LogicGuard package that owns current model authority."""
+    """Freeze the exact ResearchGuard package that owns current logic authority."""
 
-    inherited_root = os.environ.get(LOGICGUARD_VALIDATION_ROOT_ENV, "").strip()
-    inherited_digest = os.environ.get(LOGICGUARD_VALIDATION_DIGEST_ENV, "").strip()
+    dependency: dict[str, Any] = {}
+    if source_root is None:
+        from local_kb.logicguard_models import (
+            researchguard_logic_dependency_preflight,
+        )
+
+        dependency = researchguard_logic_dependency_preflight(
+            require_no_retired_standalone=True
+        )
+
+    inherited_root = os.environ.get(
+        RESEARCHGUARD_LOGIC_VALIDATION_ROOT_ENV, ""
+    ).strip()
+    inherited_digest = os.environ.get(
+        RESEARCHGUARD_LOGIC_VALIDATION_DIGEST_ENV, ""
+    ).strip()
     if source_root is None and inherited_root and inherited_digest:
         root = Path(inherited_root).resolve()
         manifest = tree_manifest(root) if root.is_dir() else {}
         if (
             str(manifest.get("digest") or "") == inherited_digest
             and (root / "__init__.py").is_file()
+            and (root / "logic" / "__init__.py").is_file()
         ):
             receipt = {
-                "schema_version": "khaos-brain.logicguard-validation-toolchain.v1",
+                "schema_version": (
+                    "khaos-brain.researchguard-logic-validation-toolchain.v1"
+                ),
                 "ok": True,
                 "status": "inherited_frozen",
                 "source_root": str(root),
                 "snapshot_root": str(root),
                 "manifest": manifest,
+                "dependency": dependency,
             }
             receipt["receipt_hash"] = _canonical_payload_hash(receipt)
             return receipt
 
-    dependency: dict[str, Any] = {}
     if source_root is None:
-        from local_kb.logicguard_models import logicguard_dependency_preflight
-
-        dependency = logicguard_dependency_preflight()
-        module = importlib.import_module("logicguard")
+        module = importlib.import_module("researchguard")
         source_root = Path(str(module.__file__)).resolve().parent
     source = Path(source_root).resolve() if source_root is not None else None
-    if source is None or not (source / "__init__.py").is_file():
-        raise RuntimeError("Current LogicGuard package is unavailable for validation freeze")
+    if (
+        source is None
+        or not (source / "__init__.py").is_file()
+        or not (source / "logic" / "__init__.py").is_file()
+    ):
+        raise RuntimeError(
+            "Current ResearchGuard package is unavailable for logic validation freeze"
+        )
 
     destination = destination.resolve()
     staging = destination.with_name(f".{destination.name}.staging")
-    last_error = "logicguard_source_unavailable"
+    last_error = "researchguard_source_unavailable"
     for attempt in range(1, max_attempts + 1):
         try:
             before = tree_manifest(source)
@@ -2162,8 +2186,9 @@ def _freeze_logicguard_validation_toolchain(
             if not (
                 before == after == snapshot
                 and (staging / "__init__.py").is_file()
+                and (staging / "logic" / "__init__.py").is_file()
             ):
-                last_error = "logicguard_source_changed_during_snapshot"
+                last_error = "researchguard_source_changed_during_snapshot"
                 shutil.rmtree(staging, ignore_errors=True)
                 time.sleep(0.5)
                 continue
@@ -2171,7 +2196,9 @@ def _freeze_logicguard_validation_toolchain(
                 shutil.rmtree(destination)
             os.replace(staging, destination)
             receipt = {
-                "schema_version": "khaos-brain.logicguard-validation-toolchain.v1",
+                "schema_version": (
+                    "khaos-brain.researchguard-logic-validation-toolchain.v1"
+                ),
                 "ok": True,
                 "status": "frozen",
                 "attempt_count": attempt,
@@ -2181,7 +2208,10 @@ def _freeze_logicguard_validation_toolchain(
                 "dependency": dependency,
             }
             receipt["receipt_hash"] = _canonical_payload_hash(receipt)
-            receipt_path = destination.parent / "logicguard-validation-toolchain.json"
+            receipt_path = (
+                destination.parent
+                / "researchguard-logic-validation-toolchain.json"
+            )
             _write_text_atomic(
                 receipt_path,
                 json.dumps(receipt, ensure_ascii=False, indent=2, sort_keys=True)
@@ -2194,17 +2224,20 @@ def _freeze_logicguard_validation_toolchain(
             shutil.rmtree(staging, ignore_errors=True)
             time.sleep(0.5)
     raise RuntimeError(
-        "Unable to freeze one current LogicGuard validation toolchain: " + last_error
+        "Unable to freeze one current ResearchGuard logic validation toolchain: "
+        + last_error
     )
 
 
-def _require_live_logicguard_matches_snapshot(receipt: Mapping[str, Any]) -> None:
+def _require_live_researchguard_logic_matches_snapshot(
+    receipt: Mapping[str, Any],
+) -> None:
     source = Path(str(receipt.get("source_root") or ""))
     expected = str((receipt.get("manifest") or {}).get("digest") or "")
     actual = tree_manifest(source) if source.is_dir() else {}
     if not expected or str(actual.get("digest") or "") != expected:
         raise RuntimeError(
-            "Live LogicGuard identity changed after validation snapshot; "
+            "Live ResearchGuard logic identity changed after validation snapshot; "
             "restart the idempotent upgrade against one current toolchain identity."
         )
 
@@ -2214,7 +2247,7 @@ def _run_pre_restore_upgrade_assurance(
     codex_home: Path,
     *,
     flowguard_validation_toolchain: Mapping[str, Any],
-    logicguard_validation_toolchain: Mapping[str, Any],
+    researchguard_logic_validation_toolchain: Mapping[str, Any],
 ) -> dict[str, Any]:
     script = repo_root / "scripts" / "check_consumer_install_assurance.py"
     environment = os.environ.copy()
@@ -2226,12 +2259,20 @@ def _run_pre_restore_upgrade_assurance(
     environment[FLOWGUARD_VALIDATION_DIGEST_ENV] = str(
         (flowguard_validation_toolchain.get("manifest") or {}).get("digest") or ""
     )
-    logicguard_root = Path(
-        str(logicguard_validation_toolchain.get("snapshot_root") or "")
+    researchguard_root = Path(
+        str(
+            researchguard_logic_validation_toolchain.get("snapshot_root")
+            or ""
+        )
     ).resolve()
-    environment[LOGICGUARD_VALIDATION_ROOT_ENV] = str(logicguard_root)
-    environment[LOGICGUARD_VALIDATION_DIGEST_ENV] = str(
-        (logicguard_validation_toolchain.get("manifest") or {}).get("digest") or ""
+    environment[RESEARCHGUARD_LOGIC_VALIDATION_ROOT_ENV] = str(
+        researchguard_root
+    )
+    environment[RESEARCHGUARD_LOGIC_VALIDATION_DIGEST_ENV] = str(
+        (
+            researchguard_logic_validation_toolchain.get("manifest") or {}
+        ).get("digest")
+        or ""
     )
     existing_pythonpath = environment.get("PYTHONPATH", "")
     if INSTALLATION_IDENTITY_PYTHONPATH_PRESENT_ENV not in environment:
@@ -2239,7 +2280,10 @@ def _run_pre_restore_upgrade_assurance(
             "1" if "PYTHONPATH" in environment else "0"
         )
         environment[INSTALLATION_IDENTITY_PYTHONPATH_VALUE_ENV] = existing_pythonpath
-    validation_parents = (str(flowguard_root.parent), str(logicguard_root.parent))
+    validation_parents = (
+        str(flowguard_root.parent),
+        str(researchguard_root.parent),
+    )
     pythonpath_parts = [part for part in existing_pythonpath.split(os.pathsep) if part]
     for parent in reversed(validation_parents):
         normalized_parent = os.path.normcase(os.path.normpath(parent))
@@ -2555,7 +2599,7 @@ def _install_codex_integration_impl(
     defer_automation_restore: bool = False,
     upgrade_attempt_id: str = "",
     flowguard_validation_toolchain: Mapping[str, Any] | None = None,
-    logicguard_validation_toolchain: Mapping[str, Any] | None = None,
+    researchguard_logic_validation_toolchain: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     home = codex_home or default_codex_home()
     initial_history_migration = dict(history_migration or {})
@@ -2582,12 +2626,16 @@ def _install_codex_integration_impl(
     )
     if not (flowguard_validation_root / "__init__.py").is_file():
         raise RuntimeError("Frozen FlowGuard validation toolchain is unavailable")
-    logicguard_toolchain = dict(logicguard_validation_toolchain or {})
-    logicguard_validation_root = Path(
-        str(logicguard_toolchain.get("snapshot_root") or "")
+    researchguard_logic_toolchain = dict(
+        researchguard_logic_validation_toolchain or {}
     )
-    if not (logicguard_validation_root / "__init__.py").is_file():
-        raise RuntimeError("Frozen LogicGuard validation toolchain is unavailable")
+    researchguard_validation_root = Path(
+        str(researchguard_logic_toolchain.get("snapshot_root") or "")
+    )
+    if not (researchguard_validation_root / "__init__.py").is_file():
+        raise RuntimeError(
+            "Frozen ResearchGuard logic validation toolchain is unavailable"
+        )
     now_ms = int(time.time() * 1000)
     automation_payloads: dict[str, dict[str, Any]] = {}
     for spec in REPO_AUTOMATION_SPECS:
@@ -2696,12 +2744,16 @@ def _install_codex_integration_impl(
             # the campaign is still caught by the identical restore-gate
             # checks below; neither case authorizes reinstalling that tool.
             _require_live_flowguard_matches_snapshot(flowguard_toolchain)
-            _require_live_logicguard_matches_snapshot(logicguard_toolchain)
+            _require_live_researchguard_logic_matches_snapshot(
+                researchguard_logic_toolchain
+            )
             upgrade_assurance = _run_pre_restore_upgrade_assurance(
                 repo_root,
                 home,
                 flowguard_validation_toolchain=flowguard_toolchain,
-                logicguard_validation_toolchain=logicguard_toolchain,
+                researchguard_logic_validation_toolchain=(
+                    researchguard_logic_toolchain
+                ),
             )
             if upgrade_attempt_id:
                 _record_upgrade_attempt(
@@ -2754,7 +2806,9 @@ def _install_codex_integration_impl(
             activation_payloads if defer_automation_restore else automation_payloads
         )
         _require_live_flowguard_matches_snapshot(flowguard_toolchain)
-        _require_live_logicguard_matches_snapshot(logicguard_toolchain)
+        _require_live_researchguard_logic_matches_snapshot(
+            researchguard_logic_toolchain
+        )
         transaction = install_managed_runtime(
             repo_root=repo_root,
             codex_home=home,
@@ -2838,7 +2892,9 @@ def _install_codex_integration_impl(
         "installed_automation_statuses": installed_automation_statuses,
         "automation_restore_deferred": bool(defer_automation_restore),
         "flowguard_validation_toolchain": flowguard_toolchain,
-        "logicguard_validation_toolchain": logicguard_toolchain,
+        "researchguard_logic_validation_toolchain": (
+            researchguard_logic_toolchain
+        ),
         "install_transaction": transaction,
         "paused_install_transaction": paused_transaction,
         "history_migration_required": bool(safe_upgrade),
@@ -2980,8 +3036,10 @@ def install_codex_integration(
         flowguard_toolchain = _freeze_flowguard_validation_toolchain(
             snapshot_parent / "python" / "flowguard"
         )
-        logicguard_toolchain = _freeze_logicguard_validation_toolchain(
-            snapshot_parent / "python" / "logicguard"
+        researchguard_logic_toolchain = (
+            _freeze_researchguard_logic_validation_toolchain(
+                snapshot_parent / "python" / "researchguard"
+            )
         )
         if attempt_id:
             _record_upgrade_attempt(
@@ -2991,7 +3049,9 @@ def install_codex_integration(
                 status="in_progress",
                 details={
                     "flowguard_validation_toolchain": flowguard_toolchain,
-                    "logicguard_validation_toolchain": logicguard_toolchain,
+                    "researchguard_logic_validation_toolchain": (
+                        researchguard_logic_toolchain
+                    ),
                     "consumer_skills_require_author_toolchain": False,
                     "survivors_must_remain_paused": True,
                 },
@@ -3000,9 +3060,11 @@ def install_codex_integration(
         previous_flowguard_digest = os.environ.get(
             FLOWGUARD_VALIDATION_DIGEST_ENV
         )
-        previous_logicguard_root = os.environ.get(LOGICGUARD_VALIDATION_ROOT_ENV)
-        previous_logicguard_digest = os.environ.get(
-            LOGICGUARD_VALIDATION_DIGEST_ENV
+        previous_researchguard_root = os.environ.get(
+            RESEARCHGUARD_LOGIC_VALIDATION_ROOT_ENV
+        )
+        previous_researchguard_digest = os.environ.get(
+            RESEARCHGUARD_LOGIC_VALIDATION_DIGEST_ENV
         )
         previous_pythonpath = os.environ.get("PYTHONPATH")
         previous_installation_identity_pythonpath_present = os.environ.get(
@@ -3026,19 +3088,21 @@ def install_codex_integration(
         os.environ[FLOWGUARD_VALIDATION_DIGEST_ENV] = str(
             flowguard_toolchain["manifest"]["digest"]
         )
-        logicguard_root = Path(
-            str(logicguard_toolchain["snapshot_root"])
+        researchguard_root = Path(
+            str(researchguard_logic_toolchain["snapshot_root"])
         ).resolve()
-        os.environ[LOGICGUARD_VALIDATION_ROOT_ENV] = str(logicguard_root)
-        os.environ[LOGICGUARD_VALIDATION_DIGEST_ENV] = str(
-            logicguard_toolchain["manifest"]["digest"]
+        os.environ[RESEARCHGUARD_LOGIC_VALIDATION_ROOT_ENV] = str(
+            researchguard_root
+        )
+        os.environ[RESEARCHGUARD_LOGIC_VALIDATION_DIGEST_ENV] = str(
+            researchguard_logic_toolchain["manifest"]["digest"]
         )
         os.environ["PYTHONPATH"] = os.pathsep.join(
             dict.fromkeys(
                 part
                 for part in (
                     str(flowguard_root.parent),
-                    str(logicguard_root.parent),
+                    str(researchguard_root.parent),
                     previous_pythonpath or "",
                 )
                 if part
@@ -3061,7 +3125,9 @@ def install_codex_integration(
                 defer_automation_restore=defer_automation_restore,
                 upgrade_attempt_id=attempt_id,
                 flowguard_validation_toolchain=flowguard_toolchain,
-                logicguard_validation_toolchain=logicguard_toolchain,
+                researchguard_logic_validation_toolchain=(
+                    researchguard_logic_toolchain
+                ),
             )
         finally:
             if previous_flowguard_root is None:
@@ -3074,15 +3140,21 @@ def install_codex_integration(
                 os.environ[FLOWGUARD_VALIDATION_DIGEST_ENV] = (
                     previous_flowguard_digest
                 )
-            if previous_logicguard_root is None:
-                os.environ.pop(LOGICGUARD_VALIDATION_ROOT_ENV, None)
+            if previous_researchguard_root is None:
+                os.environ.pop(
+                    RESEARCHGUARD_LOGIC_VALIDATION_ROOT_ENV, None
+                )
             else:
-                os.environ[LOGICGUARD_VALIDATION_ROOT_ENV] = previous_logicguard_root
-            if previous_logicguard_digest is None:
-                os.environ.pop(LOGICGUARD_VALIDATION_DIGEST_ENV, None)
+                os.environ[RESEARCHGUARD_LOGIC_VALIDATION_ROOT_ENV] = (
+                    previous_researchguard_root
+                )
+            if previous_researchguard_digest is None:
+                os.environ.pop(
+                    RESEARCHGUARD_LOGIC_VALIDATION_DIGEST_ENV, None
+                )
             else:
-                os.environ[LOGICGUARD_VALIDATION_DIGEST_ENV] = (
-                    previous_logicguard_digest
+                os.environ[RESEARCHGUARD_LOGIC_VALIDATION_DIGEST_ENV] = (
+                    previous_researchguard_digest
                 )
             if previous_pythonpath is None:
                 os.environ.pop("PYTHONPATH", None)
@@ -3236,6 +3308,21 @@ def build_installation_check(
 
     issues: list[str] = []
     warnings: list[str] = []
+    from local_kb.logicguard_models import (
+        retired_standalone_logicguard_residuals,
+    )
+
+    retired_standalone_logicguard = (
+        retired_standalone_logicguard_residuals()
+    )
+    if retired_standalone_logicguard.get("ok") is not True:
+        issues.append(
+            "Retired standalone LogicGuard authority is still present: "
+            + "; ".join(
+                str(item)
+                for item in retired_standalone_logicguard.get("issues", [])
+            )
+        )
     attempt_authority_required = bool(manifest_attempt) or Path(
         str(upgrade_attempt_authority.get("head_path") or "")
     ).is_file()
@@ -4193,6 +4280,15 @@ def build_installation_check(
             "; ".join(str(path) for path in [*retired_paths, *retired_source_paths]),
         ),
         _checklist_item(
+            "retired_standalone_logicguard_absent",
+            "The active Python environment has no standalone LogicGuard distribution, import origin, or loaded module",
+            retired_standalone_logicguard.get("ok") is True,
+            "; ".join(
+                str(item)
+                for item in retired_standalone_logicguard.get("issues", [])
+            ),
+        ),
+        _checklist_item(
             "khaos_brain_system_update_retired",
             "Khaos Brain automatic system-update task is absent",
             system_update_retired_ok,
@@ -4262,6 +4358,7 @@ def build_installation_check(
             "required": shell_tools_required,
         },
         "automation_runtime": automation_runtime,
+        "retired_standalone_logicguard": retired_standalone_logicguard,
         "checklist": checklist,
         "canonical_interface_checks": canonical_interface_checks,
         "maintenance_skill_checks": maintenance_skill_checks,
