@@ -104,9 +104,13 @@ Preferred operating pattern:
      --json
    ```
 
-   Keep that `eventId` until the command reaches a terminal JSON result. If the
-   launcher itself is interrupted or times out, do not repeat the write with a
-   new id. Inspect the exact episode instead:
+   Give the postflight launcher at least 180 seconds: the sole current writer
+   may use up to 120 seconds to acquire its lock, and the bounded append,
+   receipt, result transport, and cleanup require explicit headroom. Keep that
+   `eventId` until the command reaches a terminal JSON result. If the launcher
+   itself is interrupted or times out, never start a second writer and do not
+   repeat the write with a new id. Confirm the original process tree has zero
+   descendant processes, then inspect the same event id:
 
    ```powershell
    python "{{LAUNCHER_PATH}}" feedback `

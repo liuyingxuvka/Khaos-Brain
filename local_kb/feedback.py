@@ -8,11 +8,19 @@ from typing import Any
 
 from local_kb.common import csv_to_list, parse_route_segments
 from local_kb.history import build_history_event, record_history_event
+from local_kb.lifecycle import LIFECYCLE_WRITER_LOCK_TIMEOUT_SECONDS
 
 
 POSTFLIGHT_RECEIPT_SCHEMA = "khaos-brain.postflight-observation-receipt.v1"
 POSTFLIGHT_RECEIPT_ROOT = Path("kb") / "history" / "postflight-receipts"
-POSTFLIGHT_TERMINAL_BUDGET_MS = 30_000.0
+POSTFLIGHT_COMPLETION_HEADROOM_MS = 30_000.0
+POSTFLIGHT_TERMINAL_BUDGET_MS = (
+    LIFECYCLE_WRITER_LOCK_TIMEOUT_SECONDS * 1_000.0
+    + POSTFLIGHT_COMPLETION_HEADROOM_MS
+)
+POSTFLIGHT_LAUNCHER_TIMEOUT_SECONDS = (
+    POSTFLIGHT_TERMINAL_BUDGET_MS / 1_000.0 + 30.0
+)
 
 
 def _default_observation_rationale(

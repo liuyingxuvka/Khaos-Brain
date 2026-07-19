@@ -60,8 +60,20 @@ class KbPostflightFlowGuardTests(unittest.TestCase):
                 writer_lock_release_confirmed=False,
             ),
             flow.PostflightInput(
+                "duplicate_writer",
+                single_writer_owner=False,
+            ),
+            flow.PostflightInput(
+                "terminal_budget_cannot_contain_lock",
+                terminal_budget_ms=120_000.0,
+            ),
+            flow.PostflightInput(
+                "launcher_timeout_cannot_contain_terminal",
+                launcher_timeout_ms=150_000.0,
+            ),
+            flow.PostflightInput(
                 "budget_exceeded",
-                duration_ms=30_001.0,
+                duration_ms=150_001.0,
             ),
         ):
             with self.subTest(input_obj.kind):

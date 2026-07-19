@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from local_kb.feedback import (
+    POSTFLIGHT_LAUNCHER_TIMEOUT_SECONDS,
     POSTFLIGHT_TERMINAL_BUDGET_MS,
     build_observation,
     inspect_observation_postflight,
@@ -19,6 +20,7 @@ from local_kb.feedback import (
 )
 from local_kb.history import record_history_event
 from local_kb.lifecycle import (
+    LIFECYCLE_WRITER_LOCK_TIMEOUT_SECONDS,
     admit_observation,
     build_observation_admission_event,
     build_observation_disposition_event,
@@ -41,6 +43,16 @@ def activate_standard(repo_root: Path) -> None:
 
 
 class KbLifecycleTests(unittest.TestCase):
+    def test_postflight_budgets_contain_the_complete_writer_lock_path(self) -> None:
+        self.assertGreater(
+            POSTFLIGHT_TERMINAL_BUDGET_MS,
+            LIFECYCLE_WRITER_LOCK_TIMEOUT_SECONDS * 1_000.0,
+        )
+        self.assertGreater(
+            POSTFLIGHT_LAUNCHER_TIMEOUT_SECONDS * 1_000.0,
+            POSTFLIGHT_TERMINAL_BUDGET_MS,
+        )
+
     def test_lifecycle_writer_lock_recovers_interrupted_empty_directory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)

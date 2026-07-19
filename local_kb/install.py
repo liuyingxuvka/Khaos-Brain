@@ -109,6 +109,13 @@ LOGICGUARD_NATIVE_DEFAULT_MARKERS = (
     "grounded modelmesh",
     "sleep is the sole normal-runtime",
 )
+POSTFLIGHT_TIMEOUT_OWNERSHIP_MARKERS = (
+    "at least 180 seconds",
+    "up to 120 seconds",
+    "never start a second writer",
+    "same event id",
+    "zero descendant processes",
+)
 MAINTENANCE_SKILL_SPECS = (
     {
         "name": "kb-sleep-maintenance",
@@ -158,6 +165,14 @@ def _has_current_runtime_only_wording(text: str) -> bool:
 def _has_logicguard_native_default_wording(text: str) -> bool:
     normalized = text.lower()
     return all(marker in normalized for marker in LOGICGUARD_NATIVE_DEFAULT_MARKERS)
+
+
+def _has_postflight_timeout_ownership_wording(text: str) -> bool:
+    normalized = text.lower()
+    return all(
+        marker in normalized
+        for marker in POSTFLIGHT_TIMEOUT_OWNERSHIP_MARKERS
+    )
 
 # Chaos Brain lifecycle prompts supersede the legacy editorial prompt bodies.
 # prompt bodies above.  They are intentionally compact because the Skills own
@@ -3353,6 +3368,11 @@ def build_installation_check(
             "Global skill default_prompt does not contain the expected KB postflight reminder. "
             "Re-run the installer to refresh the installed prompt."
         )
+    if openai_text and not _has_postflight_timeout_ownership_wording(openai_text):
+        issues.append(
+            "Global skill default_prompt does not contain the current KB postflight timeout-ownership rule. "
+            "Re-run the installer to refresh the installed prompt."
+        )
     if openai_text and "skill/plugin usage lesson" not in openai_text:
         issues.append(
             "Global skill default_prompt does not mention skill/plugin usage lessons as KB signals. "
@@ -3414,6 +3434,14 @@ def build_installation_check(
     if global_agents_text and "explicit KB postflight check" not in global_agents_text:
         issues.append(
             "Global AGENTS defaults do not contain the expected explicit KB postflight check wording. "
+            "Re-run the installer to refresh the session-wide defaults."
+        )
+    if (
+        global_agents_text
+        and not _has_postflight_timeout_ownership_wording(global_agents_text)
+    ):
+        issues.append(
+            "Global AGENTS defaults do not contain the current KB postflight timeout-ownership rule. "
             "Re-run the installer to refresh the session-wide defaults."
         )
     if global_agents_text and "skill/plugin usage" not in global_agents_text:
@@ -3978,6 +4006,10 @@ def build_installation_check(
         and "record a KB follow-up observation" in openai_text
         and "required default preflight" in openai_text
     )
+    global_skill_postflight_timeout_ownership = bool(
+        openai_text
+        and _has_postflight_timeout_ownership_wording(openai_text)
+    )
     global_skill_skill_usage = bool(openai_text and "skill/plugin usage lesson" in openai_text)
     global_skill_subagent_usage = bool(openai_text and "subagent/delegation usage lesson" in openai_text)
     global_skill_phase_checkpoints = bool(openai_text and "phase-change KB checkpoints" in openai_text)
@@ -3997,6 +4029,10 @@ def build_installation_check(
     )
     global_agents_preflight = bool(global_agents_text and "$predictive-kb-preflight" in global_agents_text)
     global_agents_postflight = bool(global_agents_text and "explicit KB postflight check" in global_agents_text)
+    global_agents_postflight_timeout_ownership = bool(
+        global_agents_text
+        and _has_postflight_timeout_ownership_wording(global_agents_text)
+    )
     global_agents_skill_usage = bool(global_agents_text and "skill/plugin usage" in global_agents_text)
     global_agents_subagent_usage = bool(global_agents_text and "subagent/delegation usage" in global_agents_text)
     global_agents_phase_checkpoints = bool(global_agents_text and "phase-change KB checkpoints" in global_agents_text)
@@ -4052,9 +4088,11 @@ def build_installation_check(
     strong_defaults_ok = (
         global_skill_implicit
         and global_skill_postflight
+        and global_skill_postflight_timeout_ownership
         and global_agents_managed
         and global_agents_preflight
         and global_agents_postflight
+        and global_agents_postflight_timeout_ownership
         and global_skill_skill_usage
         and global_agents_skill_usage
         and global_skill_subagent_usage
@@ -4090,6 +4128,12 @@ def build_installation_check(
             "global_skill_postflight",
             "Global predictive KB prompt requires KB preflight and postflight reminders",
             global_skill_postflight,
+            f"openai_path={openai_path}",
+        ),
+        _checklist_item(
+            "global_skill_postflight_timeout_ownership",
+            "Global predictive KB prompt preserves one postflight writer with ordered timeout headroom",
+            global_skill_postflight_timeout_ownership,
             f"openai_path={openai_path}",
         ),
         _checklist_item(
@@ -4156,6 +4200,12 @@ def build_installation_check(
             "global_agents_postflight",
             "Global AGENTS defaults require an explicit KB postflight check",
             global_agents_postflight,
+            f"global_agents_path={global_agents}",
+        ),
+        _checklist_item(
+            "global_agents_postflight_timeout_ownership",
+            "Global AGENTS defaults preserve one postflight writer with ordered timeout headroom",
+            global_agents_postflight_timeout_ownership,
             f"global_agents_path={global_agents}",
         ),
         _checklist_item(

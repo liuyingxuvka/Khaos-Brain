@@ -1039,6 +1039,12 @@ class CodexInstallTests(unittest.TestCase):
             check = build_installation_check(repo_root, codex_home)
             self.assertTrue(check["ok"], check["issues"])
             checklist = {item["id"]: item for item in check["checklist"]}
+            self.assertTrue(
+                checklist["global_skill_postflight_timeout_ownership"]["ok"]
+            )
+            self.assertTrue(
+                checklist["global_agents_postflight_timeout_ownership"]["ok"]
+            )
             self.assertTrue(checklist["retired_managed_surfaces"]["ok"])
             self.assertTrue(
                 checklist["retired_standalone_logicguard_absent"]["ok"]

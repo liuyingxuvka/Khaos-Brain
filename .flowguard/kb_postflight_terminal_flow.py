@@ -32,8 +32,11 @@ class PostflightInput:
     synchronous_admission_count: int = 0
     runtime_authority_unchanged: bool = True
     writer_lock_release_confirmed: bool = True
+    single_writer_owner: bool = True
     duration_ms: float = 100.0
-    terminal_budget_ms: float = 30_000.0
+    writer_lock_timeout_ms: float = 120_000.0
+    terminal_budget_ms: float = 150_000.0
+    launcher_timeout_ms: float = 180_000.0
     interrupted: bool = False
 
 
@@ -80,6 +83,10 @@ class PostflightTerminalBlock:
                 and input_obj.synchronous_admission_count == 0
                 and input_obj.runtime_authority_unchanged
                 and input_obj.writer_lock_release_confirmed
+                and input_obj.single_writer_owner
+                and input_obj.writer_lock_timeout_ms
+                < input_obj.terminal_budget_ms
+                < input_obj.launcher_timeout_ms
                 and input_obj.duration_ms <= input_obj.terminal_budget_ms
                 and not input_obj.interrupted
             )
@@ -121,7 +128,16 @@ INPUTS = (
     PostflightInput("synchronous_admission", synchronous_admission_count=1),
     PostflightInput("authority_changed", runtime_authority_unchanged=False),
     PostflightInput("lock_not_released", writer_lock_release_confirmed=False),
-    PostflightInput("budget_exceeded", duration_ms=30_001.0),
+    PostflightInput("duplicate_writer", single_writer_owner=False),
+    PostflightInput(
+        "terminal_budget_cannot_contain_lock",
+        terminal_budget_ms=120_000.0,
+    ),
+    PostflightInput(
+        "launcher_timeout_cannot_contain_terminal",
+        launcher_timeout_ms=150_000.0,
+    ),
+    PostflightInput("budget_exceeded", duration_ms=150_001.0),
 )
 
 
@@ -144,6 +160,10 @@ def success_is_fully_licensed(
             and item.synchronous_admission_count == 0
             and item.runtime_authority_unchanged
             and item.writer_lock_release_confirmed
+            and item.single_writer_owner
+            and item.writer_lock_timeout_ms
+            < item.terminal_budget_ms
+            < item.launcher_timeout_ms
             and item.duration_ms <= item.terminal_budget_ms
             and not item.interrupted
         ):
@@ -196,7 +216,7 @@ def sleep_is_the_only_deferred_owner(
 
 SUCCESS_LICENSED = Invariant(
     name="success_is_fully_licensed",
-    description="Success requires one durable event, a matching receipt, unchanged authorities, no synchronous lifecycle work, released lock, and current budget.",
+    description="Success requires one durable event, one writer, a matching receipt, unchanged authorities, no synchronous lifecycle work, released lock, and ordered lock/terminal/launcher budgets.",
     predicate=success_is_fully_licensed,
 )
 TIMEOUT_UNKNOWN_VISIBLE = Invariant(
