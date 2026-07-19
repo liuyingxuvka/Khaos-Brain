@@ -16,6 +16,50 @@ from scripts import check_chaos_brain_readiness as readiness
 
 
 class ChaosBrainReadinessTests(unittest.TestCase):
+    def _verifier_fingerprint(self) -> dict[str, object]:
+        return {
+            "evidence_policy_version": readiness.EVIDENCE_POLICY_VERSION,
+            "python_executable": str(Path(sys.executable).resolve()),
+            "python_version": "test-python",
+            "platform": "test-platform",
+            "pytest_version": "test-pytest",
+            "flowguard_toolchain": {"digest": "flowguard", "file_count": 1},
+            "researchguard_logic_toolchain": {
+                "digest": "researchguard",
+                "file_count": 1,
+                "version": "test",
+                "model_store_schema": "model-v1",
+                "mesh_schema": "mesh-v1",
+            },
+        }
+
+    def _owner_snapshot(
+        self,
+        owner: str,
+        digest: str = "source",
+    ) -> dict[str, object]:
+        return {
+            "owner": owner,
+            "digest": digest,
+            "components": [
+                {
+                    "component_id": f"component:{owner}",
+                    "digest": digest,
+                    "file_count": 1,
+                }
+            ],
+        }
+
+    def _owner_snapshots(
+        self,
+        commands: dict[str, list[str]],
+        digest: str = "source",
+    ) -> dict[str, dict[str, object]]:
+        return {
+            owner: self._owner_snapshot(owner, digest)
+            for owner in commands
+        }
+
     def test_run_resolves_windows_launcher_and_preserves_canonical_command(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir).resolve()
@@ -41,8 +85,10 @@ class ChaosBrainReadinessTests(unittest.TestCase):
                         ("openspec_probe", ["openspec", "--version"]),
                         root,
                         evidence_dir=root / "evidence",
-                        source_snapshot={"digest": "source"},
-                        verifier_fingerprint={"digest": "verifier"},
+                        owner_component_snapshot=self._owner_snapshot(
+                            "openspec_probe"
+                        ),
+                        owner_verifier_fingerprint={"digest": "verifier"},
                     )
             finally:
                 readiness._resolved_executable_identity.cache_clear()
@@ -183,10 +229,15 @@ class ChaosBrainReadinessTests(unittest.TestCase):
             f"--junitxml={junit_path}",
         ]
         environment = readiness._environment_contract(root)
+        snapshot = self._owner_snapshot("full_regression", source_digest)
+        owner_verifier = readiness._owner_verifier_fingerprint(
+            "full_regression",
+            self._verifier_fingerprint(),
+        )
         identity = readiness._command_identity(
             command,
-            source_digest=source_digest,
-            verifier_digest=verifier_digest,
+            owner_component_digest=source_digest,
+            verifier_digest=str(owner_verifier["digest"]),
             environment_contract=environment,
         )
         receipt = {
@@ -196,16 +247,20 @@ class ChaosBrainReadinessTests(unittest.TestCase):
             "execution": "executed",
             "identity_fingerprint": identity,
             "command": command,
+            "executable_identity": readiness._executable_identity(command[0]),
             "semantic_argv": readiness._semantic_argv(command),
             "cwd": str(root.resolve()),
             "environment_contract": environment,
             "input_fingerprints": {
-                "source": source_digest,
-                "verifier": verifier_digest,
+                "owner_components": source_digest,
+                "verifier": owner_verifier["digest"],
             },
+            "owner_components": snapshot["components"],
+            "owner_verifier_fingerprint": owner_verifier,
             "inventory_revision": "owner-inventory",
             "terminal_status": "passed",
             "timed_out": False,
+            "cleanup_confirmed": True,
             "exit_code": 0,
             "ok": True,
             "junit": readiness._junit_summary(junit_path, root),
@@ -233,6 +288,51 @@ class ChaosBrainReadinessTests(unittest.TestCase):
             encoding="utf-8",
         )
         return current_path, receipt_path, junit_path, command, identity
+
+    def _write_current_owner_receipts(
+        self,
+        root: Path,
+        owners: dict[str, tuple[list[str], dict[str, object], int]],
+    ) -> Path:
+        evidence_root = root / "evidence"
+        owner_dir = evidence_root / "owner-run"
+        owner_dir.mkdir(parents=True, exist_ok=True)
+        verifier = self._verifier_fingerprint()
+        entries: dict[str, dict[str, object]] = {}
+        for owner, (command, snapshot, exit_code) in owners.items():
+            completed = subprocess.CompletedProcess(
+                command,
+                exit_code,
+                stdout=json.dumps({"ok": exit_code == 0}),
+                stderr="",
+            )
+            with mock.patch.object(
+                readiness,
+                "run_with_timeout_cleanup",
+                return_value=completed,
+            ):
+                _, receipt = readiness._run(
+                    (owner, command),
+                    root,
+                    evidence_dir=owner_dir,
+                    owner_component_snapshot=dict(snapshot),
+                    owner_verifier_fingerprint=readiness._owner_verifier_fingerprint(
+                        owner,
+                        verifier,
+                    ),
+                    inventory_revision="owner-inventory",
+                )
+            entries[owner] = receipt
+        current = {
+            "schema_version": readiness.EVIDENCE_SCHEMA,
+            "entries": entries,
+        }
+        current_path = evidence_root / "current.json"
+        current_path.write_text(
+            json.dumps(current, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return current_path
 
     def test_author_contract_audit_does_not_consume_regression_or_installed_runtime(
         self,
@@ -317,8 +417,8 @@ class ChaosBrainReadinessTests(unittest.TestCase):
                 commands,
                 Path(temp_dir),
                 evidence_dir=Path(temp_dir) / "evidence",
-                source_snapshot={"digest": "source"},
-                verifier_fingerprint={"digest": "verifier"},
+                owner_component_snapshots=self._owner_snapshots(commands),
+                verifier_fingerprint=self._verifier_fingerprint(),
             )
 
         self.assertTrue(all(item["ok"] for item in results.values()))
@@ -328,7 +428,7 @@ class ChaosBrainReadinessTests(unittest.TestCase):
         self.assertTrue(logicguard_started_after_other_children)
         self.assertTrue(all(count == 1 for count in counts.values()))
 
-    def test_exact_duplicate_command_is_executed_once_and_reused(self) -> None:
+    def test_exact_duplicate_command_with_two_owners_is_blocked(self) -> None:
         calls: list[str] = []
 
         def fake_run(item, repo_root, **kwargs):
@@ -339,8 +439,13 @@ class ChaosBrainReadinessTests(unittest.TestCase):
                 "receipt_id": f"validation:{name}:same",
                 "identity_fingerprint": readiness._command_identity(
                     command,
-                    source_digest="source",
-                    verifier_digest="verifier",
+                    owner_component_digest="source",
+                    verifier_digest=str(
+                        readiness._owner_verifier_fingerprint(
+                            name,
+                            self._verifier_fingerprint(),
+                        )["digest"]
+                    ),
                     environment_contract=readiness._environment_contract(Path(".")),
                 ),
                 "execution": "executed",
@@ -349,20 +454,35 @@ class ChaosBrainReadinessTests(unittest.TestCase):
             }
 
         command = ["python", "check.py"]
+        shared_snapshot = {
+            "owner": "shared-command",
+            "digest": "source",
+            "components": [
+                {
+                    "component_id": "component:shared-command",
+                    "digest": "source",
+                    "file_count": 1,
+                }
+            ],
+        }
         with tempfile.TemporaryDirectory() as temp_dir, mock.patch.object(
             readiness, "_run", side_effect=fake_run
+        ), self.assertRaisesRegex(
+            RuntimeError,
+            "multiple owners",
         ):
-            results, counts = readiness._execute_plan(
+            readiness._execute_plan(
                 {"owner": command, "consumer": list(command)},
                 Path("."),
                 evidence_dir=Path(temp_dir),
-                source_snapshot={"digest": "source"},
-                verifier_fingerprint={"digest": "verifier"},
+                owner_component_snapshots={
+                    "owner": shared_snapshot,
+                    "consumer": shared_snapshot,
+                },
+                verifier_fingerprint=self._verifier_fingerprint(),
             )
 
-        self.assertEqual(calls, ["owner"])
-        self.assertEqual(results["consumer"]["execution"], "reused")
-        self.assertEqual(sum(counts.values()), 1)
+        self.assertEqual(calls, [])
 
     def test_current_full_regression_receipt_is_reused_across_aggregate_runs(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -384,20 +504,36 @@ class ChaosBrainReadinessTests(unittest.TestCase):
                     {"full_regression": next_command},
                     root,
                     evidence_dir=next_dir,
-                    source_snapshot={"digest": "source"},
-                    verifier_fingerprint={"digest": "verifier"},
+                    owner_component_snapshots={
+                        "full_regression": self._owner_snapshot(
+                            "full_regression"
+                        )
+                    },
+                    verifier_fingerprint=self._verifier_fingerprint(),
                     inventory_revision="consumer-inventory",
                     current_manifest_path=current,
                 )
 
             row = results["full_regression"]
-            alias = Path(row["receipt_path"])
+            projection = Path(row["receipt_path"])
             self.assertEqual(row["execution"], "reused")
             self.assertEqual(row["identity_fingerprint"], identity)
             self.assertEqual(row["inventory_revision"], "consumer-inventory")
             self.assertEqual(row["reuse_ticket"]["source_inventory_revision"], "owner-inventory")
-            self.assertEqual(alias.read_bytes(), owner_receipt.read_bytes())
-            self.assertEqual(json.loads(alias.read_text())["execution"], "executed")
+            stored = json.loads(projection.read_text(encoding="utf-8"))
+            self.assertEqual(stored["execution"], "executed")
+            self.assertEqual(
+                stored["compacted_from"]["receipt_sha256"],
+                hashlib.sha256(owner_receipt.read_bytes()).hexdigest(),
+            )
+            self.assertLess(
+                projection.stat().st_size,
+                owner_receipt.stat().st_size + 2_000,
+            )
+            self.assertEqual(
+                json.loads(projection.read_text())["execution"],
+                "executed",
+            )
             self.assertEqual(counts, {})
 
     def test_changed_full_regression_proof_forces_one_new_execution(self) -> None:
@@ -409,8 +545,13 @@ class ChaosBrainReadinessTests(unittest.TestCase):
             calls.append(name)
             identity = readiness._command_identity(
                 command,
-                source_digest="source",
-                verifier_digest="verifier",
+                owner_component_digest="source",
+                verifier_digest=str(
+                    readiness._owner_verifier_fingerprint(
+                        name,
+                        self._verifier_fingerprint(),
+                    )["digest"]
+                ),
                 environment_contract=readiness._environment_contract(root),
             )
             return name, {
@@ -435,8 +576,12 @@ class ChaosBrainReadinessTests(unittest.TestCase):
                     {"full_regression": next_command},
                     root,
                     evidence_dir=next_dir,
-                    source_snapshot={"digest": "source"},
-                    verifier_fingerprint={"digest": "verifier"},
+                    owner_component_snapshots={
+                        "full_regression": self._owner_snapshot(
+                            "full_regression"
+                        )
+                    },
+                    verifier_fingerprint=self._verifier_fingerprint(),
                     inventory_revision="consumer-inventory",
                     current_manifest_path=current,
                 )
@@ -444,6 +589,193 @@ class ChaosBrainReadinessTests(unittest.TestCase):
         self.assertEqual(calls, ["full_regression"])
         self.assertEqual(results["full_regression"]["execution"], "executed")
         self.assertEqual(sum(counts.values()), 1)
+
+    def test_exact_non_regression_owner_receipt_is_reused(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir).resolve()
+            command = [sys.executable, "-c", "print('ok')"]
+            snapshot = self._owner_snapshot("retrieval_quality")
+            current = self._write_current_owner_receipts(
+                root,
+                {"retrieval_quality": (command, snapshot, 0)},
+            )
+            next_dir = root / "evidence" / "next-run"
+            with mock.patch.object(
+                readiness,
+                "_run",
+                side_effect=AssertionError("current owner must not rerun"),
+            ):
+                results, counts = readiness._execute_plan(
+                    {"retrieval_quality": command},
+                    root,
+                    evidence_dir=next_dir,
+                    owner_component_snapshots={"retrieval_quality": snapshot},
+                    verifier_fingerprint=self._verifier_fingerprint(),
+                    current_manifest_path=current,
+                )
+
+        self.assertEqual(results["retrieval_quality"]["execution"], "reused")
+        self.assertEqual(counts, {})
+
+    def test_failed_non_regression_owner_receipt_is_not_reused(self) -> None:
+        calls: list[str] = []
+
+        def fake_run(item, repo_root, **kwargs):
+            del repo_root, kwargs
+            name, command = item
+            calls.append(name)
+            return name, {
+                "receipt_id": f"validation:{name}:new",
+                "identity_fingerprint": f"new:{name}",
+                "execution": "executed",
+                "command": command,
+                "ok": True,
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir).resolve()
+            command = [sys.executable, "-c", "raise SystemExit(1)"]
+            snapshot = self._owner_snapshot("retrieval_quality")
+            current = self._write_current_owner_receipts(
+                root,
+                {"retrieval_quality": (command, snapshot, 1)},
+            )
+            with mock.patch.object(readiness, "_run", side_effect=fake_run):
+                results, _ = readiness._execute_plan(
+                    {"retrieval_quality": command},
+                    root,
+                    evidence_dir=root / "evidence" / "next-run",
+                    owner_component_snapshots={"retrieval_quality": snapshot},
+                    verifier_fingerprint=self._verifier_fingerprint(),
+                    current_manifest_path=current,
+                )
+
+        self.assertEqual(calls, ["retrieval_quality"])
+        self.assertEqual(results["retrieval_quality"]["execution"], "executed")
+
+    def test_timeout_hash_mismatch_and_missing_proof_are_not_reused(self) -> None:
+        for variant in ("timeout", "receipt-hash-mismatch", "missing-proof"):
+            with self.subTest(variant=variant), tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir).resolve()
+                owner = "retrieval_quality"
+                command = [sys.executable, "-c", "print('ok')"]
+                snapshot = self._owner_snapshot(owner)
+                verifier = readiness._owner_verifier_fingerprint(
+                    owner,
+                    self._verifier_fingerprint(),
+                )
+                current = self._write_current_owner_receipts(
+                    root,
+                    {owner: (command, snapshot, 0)},
+                )
+                manifest = json.loads(current.read_text(encoding="utf-8"))
+                entry = manifest["entries"][owner]
+                receipt_path = Path(entry["receipt_path"])
+                receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+                if variant == "timeout":
+                    receipt.update(
+                        {
+                            "terminal_status": "timeout",
+                            "timed_out": True,
+                            "cleanup_confirmed": False,
+                            "exit_code": 124,
+                            "ok": False,
+                        }
+                    )
+                    receipt_path.write_text(
+                        json.dumps(receipt, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    entry["receipt_sha256"] = hashlib.sha256(
+                        receipt_path.read_bytes()
+                    ).hexdigest()
+                    current.write_text(
+                        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                elif variant == "receipt-hash-mismatch":
+                    receipt_path.write_text(
+                        receipt_path.read_text(encoding="utf-8") + " ",
+                        encoding="utf-8",
+                    )
+                else:
+                    Path(receipt["proof_artifact_ref"]["path"]).unlink()
+
+                reusable = readiness._current_owner_receipt(
+                    current,
+                    owner,
+                    command,
+                    root,
+                    owner_component_snapshot=snapshot,
+                    owner_verifier_fingerprint=verifier,
+                )
+
+            self.assertIsNone(reusable)
+
+    def test_one_changed_owner_component_executes_only_that_owner(self) -> None:
+        calls: list[str] = []
+
+        def fake_run(item, repo_root, **kwargs):
+            del repo_root, kwargs
+            name, command = item
+            calls.append(name)
+            return name, {
+                "receipt_id": f"validation:{name}:new",
+                "identity_fingerprint": f"new:{name}",
+                "execution": "executed",
+                "command": command,
+                "ok": True,
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir).resolve()
+            commands = {
+                "retrieval_quality": [sys.executable, "-c", "print('retrieval')"],
+                "current_runtime_only": [sys.executable, "-c", "print('runtime')"],
+            }
+            old_snapshots = self._owner_snapshots(commands)
+            current = self._write_current_owner_receipts(
+                root,
+                {
+                    name: (command, old_snapshots[name], 0)
+                    for name, command in commands.items()
+                },
+            )
+            new_snapshots = dict(old_snapshots)
+            new_snapshots["retrieval_quality"] = self._owner_snapshot(
+                "retrieval_quality",
+                "changed",
+            )
+            with mock.patch.object(readiness, "_run", side_effect=fake_run):
+                results, _ = readiness._execute_plan(
+                    commands,
+                    root,
+                    evidence_dir=root / "evidence" / "next-run",
+                    owner_component_snapshots=new_snapshots,
+                    verifier_fingerprint=self._verifier_fingerprint(),
+                    current_manifest_path=current,
+                )
+
+        self.assertEqual(calls, ["retrieval_quality"])
+        self.assertEqual(results["retrieval_quality"]["execution"], "executed")
+        self.assertEqual(results["current_runtime_only"]["execution"], "reused")
+
+    def test_watched_source_classification_is_closed(self) -> None:
+        rows = {
+            path.relative_to(readiness.REPO_ROOT).as_posix(): (
+                readiness._classify_watched_source(
+                    path.relative_to(readiness.REPO_ROOT)
+                )
+            )
+            for path in readiness._watched_files(readiness.REPO_ROOT)
+        }
+        self.assertTrue(rows)
+        self.assertFalse(
+            [path for path, component in rows.items() if component is None]
+        )
+        self.assertIsNone(
+            readiness._classify_watched_source(Path("unexpected/new.py"))
+        )
 
     def test_task_checkbox_bookkeeping_does_not_stale_source_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -540,6 +872,17 @@ class ChaosBrainReadinessTests(unittest.TestCase):
             readiness,
             "_verifier_fingerprint",
             return_value={"digest": "verifier"},
+        ), mock.patch.object(
+            readiness,
+            "_build_component_inventory",
+            return_value={"ok": True, "issues": [], "components": {}},
+        ), mock.patch.object(
+            readiness,
+            "_owner_component_snapshots",
+            side_effect=lambda commands, inventory: (
+                self._owner_snapshots(dict(commands)),
+                [],
+            ),
         ), mock.patch.object(
             readiness,
             "_alignment_from_manifest",

@@ -817,11 +817,6 @@ def _automation_spec_payload(
     schedule_window = automation_time_window_label(spec)
     existing_payload = existing or {}
     existing_status = str(existing_payload.get("status", "") or "").upper()
-    status = (
-        existing_status
-        if existing_status in {"ACTIVE", "PAUSED"}
-        else str(spec["status"]).upper()
-    )
     # Runtime status and the user's pause preference are independent.  An
     # upgrade may temporarily pause an otherwise enabled automation without
     # turning that safety pause into a permanent user preference.  Older
@@ -831,6 +826,11 @@ def _automation_spec_payload(
         bool(existing_payload.get("user_paused"))
         if "user_paused" in existing_payload
         else bool(existing_payload) and existing_status == "PAUSED"
+    )
+    status = (
+        "PAUSED"
+        if user_paused
+        else str(spec["status"]).upper()
     )
     return {
         "version": 1,
@@ -1187,61 +1187,21 @@ def _upgrade_assurance_projection(value: object) -> dict[str, Any]:
             "exact_execution_identity_counts",
             "duplicate_exact_executions",
             "verifier_fingerprint",
+            "receipt_hash",
+            "execution_count",
             "claim_boundary",
         )
         if key in value
     }
-    checks = value.get("checks")
-    if isinstance(checks, (list, tuple)):
-        projected["check_count"] = len(checks)
+    owners = value.get("owners")
+    if isinstance(owners, Mapping):
+        projected["owner_count"] = len(owners)
     failed_checks = _bounded_projection_strings(value.get("failed_checks"))
     projected["failed_checks"] = failed_checks
-    return projected
-
-
-def _post_assurance_convergence_projection(value: object) -> dict[str, Any]:
-    if not isinstance(value, Mapping):
-        return {}
-    projected = {
-        key: value[key]
-        for key in (
-            "schema_version",
-            "ok",
-            "status",
-            "attempt_count",
-            "receipt_hash",
-        )
-        if key in value
-    }
-    attempts = value.get("attempts")
-    if isinstance(attempts, (list, tuple)):
-        projected["attempts"] = [
-            {
-                key: item[key]
-                for key in ("attempt", "ok", "status")
-                if isinstance(item, Mapping) and key in item
-            }
-            for item in attempts[:10]
-            if isinstance(item, Mapping)
-        ]
-    for key in ("history_migration", "migration_check"):
-        nested = _migration_projection(value.get(key))
-        if nested:
-            projected[key] = nested
-    retrieval = value.get("retrieval_evaluation")
-    if isinstance(retrieval, Mapping):
-        projected["retrieval_evaluation"] = {
-            key: retrieval[key]
-            for key in (
-                "schema_version",
-                "ok",
-                "status",
-                "metrics",
-                "threshold_results",
-                "receipt_hash",
-            )
-            if key in retrieval
-        }
+    for key in ("executed_owner_ids", "reused_owner_ids"):
+        rows = _bounded_projection_strings(value.get(key))
+        if rows:
+            projected[key] = rows
     return projected
 
 
@@ -1269,6 +1229,23 @@ def _upgrade_attempt_detail_projection(details: Mapping[str, Any]) -> dict[str, 
             for key in ("ok", "expected_ids", "paused_ids")
             if key in pause
         }
+    automation_snapshot = details.get("automation_state_snapshot")
+    if isinstance(automation_snapshot, Mapping):
+        projected["automation_state_snapshot"] = {
+            "schema_version": str(
+                automation_snapshot.get("schema_version")
+                or "khaos-brain.automation-state-snapshot.v1"
+            ),
+            "ok": automation_snapshot.get("ok") is True,
+            "states": dict(automation_snapshot.get("states") or {}),
+            "user_paused": dict(
+                automation_snapshot.get("user_paused") or {}
+            ),
+            "sources": dict(automation_snapshot.get("sources") or {}),
+            "ambiguities": _bounded_projection_strings(
+                automation_snapshot.get("ambiguities")
+            ),
+        }
     for key in ("pre_assurance_update_state_migration",):
         nested = details.get(key)
         if isinstance(nested, Mapping):
@@ -1277,10 +1254,7 @@ def _upgrade_attempt_detail_projection(details: Mapping[str, Any]) -> dict[str, 
                 for nested_key, nested_value in nested.items()
                 if isinstance(nested_value, (str, int, float, bool))
             }
-    for key in (
-        "history_migration",
-        "post_assurance_history_migration",
-    ):
+    for key in ("history_migration",):
         nested = _migration_projection(details.get(key))
         if nested:
             projected[key] = nested
@@ -1298,11 +1272,6 @@ def _upgrade_attempt_detail_projection(details: Mapping[str, Any]) -> dict[str, 
     assurance = _upgrade_assurance_projection(details.get("upgrade_assurance"))
     if assurance:
         projected["upgrade_assurance"] = assurance
-    convergence = _post_assurance_convergence_projection(
-        details.get("post_assurance_data_convergence")
-    )
-    if convergence:
-        projected["post_assurance_data_convergence"] = convergence
     return projected
 
 
@@ -1513,6 +1482,7 @@ def _start_upgrade_attempt(
     repo_root: Path,
     pause_before_migration: Mapping[str, Any],
     history_migration: Mapping[str, Any],
+    automation_state_snapshot: Mapping[str, Any],
 ) -> dict[str, Any]:
     seed = f"{time.time_ns()}:{os.getpid()}:{repo_root}"
     attempt_id = (
@@ -1530,6 +1500,7 @@ def _start_upgrade_attempt(
                 str(repo_root).encode("utf-8")
             ).hexdigest().upper(),
             "pause_before_migration": dict(pause_before_migration),
+            "automation_state_snapshot": dict(automation_state_snapshot),
             "history_migration": dict(history_migration),
             "survivors_must_remain_paused": True,
         },
@@ -1626,6 +1597,10 @@ def capture_repo_automation_state_snapshot(codex_home: Path) -> dict[str, Any]:
     user_paused: dict[str, bool] = {}
     sources: dict[str, str] = {}
     ambiguities: list[str] = []
+    clean_install = not any(
+        automation_toml_path(str(spec["id"]), codex_home).exists()
+        for spec in REPO_AUTOMATION_SPECS
+    )
     for spec in REPO_AUTOMATION_SPECS:
         automation_id = str(spec["id"])
         path = automation_toml_path(automation_id, codex_home)
@@ -1633,13 +1608,27 @@ def capture_repo_automation_state_snapshot(codex_home: Path) -> dict[str, Any]:
         status = str(payload.get("status") or "").upper()
         if payload and status in {"ACTIVE", "PAUSED"}:
             states[automation_id] = status
-            user_paused[automation_id] = bool(payload.get("user_paused"))
-            sources[automation_id] = "installed"
+            user_paused[automation_id] = (
+                bool(payload.get("user_paused"))
+                if "user_paused" in payload
+                else status == "PAUSED"
+            )
+            sources[automation_id] = (
+                "installed-current"
+                if "user_paused" in payload
+                else "codex-status-direct-migration"
+            )
             continue
-        if not path.exists() and automation_id in POST_LEGACY_AUTOMATION_IDS:
+        if not path.exists() and (
+            clean_install or automation_id in POST_LEGACY_AUTOMATION_IDS
+        ):
             states[automation_id] = str(spec["status"]).upper()
             user_paused[automation_id] = False
-            sources[automation_id] = "new-automation-policy"
+            sources[automation_id] = (
+                "clean-install-policy"
+                if clean_install
+                else "new-automation-policy"
+            )
             continue
         states[automation_id] = "PAUSED"
         user_paused[automation_id] = True
@@ -1971,8 +1960,8 @@ def restore_repo_automation_states(
 def _automation_toml_text(payload: Mapping[str, Any]) -> str:
     # Codex owns the live automation document schema and normalizes unknown
     # keys away. Khaos-only policy and user-pause evidence therefore belongs
-    # in the install/upgrade receipts, while this renderer emits only the
-    # durable Codex automation surface.
+    # in the attempt-bound pre-pause snapshot, while this renderer emits only
+    # the durable Codex automation surface.
     lines = [
         f"version = {int(payload['version'])}",
         f"id = {json.dumps(payload['id'], ensure_ascii=False)}",
@@ -2301,6 +2290,14 @@ def _run_pre_restore_upgrade_assurance(
         "--json",
         "--repo-root",
         str(repo_root),
+        "--codex-home",
+        str(codex_home),
+        "--evidence-root",
+        str(
+            codex_home
+            / ".khaos-brain-install"
+            / "consumer-assurance"
+        ),
     ]
     try:
         process = run_with_timeout_cleanup(
@@ -2324,13 +2321,16 @@ def _run_pre_restore_upgrade_assurance(
         payload = json.loads(process.stdout)
     except json.JSONDecodeError:
         payload = {}
-    if process.returncode != 0 or not bool(payload.get("ok")):
+    if (
+        process.returncode != 0
+        or payload.get("schema_version")
+        != "khaos-brain.consumer-install-assurance.v2"
+        or not bool(payload.get("ok"))
+    ):
         failed_checks = list(payload.get("failed_checks") or [])
         entries = (
-            payload.get("checks")
-            if isinstance(payload.get("checks"), Mapping)
-            else payload.get("entries")
-            if isinstance(payload.get("entries"), Mapping)
+            payload.get("owners")
+            if isinstance(payload.get("owners"), Mapping)
             else {}
         )
         failure_details: dict[str, dict[str, Any]] = {}
@@ -2496,7 +2496,7 @@ def _run_pre_restore_upgrade_assurance(
                 {
                     "failed_checks": failed_checks,
                     "failure_details": failure_details,
-                    "fallback_diagnostic": (
+                    "process_diagnostic": (
                         str(process.stderr or process.stdout[-4000:])
                         if not failed_checks
                         else ""
@@ -2507,81 +2507,6 @@ def _run_pre_restore_upgrade_assurance(
             )
         )
     return payload
-
-
-def _run_post_assurance_data_convergence(
-    repo_root: Path,
-    *,
-    max_attempts: int = 4,
-) -> dict[str, Any]:
-    """Drain data admitted during long assurance and recheck dependent gates."""
-
-    from local_kb.maintenance_migration import (
-        check_migration,
-        run_maintenance_migration,
-    )
-    from scripts.evaluate_kb_retrieval import build_report as build_retrieval_report
-
-    root = Path(repo_root).resolve()
-    attempts: list[dict[str, Any]] = []
-    final_migration: dict[str, Any] = {}
-    final_retrieval: dict[str, Any] = {}
-    final_check: dict[str, Any] = {}
-    for attempt in range(1, max_attempts + 1):
-        final_migration = run_maintenance_migration(root)
-        if final_migration.get("ok"):
-            final_retrieval = build_retrieval_report(
-                root,
-                root / "tests" / "fixtures" / "kb_retrieval_eval_cases.json",
-            )
-            final_check = check_migration(root)
-        else:
-            final_retrieval = {}
-            final_check = {}
-        attempt_receipt = {
-            "attempt": attempt,
-            "migration_ok": bool(final_migration.get("ok")),
-            "migration_status": str(final_migration.get("status") or ""),
-            "migration_issues": list(final_migration.get("issues") or []),
-            "retrieval_ok": bool(final_retrieval.get("ok")),
-            "retrieval_metrics": dict(final_retrieval.get("metrics") or {}),
-            "retrieval_threshold_results": dict(
-                final_retrieval.get("threshold_results") or {}
-            ),
-            "migration_check_ok": bool(final_check.get("ok")),
-            "migration_check_issues": list(final_check.get("issues") or []),
-        }
-        attempt_receipt["receipt_hash"] = _canonical_payload_hash(attempt_receipt)
-        attempts.append(attempt_receipt)
-        if (
-            final_migration.get("ok")
-            and final_retrieval.get("ok")
-            and final_check.get("ok")
-        ):
-            result = {
-                "schema_version": "khaos-brain.post-assurance-data-convergence.v1",
-                "ok": True,
-                "status": "current",
-                "attempt_count": attempt,
-                "attempts": attempts,
-                "history_migration": final_migration,
-                "retrieval_evaluation": final_retrieval,
-                "migration_check": final_check,
-            }
-            result["receipt_hash"] = _canonical_payload_hash(result)
-            return result
-    result = {
-        "schema_version": "khaos-brain.post-assurance-data-convergence.v1",
-        "ok": False,
-        "status": "paused_failed",
-        "attempt_count": len(attempts),
-        "attempts": attempts,
-        "history_migration": final_migration,
-        "retrieval_evaluation": final_retrieval,
-        "migration_check": final_check,
-    }
-    result["receipt_hash"] = _canonical_payload_hash(result)
-    return result
 
 
 def _install_codex_integration_impl(
@@ -2603,8 +2528,6 @@ def _install_codex_integration_impl(
 ) -> dict[str, Any]:
     home = codex_home or default_codex_home()
     initial_history_migration = dict(history_migration or {})
-    post_assurance_history_migration: dict[str, Any] = {}
-    post_assurance_data_convergence: dict[str, Any] = {}
     pre_assurance_update_state_migration: dict[str, Any] = {}
     skill_dir = global_skill_dir(home)
     launcher_path = skill_dir / "kb_launch.py"
@@ -2759,47 +2682,18 @@ def _install_codex_integration_impl(
                 _record_upgrade_attempt(
                     home,
                     upgrade_attempt_id,
-                    phase="aggregate_assurance_passed",
+                    phase="affected_assurance_stable",
                     status="in_progress",
                     details={
                         "upgrade_assurance": upgrade_assurance,
                         "survivors_must_remain_paused": True,
                     },
                 )
-            # Aggregate assurance is intentionally long. Peer AI work may admit
-            # observations while it runs, so drain that late logical debt and
-            # atomically rebuild the active index before any restore transaction.
-            post_assurance_data_convergence = (
-                _run_post_assurance_data_convergence(repo_root)
-            )
-            post_assurance_history_migration = dict(
-                post_assurance_data_convergence.get("history_migration") or {}
-            )
-            if not post_assurance_data_convergence.get("ok"):
-                raise RuntimeError(
-                    "Chaos Brain post-assurance data convergence failed: "
-                    + str(
-                        post_assurance_data_convergence.get("attempts")
-                        or post_assurance_data_convergence.get("status")
-                    )
-                )
-            history_migration = post_assurance_history_migration
-            if upgrade_attempt_id:
-                _record_upgrade_attempt(
-                    home,
-                    upgrade_attempt_id,
-                    phase="post_assurance_history_current",
-                    status="in_progress",
-                    details={
-                        "post_assurance_history_migration": (
-                            post_assurance_history_migration
-                        ),
-                        "post_assurance_data_convergence": (
-                            post_assurance_data_convergence
-                        ),
-                        "survivors_must_remain_paused": True,
-                    },
-                )
+            # The assurance planner fingerprints every declared owner input
+            # before and after execution. If a concurrent writer changes one
+            # of those inputs, only the affected owners are replanned inside
+            # that single campaign. A second unconditional migration or
+            # retrieval pass would duplicate ownership and is forbidden.
         # This second all-or-nothing transaction is the restore gate.  If it
         # fails, rollback returns to the already-validated paused runtime.
         final_activation_payloads = (
@@ -2900,8 +2794,6 @@ def _install_codex_integration_impl(
         "history_migration_required": bool(safe_upgrade),
         "history_migration": dict(history_migration or {}),
         "initial_history_migration": initial_history_migration,
-        "post_assurance_history_migration": post_assurance_history_migration,
-        "post_assurance_data_convergence": post_assurance_data_convergence,
         "pre_assurance_update_state_migration": (
             pre_assurance_update_state_migration
         ),
@@ -2952,29 +2844,84 @@ def install_codex_integration(
             raise RuntimeError(
                 "isolated installer fixture mode requires persist_user_shell_path=False"
             )
-    original_configs = {
-        str(spec["id"]): _load_automation_toml(
-            automation_toml_path(str(spec["id"]), home)
+    expected_ids = {str(spec["id"]) for spec in REPO_AUTOMATION_SPECS}
+    prior_attempt = latest_upgrade_attempt(home) if run_history_migration else {}
+    effective_snapshot: Mapping[str, Any] | None = automation_state_snapshot
+    snapshot_source = "explicit-direct-repair"
+    if effective_snapshot is None:
+        recovery_required = bool(
+            prior_attempt.get("status") in {"failed", "in_progress"}
+            and prior_attempt.get("survivors_must_remain_paused") is True
         )
-        for spec in REPO_AUTOMATION_SPECS
+        if recovery_required:
+            recovered = prior_attempt.get("automation_state_snapshot")
+            if not isinstance(recovered, Mapping):
+                raise RuntimeError(
+                    "recoverable upgrade attempt lacks its original automation "
+                    "state snapshot; provide one explicit direct-repair snapshot"
+                )
+            effective_snapshot = recovered
+            snapshot_source = "prior-upgrade-attempt"
+        else:
+            effective_snapshot = capture_repo_automation_state_snapshot(home)
+            snapshot_source = "live-codex-runtime"
+    states = effective_snapshot.get("states")
+    user_paused_states = effective_snapshot.get("user_paused")
+    if effective_snapshot.get("ok") is False:
+        raise RuntimeError(
+            "automation state snapshot is ambiguous: "
+            + ", ".join(
+                str(item)
+                for item in list(effective_snapshot.get("ambiguities") or [])
+            )
+        )
+    if not isinstance(states, Mapping) or not isinstance(
+        user_paused_states, Mapping
+    ):
+        raise RuntimeError(
+            "automation state snapshot is missing states or user_paused maps"
+        )
+    if set(states) != expected_ids or set(user_paused_states) != expected_ids:
+        raise RuntimeError(
+            "automation state snapshot does not cover the exact surviving automation set"
+        )
+    normalized_states: dict[str, str] = {}
+    normalized_user_paused: dict[str, bool] = {}
+    for automation_id in expected_ids:
+        status = str(states.get(automation_id) or "").upper()
+        if status not in {"ACTIVE", "PAUSED"}:
+            raise RuntimeError(
+                f"invalid automation snapshot status for {automation_id}: {status}"
+            )
+        if not isinstance(user_paused_states.get(automation_id), bool):
+            raise RuntimeError(
+                f"invalid automation user-pause intent for {automation_id}"
+            )
+        normalized_states[automation_id] = status
+        normalized_user_paused[automation_id] = bool(
+            user_paused_states[automation_id]
+        )
+    effective_snapshot = {
+        "schema_version": "khaos-brain.automation-state-snapshot.v1",
+        "ok": True,
+        "states": normalized_states,
+        "user_paused": normalized_user_paused,
+        "sources": {
+            automation_id: snapshot_source for automation_id in sorted(expected_ids)
+        },
+        "ambiguities": [],
     }
-    if automation_state_snapshot is not None:
-        states = automation_state_snapshot.get("states")
-        user_paused_states = automation_state_snapshot.get("user_paused")
-        if not isinstance(states, Mapping) or not isinstance(user_paused_states, Mapping):
-            raise RuntimeError("automation state snapshot is missing states or user_paused maps")
-        expected_ids = {str(spec["id"]) for spec in REPO_AUTOMATION_SPECS}
-        if set(states) != expected_ids or set(user_paused_states) != expected_ids:
-            raise RuntimeError("automation state snapshot does not cover the exact surviving automation set")
-        for automation_id in expected_ids:
-            status = str(states.get(automation_id) or "").upper()
-            if status not in {"ACTIVE", "PAUSED"}:
-                raise RuntimeError(f"invalid automation snapshot status for {automation_id}: {status}")
-            original_configs[automation_id] = {
-                **original_configs.get(automation_id, {}),
-                "status": status,
-                "user_paused": bool(user_paused_states.get(automation_id)),
-            }
+    original_configs: dict[str, dict[str, Any]] = {}
+    for spec in REPO_AUTOMATION_SPECS:
+        automation_id = str(spec["id"])
+        original = _load_automation_toml(
+            automation_toml_path(automation_id, home)
+        )
+        original_configs[automation_id] = {
+            **original,
+            "status": normalized_states[automation_id],
+            "user_paused": normalized_user_paused[automation_id],
+        }
     if defer_automation_restore and not run_history_migration:
         raise RuntimeError("deferred automation restoration requires the real migration gate")
     history_migration: dict[str, Any] = {
@@ -3015,6 +2962,7 @@ def install_codex_integration(
             repo_root=root,
             pause_before_migration=pause_before_migration,
             history_migration=history_migration,
+            automation_state_snapshot=effective_snapshot,
         )
     attempt_id = str(upgrade_attempt.get("attempt_id") or "")
     from local_kb.software_update import update_state_path
@@ -3554,9 +3502,13 @@ def build_installation_check(
                 "The update-state file is not in the sole current schema; the versioned upgrade must rewrite it before installation can be healthy."
             )
         obsolete_update_state_settled = True
-        from local_kb.maintenance_migration import check_migration
+        from local_kb.maintenance_migration import (
+            check_migration_current_authority,
+        )
 
-        history_migration_check = check_migration(expected_repo_root)
+        history_migration_check = check_migration_current_authority(
+            expected_repo_root
+        )
         if not history_migration_check.get("ok"):
             issues.append(
                 "Chaos Brain history-debt migration is not current and committed: "
@@ -3583,14 +3535,50 @@ def build_installation_check(
         if isinstance(manifest.get("upgrade_assurance"), dict)
         else {}
     )
+    if upgrade_assurance_required:
+        from scripts.check_consumer_install_assurance import (
+            audit_current_assurance,
+        )
+
+        upgrade_assurance_currentness = audit_current_assurance(
+            expected_repo_root,
+            home,
+            expected_receipt_hash=str(
+                upgrade_assurance.get("receipt_hash") or ""
+            ),
+        )
+    else:
+        upgrade_assurance_currentness = {
+            "ok": True,
+            "status": "fixture_skipped",
+            "execution_count": 0,
+            "issues": [],
+        }
     upgrade_assurance_ok = bool(
-        not upgrade_assurance_required or upgrade_assurance.get("ok")
+        not upgrade_assurance_required
+        or (
+            upgrade_assurance.get("ok")
+            and upgrade_assurance.get("receipt_hash")
+            and upgrade_assurance_currentness.get("ok")
+            and upgrade_assurance_currentness.get("execution_count") == 0
+        )
     )
     if not upgrade_assurance_ok:
         issues.append(
             "Chaos Brain aggregate pre-restore assurance is missing or failed: "
             + ", ".join(
-                str(item) for item in upgrade_assurance.get("failed_checks", [])
+                [
+                    *(
+                        str(item)
+                        for item in upgrade_assurance.get("failed_checks", [])
+                    ),
+                    *(
+                        str(item)
+                        for item in upgrade_assurance_currentness.get(
+                            "issues", []
+                        )
+                    ),
+                ]
             )
         )
     canonical_interface_checks: list[dict[str, Any]] = []
@@ -3765,6 +3753,11 @@ def build_installation_check(
 
     automation_checks: list[dict[str, Any]] = []
     automation_runtime = resolve_automation_runtime(home)
+    recorded_automation_statuses = (
+        manifest.get("installed_automation_statuses")
+        if isinstance(manifest.get("installed_automation_statuses"), Mapping)
+        else {}
+    )
     for spec in REPO_AUTOMATION_SPECS:
         expected = _automation_spec_payload(spec, expected_repo_root, codex_home=home)
         path = automation_toml_path(spec["id"], home)
@@ -3786,23 +3779,21 @@ def build_installation_check(
                     f"Automation {expected['id']} should be named {expected['name']}."
                 )
             payload_status = str(payload.get("status", "") or "")
-            # PAUSED is a valid user-visible Codex state. The application
-            # normalizes unknown Khaos metadata such as ``user_paused`` away,
-            # so current health reads the supported status field and binds
-            # pause ownership/policy to the install and upgrade receipts.
-            preserved_pause_allowed = payload_status == "PAUSED"
+            recorded_status = str(
+                recorded_automation_statuses.get(str(spec["id"]))
+                or expected["status"]
+            ).upper()
             deferred_pause_allowed = bool(
                 allow_deferred_automation_restore
                 and restore_deferred
                 and payload_status == "PAUSED"
             )
             if (
-                payload_status != expected["status"]
-                and not preserved_pause_allowed
+                payload_status != recorded_status
                 and not deferred_pause_allowed
             ):
                 issues_for_automation.append(
-                    f"Automation {expected['id']} should be status={expected['status']}."
+                    f"Automation {expected['id']} should be status={recorded_status}."
                 )
             if str(payload.get("rrule", "") or "") != expected["rrule"]:
                 issues_for_automation.append(
@@ -4258,7 +4249,9 @@ def build_installation_check(
             upgrade_assurance_ok,
             (
                 f"required={upgrade_assurance_required}; "
-                f"failed={','.join(str(item) for item in upgrade_assurance.get('failed_checks', []))}"
+                f"failed={','.join(str(item) for item in upgrade_assurance.get('failed_checks', []))}; "
+                f"receipt_hash={upgrade_assurance.get('receipt_hash', '')}; "
+                f"currentness_execution_count={upgrade_assurance_currentness.get('execution_count', '')}"
             ),
         ),
         _checklist_item(
@@ -4372,6 +4365,7 @@ def build_installation_check(
         "current_update_state": current_update_state,
         "upgrade_assurance_required": upgrade_assurance_required,
         "upgrade_assurance": upgrade_assurance,
+        "upgrade_assurance_currentness": upgrade_assurance_currentness,
         "upgrade_attempt_authority": upgrade_attempt_authority,
         "upgrade_attempt": active_upgrade_attempt,
         "install_transaction": install_transaction,

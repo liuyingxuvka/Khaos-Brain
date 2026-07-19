@@ -190,6 +190,10 @@ def _installation_check_result_projection(
             payload.get("upgrade_assurance_required")
         ),
         "upgrade_assurance": _status_projection(payload.get("upgrade_assurance")),
+        "upgrade_assurance_currentness": _status_projection(
+            payload.get("upgrade_assurance_currentness"),
+            extra_keys=("execution_count",),
+        ),
         "upgrade_attempt": _upgrade_attempt_projection(
             payload.get("upgrade_attempt"),
             codex_home=codex_home,

@@ -21,7 +21,9 @@ obligations:
     source: "specs/kb-runtime-assurance/spec.md#Requirement: FlowGuard and target-native checks own consumer assurance"
     claim: Current target-owned checks and FlowGuard evidence close consumer readiness.
     required: true
-    evidence: [check.assurance.aggregate]
+    evidence:
+      - check.assurance.affected-owners
+      - check.assurance.aggregate
   - id: req.manual-update-native-closure
     source: "specs/kb-runtime-assurance/spec.md#Requirement: Manual update closes in one native route"
     claim: Manual update closes directly with its own immutable receipt.
@@ -46,6 +48,16 @@ checks:
     owner: official-openspec
     command: openspec
     args: [validate, converge-kb-learning-and-upgrade-migration, --type, change, --strict, --json, --no-interactive]
+  - id: check.assurance.affected-owners
+    owner: consumer-assurance-affected-only
+    command: python
+    args:
+      - -m
+      - pytest
+      - tests/test_consumer_install_assurance.py
+      - tests/test_codex_install.py
+      - tests/test_process_control.py
+      - -q
   - id: check.assurance.aggregate
     owner: chaos-brain-readiness
     command: python

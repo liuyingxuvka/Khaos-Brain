@@ -83,3 +83,23 @@
 - [x] 8.4 Stream lifecycle replay with exact digest parity and make every
   post-activation exception transactionally restore all four automations to
   `PAUSED` before rebuilding the current activation receipt.
+
+## 9. Repair validation execution ownership and release sequencing
+
+- [x] 9.1 Extend the existing convergence FlowGuard model with shallow
+  currentness, affected-owner planning, exact receipt reuse, late-input
+  replan, timeout cleanup, and receipt-only tag scenarios.
+- [x] 9.2 Replace unconditional consumer-assurance reruns with exact
+  component-to-owner invalidation and immutable owner receipts.
+- [x] 9.3 Make `install_codex_kb.py --check --json` strictly read-only and
+  subprocess-free while preserving visible failure for stale migration,
+  installation, automation, attempt, or assurance authority.
+- [x] 9.4 Remove the unconditional post-assurance migration/retrieval rerun;
+  replan only owners affected by an observed input-identity change.
+- [x] 9.5 Restrict CI so pull requests and `main` each have one validation
+  owner and release tags consume the exact successful `main` receipt.
+- [x] 9.5a Make frozen and live toolchain identities path-independent and keep
+  owner/currentness receipts bounded while retaining raw-output identity.
+- [x] 9.6 Run focused checks, install and shallow-check the machine, restore
+  exactly four scheduled automations, and freeze the source for one foreground
+  final campaign followed by exact-main publication.

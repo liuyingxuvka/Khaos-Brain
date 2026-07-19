@@ -81,14 +81,19 @@ The release sequence must be:
 1. prepare release files
 2. create the release commit
 3. verify `HEAD`
-4. create the annotated tag
-5. verify the tag target locally
-6. push branch
-7. push tag
-8. verify the remote tag target
-9. create or update the GitHub Release
+4. push the source branch to `main`
+5. wait for the exact `main` commit's single validation run to succeed
+6. create the annotated tag on that exact successful commit
+7. verify the tag target locally
+8. push the tag
+9. let the tag lane consume the exact successful `main` receipt without rerunning tests
+10. verify the remote tag target
+11. create or update the GitHub Release
 
-Do **not** create the commit and tag in parallel.
+Do **not** create the tag before the exact `main` validation receipt exists,
+and do not create the commit and tag in parallel. Pull requests and `main`
+each own their applicable validation run; ordinary feature-branch pushes do
+not duplicate the pull-request suite.
 
 ## 6. Small-change batching
 

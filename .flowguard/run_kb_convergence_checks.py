@@ -258,6 +258,251 @@ def _scenarios() -> tuple[Scenario, ...]:
             ),
         ),
         Scenario(
+            "installation_currentness_is_read_only",
+            "A normal installation check reads current authority without launching an owner.",
+            model.ConsumerState(),
+            (model.ConsumerInput("audit_install_currentness"),),
+            ScenarioExpectation(
+                required_trace_labels=("installation_currentness_read_only",)
+            ),
+        ),
+        Scenario(
+            "installation_currentness_owner_execution_is_blocked",
+            "A currentness path that launches even one validation owner is rejected.",
+            model.ConsumerState(),
+            (
+                model.ConsumerInput(
+                    "audit_install_currentness",
+                    currentness_owner_execution_count=1,
+                ),
+            ),
+            ScenarioExpectation(
+                required_trace_labels=(
+                    "installation_currentness_executed_owner_blocked",
+                ),
+                forbidden_trace_labels=("installation_currentness_read_only",),
+            ),
+        ),
+        Scenario(
+            "toolchain_identity_ignores_absolute_snapshot_path",
+            "A frozen copy and live package remain one toolchain when portable content matches.",
+            model.ConsumerState(),
+            (
+                model.ConsumerInput(
+                    "audit_toolchain_receipt",
+                    toolchain_content_matches=True,
+                    toolchain_location_differs=True,
+                    assurance_receipt_bounded=True,
+                ),
+            ),
+            ScenarioExpectation(
+                required_trace_labels=(
+                    "content_bound_toolchain_receipt_current",
+                )
+            ),
+        ),
+        Scenario(
+            "failed_upgrade_restores_attempt_bound_automation_intent",
+            "A safety-paused runtime restores the pre-pause ACTIVE intent from the failed attempt.",
+            model.ConsumerState(),
+            (
+                model.ConsumerInput(
+                    "restore_automation_intent",
+                    automation_runtime_status="PAUSED",
+                    automation_user_paused=False,
+                    recoverable_upgrade_attempt=True,
+                    recovery_snapshot_current=True,
+                ),
+            ),
+            ScenarioExpectation(
+                required_trace_labels=("system_pause_reactivated",)
+            ),
+        ),
+        Scenario(
+            "missing_recovery_snapshot_blocks_direct_repair",
+            "A recoverable attempt without its original state snapshot cannot infer intent.",
+            model.ConsumerState(),
+            (
+                model.ConsumerInput(
+                    "restore_automation_intent",
+                    automation_runtime_status="PAUSED",
+                    automation_user_paused=False,
+                    recoverable_upgrade_attempt=True,
+                    recovery_snapshot_current=False,
+                ),
+            ),
+            ScenarioExpectation(
+                required_trace_labels=(
+                    "missing_recovery_snapshot_direct_repair_blocked",
+                ),
+                forbidden_trace_labels=("system_pause_reactivated",),
+            ),
+        ),
+        Scenario(
+            "one_changed_component_executes_one_owner",
+            "A retrieval-only input change reuses every unrelated owner.",
+            model.ConsumerState(),
+            (
+                model.ConsumerInput(
+                    "plan_affected_assurance",
+                    changed_component_ids=("retrieval-data",),
+                    affected_owner_ids=("retrieval-quality",),
+                    reusable_owner_ids=(
+                        "consumer-projections",
+                        "current-runtime",
+                        "flow-model",
+                        "reasoning-runtime",
+                    ),
+                    executed_owner_ids=("retrieval-quality",),
+                ),
+            ),
+            ScenarioExpectation(
+                required_trace_labels=("affected_assurance_plan_stable",)
+            ),
+        ),
+        Scenario(
+            "final_readiness_reuses_every_unaffected_owner",
+            "A readiness-planner fix executes only full regression while every other declared owner is reused.",
+            model.ConsumerState(),
+            (
+                model.ConsumerInput(
+                    "plan_affected_assurance",
+                    changed_component_ids=("readiness-planner",),
+                    declared_owner_ids=model.FINAL_READINESS_OWNER_IDS,
+                    affected_owner_ids=("full-regression",),
+                    reusable_owner_ids=tuple(
+                        owner
+                        for owner in model.FINAL_READINESS_OWNER_IDS
+                        if owner != "full-regression"
+                    ),
+                    executed_owner_ids=("full-regression",),
+                ),
+            ),
+            ScenarioExpectation(
+                required_trace_labels=("affected_assurance_plan_stable",)
+            ),
+        ),
+        Scenario(
+            "missing_final_readiness_owner_blocks",
+            "A declared readiness owner without an affected execution or reusable receipt keeps the plan blocked.",
+            model.ConsumerState(),
+            (
+                model.ConsumerInput(
+                    "plan_affected_assurance",
+                    changed_component_ids=("readiness-planner",),
+                    declared_owner_ids=model.FINAL_READINESS_OWNER_IDS,
+                    affected_owner_ids=("full-regression",),
+                    reusable_owner_ids=tuple(
+                        owner
+                        for owner in model.FINAL_READINESS_OWNER_IDS
+                        if owner not in {"full-regression", "retrieval-quality"}
+                    ),
+                    executed_owner_ids=("full-regression",),
+                ),
+            ),
+            ScenarioExpectation(
+                required_trace_labels=("affected_assurance_plan_blocked",),
+                forbidden_trace_labels=("affected_assurance_plan_stable",),
+            ),
+        ),
+        Scenario(
+            "unmapped_component_blocks_without_run_all",
+            "An unmapped component cannot select a broad validation fallback.",
+            model.ConsumerState(),
+            (
+                model.ConsumerInput(
+                    "plan_affected_assurance",
+                    changed_component_ids=("unmapped",),
+                    unknown_component_ids=("unmapped",),
+                    executed_owner_ids=(
+                        "consumer-projections",
+                        "current-runtime",
+                        "flow-model",
+                        "reasoning-runtime",
+                        "retrieval-quality",
+                    ),
+                ),
+            ),
+            ScenarioExpectation(
+                required_trace_labels=("affected_assurance_plan_blocked",),
+                forbidden_trace_labels=("affected_assurance_plan_stable",),
+            ),
+        ),
+        Scenario(
+            "late_retrieval_input_replans_retrieval_only",
+            "Data admitted during assurance invalidates only its declared owner.",
+            model.ConsumerState(),
+            (
+                model.ConsumerInput(
+                    "replan_late_assurance_inputs",
+                    late_affected_owner_ids=("retrieval-quality",),
+                    late_executed_owner_ids=("retrieval-quality",),
+                ),
+            ),
+            ScenarioExpectation(
+                required_trace_labels=("late_inputs_affected_only_replanned",)
+            ),
+        ),
+        Scenario(
+            "late_input_run_all_is_blocked",
+            "Late input drift cannot trigger an unconditional aggregate rerun.",
+            model.ConsumerState(),
+            (
+                model.ConsumerInput(
+                    "replan_late_assurance_inputs",
+                    late_affected_owner_ids=("retrieval-quality",),
+                    late_executed_owner_ids=(
+                        "consumer-projections",
+                        "current-runtime",
+                        "flow-model",
+                        "reasoning-runtime",
+                        "retrieval-quality",
+                    ),
+                ),
+            ),
+            ScenarioExpectation(
+                required_trace_labels=("late_inputs_run_all_blocked",),
+                forbidden_trace_labels=("late_inputs_affected_only_replanned",),
+            ),
+        ),
+        Scenario(
+            "timeout_cleanup_invalidates_evidence",
+            "A timed-out owner remains invalid after its descendants reach zero.",
+            model.ConsumerState(),
+            (model.ConsumerInput("validation_owner_timeout"),),
+            ScenarioExpectation(
+                required_trace_labels=(
+                    "timeout_descendants_zero_evidence_invalid",
+                )
+            ),
+        ),
+        Scenario(
+            "release_tag_consumes_exact_main_receipt",
+            "A release tag verifies main evidence and launches no repository suite.",
+            model.ConsumerState(),
+            (model.ConsumerInput("verify_release_tag"),),
+            ScenarioExpectation(
+                required_trace_labels=("release_tag_consumed_main_receipt",)
+            ),
+        ),
+        Scenario(
+            "release_tag_test_rerun_is_blocked",
+            "A tag lane that executes tests is not a receipt-only release gate.",
+            model.ConsumerState(),
+            (
+                model.ConsumerInput(
+                    "verify_release_tag",
+                    tag_suite_execution_count=1,
+                ),
+            ),
+            ScenarioExpectation(
+                required_trace_labels=("release_tag_receipt_gate_blocked",),
+                forbidden_trace_labels=(
+                    "release_tag_consumed_main_receipt",
+                ),
+            ),
+        ),
+        Scenario(
             "third_party_overlap_is_outside_guarantee",
             "Unknown third-party overlap does not create cross-skill proof sharing.",
             model.ConsumerState(),
@@ -280,6 +525,10 @@ def _model_report() -> dict[str, Any]:
             "cross-skill evidence reuse",
             "manual-only update skill treated as a scheduled automation",
             "upgrade currentness scans attempt history or falls back to manifest state",
+            "installation currentness launches a validation owner",
+            "one changed component triggers every assurance owner",
+            "late data admission triggers an unconditional second campaign",
+            "release tag reruns repository validation",
         ),
         protected_error_classes=(
             "consumer_author_control_leak",
@@ -288,6 +537,10 @@ def _model_report() -> dict[str, Any]:
             "shared_test_evidence",
             "ambiguous_activation_inventory",
             "unbounded_attempt_currentness",
+            "currentness_execution",
+            "run_all_invalidation",
+            "late_input_run_all",
+            "tag_validation_duplication",
         ),
         protected_harms=(
             "ordinary projects gain hidden maintenance control",
@@ -300,6 +553,9 @@ def _model_report() -> dict[str, Any]:
             "manual update restoration and CURRENT",
             "four-automation activation from a five-skill classified inventory",
             "bounded HEAD-to-current attempt lookup",
+            "read-only installation currentness",
+            "affected-owner assurance planning and exact receipt reuse",
+            "receipt-only release-tag verification",
         ),
         completion_evidence=(
             "clean consumer projection",
@@ -307,6 +563,9 @@ def _model_report() -> dict[str, Any]:
             "current target-native receipt",
             "exact scheduled/manual-only skill inventory",
             "bounded hash-bound current attempt authority",
+            "zero currentness owner executions",
+            "exact changed-component to affected-owner plan",
+            "exact successful main validation receipt",
         ),
         hard_invariants=tuple(item.name for item in model.CONSUMER_INVARIANTS),
         known_bad_cases=(
@@ -319,6 +578,9 @@ def _model_report() -> dict[str, Any]:
             "manual update restoration failure",
             "five maintained skills incorrectly treated as five scheduled tasks",
             "missing current pointer with a readable historical attempt",
+            "unmapped assurance component",
+            "late retrieval input with broad rerun",
+            "tag event with a repository test execution",
         ),
         blindspots=(
             "third-party skills on other machines are outside the guarantee",
@@ -344,6 +606,15 @@ def _model_report() -> dict[str, Any]:
             "activation_inventory_blocked",
             "upgrade_attempt_current_authority",
             "upgrade_attempt_current_authority_blocked",
+            "installation_currentness_read_only",
+            "installation_currentness_executed_owner_blocked",
+            "affected_assurance_plan_stable",
+            "affected_assurance_plan_blocked",
+            "late_inputs_affected_only_replanned",
+            "late_inputs_run_all_blocked",
+            "timeout_descendants_zero_evidence_invalid",
+            "release_tag_consumed_main_receipt",
+            "release_tag_receipt_gate_blocked",
         ),
         risk_profile=RiskProfile(
             modeled_boundary=(

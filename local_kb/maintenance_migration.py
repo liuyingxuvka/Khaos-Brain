@@ -3494,6 +3494,83 @@ def converge_precommit_migration(
     }
 
 
+def check_migration_current_authority(repo_root: Path) -> dict[str, Any]:
+    """Read the bounded committed migration authority without revalidation.
+
+    This is the installation-currentness owner. It verifies the exact state,
+    journal checkpoint, and immutable receipt binding only. Full lifecycle,
+    index, LogicGuard, archive, and residual validation remains owned by
+    ``check_migration`` during an affected assurance or upgrade.
+    """
+
+    state = load_maintenance_state(repo_root)
+    journal = _load_journal(repo_root)
+    receipt = _load_json(migration_receipt_path(repo_root))
+    issues: list[str] = []
+    stored_digest = str(receipt.get("receipt_digest") or "")
+    unsigned_receipt = {
+        key: value for key, value in receipt.items() if key != "receipt_digest"
+    }
+    calculated_digest = (
+        content_fingerprint(unsigned_receipt) if receipt else ""
+    )
+    committed_checkpoint = (
+        journal.get("checkpoints", {}).get("committed", {})
+        if isinstance(journal.get("checkpoints"), Mapping)
+        else {}
+    )
+    checkpoint_details = (
+        committed_checkpoint.get("details", {})
+        if isinstance(committed_checkpoint, Mapping)
+        else {}
+    )
+    expected_receipt_path = str(
+        migration_receipt_path(repo_root).relative_to(repo_root)
+    ).replace("\\", "/")
+    source_version = (
+        (Path(repo_root) / "VERSION").read_text(encoding="utf-8").strip()
+        if (Path(repo_root) / "VERSION").is_file()
+        else ""
+    )
+    if state.get("committed") is not True or state.get("phase") != "committed":
+        issues.append("maintenance state is not committed")
+    if state.get("migration_id") != MIGRATION_ID:
+        issues.append("maintenance state migration id is not current")
+    if state.get("migration_receipt") != expected_receipt_path:
+        issues.append("maintenance state does not bind the current receipt path")
+    if str(state.get("software_version") or "") != source_version:
+        issues.append("maintenance state software version is stale")
+    if journal.get("status") != "committed" or journal.get("phase") != "committed":
+        issues.append("migration journal is not committed")
+    if journal.get("migration_id") != MIGRATION_ID:
+        issues.append("migration journal id is not current")
+    if journal.get("failure"):
+        issues.append("migration journal retains an active failure")
+    if receipt.get("status") != "committed":
+        issues.append("migration receipt is not committed")
+    if receipt.get("migration_id") != MIGRATION_ID:
+        issues.append("migration receipt id is not current")
+    if not stored_digest or stored_digest != calculated_digest:
+        issues.append("migration receipt digest is invalid")
+    if str(state.get("receipt_digest") or "") != stored_digest:
+        issues.append("maintenance state receipt digest binding is stale")
+    if str(checkpoint_details.get("receipt_digest") or "") != stored_digest:
+        issues.append("migration journal receipt digest binding is stale")
+    return {
+        "ok": not issues,
+        "status": "current" if not issues else "stale",
+        "migration_id": MIGRATION_ID,
+        "receipt_path": expected_receipt_path,
+        "receipt_digest": stored_digest,
+        "issues": issues,
+        "claim_boundary": (
+            "Bounded read-only committed-authority check. It does not execute "
+            "migration or repeat lifecycle, index, LogicGuard, archive, or "
+            "residual validation."
+        ),
+    }
+
+
 def check_migration(repo_root: Path) -> dict[str, Any]:
     state = load_maintenance_state(repo_root)
     journal = _load_journal(repo_root)
@@ -3763,6 +3840,18 @@ def run_maintenance_migration(
             reconciled_any = bool(
                 physical_receipts or logical_receipts or convergence_runs
             )
+            if check.get("ok"):
+                source_version = (
+                    (root / "VERSION").read_text(encoding="utf-8").strip()
+                    if (root / "VERSION").is_file()
+                    else ""
+                )
+                current_state = dict(check.get("maintenance_state") or {})
+                if str(current_state.get("software_version") or "") != source_version:
+                    current_state["software_version"] = source_version
+                    current_state["updated_at"] = utc_now_iso()
+                    write_maintenance_state(root, current_state)
+                    check = {**check, "maintenance_state": current_state}
             return {
                 **check,
                 "status": (

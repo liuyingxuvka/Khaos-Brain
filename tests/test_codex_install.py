@@ -122,7 +122,7 @@ class CodexInstallTests(unittest.TestCase):
             first = _record_upgrade_attempt(
                 codex_home,
                 attempt_id,
-                phase="aggregate_assurance_passed",
+                phase="affected_assurance_stable",
                 status="in_progress",
                 details={
                     "history_migration": {
@@ -132,10 +132,19 @@ class CodexInstallTests(unittest.TestCase):
                         "journal": huge_journal,
                     },
                     "upgrade_assurance": {
+                        "schema_version": (
+                            "khaos-brain.consumer-install-assurance.v2"
+                        ),
                         "ok": True,
                         "status": "passed",
-                        "checks": huge_checks,
+                        "owners": {
+                            "flow_model": {
+                                "status": "passed",
+                                "payload": huge_checks,
+                            }
+                        },
                         "failed_checks": [],
+                        "receipt_hash": "sha256:fixture",
                     },
                     "researchguard_logic_validation_toolchain": {
                         "ok": True,
@@ -157,8 +166,8 @@ class CodexInstallTests(unittest.TestCase):
                 "khaos-brain.upgrade-attempt-projection.v2",
             )
             self.assertNotIn("journal", first["history_migration"])
-            self.assertEqual(first["upgrade_assurance"]["check_count"], 1)
-            self.assertNotIn("checks", first["upgrade_assurance"])
+            self.assertEqual(first["upgrade_assurance"]["owner_count"], 1)
+            self.assertNotIn("owners", first["upgrade_assurance"])
             self.assertNotIn(
                 "files",
                 first["researchguard_logic_validation_toolchain"]["manifest"],
@@ -291,7 +300,7 @@ class CodexInstallTests(unittest.TestCase):
             _restore_exact_file_snapshot(path, existed=False, content=b"")
             self.assertFalse(path.exists())
 
-    def test_automation_payload_preserves_status_and_user_pause_independently(self) -> None:
+    def test_automation_payload_restores_runtime_from_user_pause_intent(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         spec = next(item for item in REPO_AUTOMATION_SPECS if item["id"] == "kb-sleep")
 
@@ -300,7 +309,7 @@ class CodexInstallTests(unittest.TestCase):
             repo_root,
             existing={"status": "PAUSED", "user_paused": False},
         )
-        self.assertEqual("PAUSED", system_paused["status"])
+        self.assertEqual("ACTIVE", system_paused["status"])
         self.assertFalse(system_paused["user_paused"])
 
         independently_marked = _automation_spec_payload(
@@ -308,7 +317,7 @@ class CodexInstallTests(unittest.TestCase):
             repo_root,
             existing={"status": "ACTIVE", "user_paused": True},
         )
-        self.assertEqual("ACTIVE", independently_marked["status"])
+        self.assertEqual("PAUSED", independently_marked["status"])
         self.assertTrue(independently_marked["user_paused"])
 
         legacy_paused = _automation_spec_payload(
@@ -390,7 +399,7 @@ class CodexInstallTests(unittest.TestCase):
                 phases.index("paused_install_transaction_committed"),
             )
 
-    def test_real_upgrade_drains_observations_admitted_during_assurance(self) -> None:
+    def test_real_upgrade_runs_one_affected_assurance_without_second_migration(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -401,28 +410,19 @@ class CodexInstallTests(unittest.TestCase):
                 "status": "committed",
                 "migration_id": "fixture-initial",
             }
-            final = {
-                "ok": True,
-                "status": "reconciled",
-                "migration_id": "fixture-final",
-                "logical_debt_reconciliation": {"pass_count": 1},
-            }
             with patch(
                 "local_kb.maintenance_migration.run_maintenance_migration",
-                side_effect=[initial, final],
+                return_value=initial,
             ) as migration, patch(
-                "local_kb.maintenance_migration.check_migration",
-                return_value={"ok": True, "issues": []},
-            ), patch(
-                "scripts.evaluate_kb_retrieval.build_report",
-                return_value={
-                    "ok": True,
-                    "metrics": {"useful_top3_rate": 1.0},
-                    "threshold_results": {"active_index_current": True},
-                },
-            ), patch(
                 "local_kb.install._run_pre_restore_upgrade_assurance",
-                return_value={"ok": True, "failed_checks": []},
+                return_value={
+                    "schema_version": "khaos-brain.consumer-install-assurance.v2",
+                    "ok": True,
+                    "status": "passed",
+                    "failed_checks": [],
+                    "receipt_hash": "sha256:fixture",
+                    "execution_count": 1,
+                },
             ), patch(
                 "local_kb.install.build_installation_check",
                 return_value={"ok": True, "issues": []},
@@ -436,27 +436,18 @@ class CodexInstallTests(unittest.TestCase):
                     persist_user_shell_path=False,
                 )
 
-            self.assertEqual(migration.call_count, 2)
+            self.assertEqual(migration.call_count, 1)
             self.assertEqual(payload["initial_history_migration"], initial)
-            self.assertEqual(payload["history_migration"], final)
-            self.assertEqual(payload["post_assurance_history_migration"], final)
-            self.assertTrue(payload["post_assurance_data_convergence"]["ok"])
-            self.assertEqual(
-                payload["post_assurance_data_convergence"]["attempt_count"], 1
-            )
+            self.assertEqual(payload["history_migration"], initial)
+            self.assertNotIn("post_assurance_history_migration", payload)
+            self.assertNotIn("post_assurance_data_convergence", payload)
             phases = [
                 row["phase"] for row in payload["upgrade_attempt"]["checkpoint_refs"]
             ]
-            self.assertLess(
-                phases.index("aggregate_assurance_passed"),
-                phases.index("post_assurance_history_current"),
-            )
-            self.assertLess(
-                phases.index("post_assurance_history_current"),
-                phases.index("final_install_transaction_committed"),
-            )
+            self.assertIn("affected_assurance_stable", phases)
+            self.assertNotIn("post_assurance_history_current", phases)
 
-    def test_post_assurance_data_convergence_failure_keeps_survivors_paused(self) -> None:
+    def test_affected_assurance_failure_keeps_survivors_paused(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -467,20 +458,17 @@ class CodexInstallTests(unittest.TestCase):
                 "status": "committed",
                 "migration_id": "fixture-initial",
             }
-            failed = {
-                "ok": False,
-                "status": "paused_failed",
-                "issues": ["late observation debt kept changing"],
-            }
             with patch(
                 "local_kb.maintenance_migration.run_maintenance_migration",
-                side_effect=[initial, failed, failed, failed, failed],
+                return_value=initial,
             ), patch(
                 "local_kb.install._run_pre_restore_upgrade_assurance",
-                return_value={"ok": True, "failed_checks": []},
+                side_effect=RuntimeError(
+                    "affected assurance stability limit reached"
+                ),
             ):
                 with self.assertRaisesRegex(
-                    RuntimeError, "post-assurance data convergence failed"
+                    RuntimeError, "affected assurance stability limit reached"
                 ):
                     install_codex_integration(
                         repo_root,
@@ -494,7 +482,7 @@ class CodexInstallTests(unittest.TestCase):
             attempt = latest_upgrade_attempt(codex_home)
             self.assertEqual(attempt["status"], "failed")
             phases = [row["phase"] for row in attempt["checkpoint_refs"]]
-            self.assertIn("aggregate_assurance_passed", phases)
+            self.assertNotIn("affected_assurance_stable", phases)
             self.assertNotIn("final_install_transaction_committed", phases)
             for automation_id in SURVIVING_AUTOMATIONS:
                 self.assertEqual(
@@ -575,6 +563,16 @@ class CodexInstallTests(unittest.TestCase):
             attempt = latest_upgrade_attempt(codex_home)
             self.assertEqual(attempt["status"], "failed")
             self.assertEqual(attempt["phase"], "failed_paused_recoverable")
+            self.assertEqual(
+                set(attempt["automation_state_snapshot"]["states"].values()),
+                {"ACTIVE"},
+            )
+            self.assertEqual(
+                set(
+                    attempt["automation_state_snapshot"]["user_paused"].values()
+                ),
+                {False},
+            )
             phases = [row["phase"] for row in attempt["checkpoint_refs"]]
             self.assertIn("paused_install_transaction_committed", phases)
             self.assertIn("pre_assurance_consumer_projection_current", phases)
@@ -697,7 +695,15 @@ class CodexInstallTests(unittest.TestCase):
                 return subprocess.CompletedProcess(
                     args=args,
                     returncode=0,
-                    stdout=json.dumps({"ok": True}),
+                    stdout=json.dumps(
+                        {
+                            "schema_version": (
+                                "khaos-brain.consumer-install-assurance.v2"
+                            ),
+                            "ok": True,
+                            "receipt_hash": "sha256:fixture",
+                        }
+                    ),
                     stderr="",
                 )
 
@@ -758,9 +764,10 @@ class CodexInstallTests(unittest.TestCase):
             researchguard_root = root / "validation" / "python" / "researchguard"
             researchguard_root.mkdir(parents=True)
             payload = {
+                "schema_version": "khaos-brain.consumer-install-assurance.v2",
                 "ok": False,
                 "failed_checks": ["full_regression"],
-                "checks": {
+                "owners": {
                     "full_regression": {
                         "terminal_status": "failed",
                         "exit_code": 1,
@@ -844,9 +851,10 @@ class CodexInstallTests(unittest.TestCase):
             researchguard_root = root / "validation" / "python" / "researchguard"
             researchguard_root.mkdir(parents=True)
             payload = {
+                "schema_version": "khaos-brain.consumer-install-assurance.v2",
                 "ok": False,
                 "failed_checks": ["model_code_test_alignment"],
-                "checks": {
+                "owners": {
                     "model_code_test_alignment": {
                         "terminal_status": "failed",
                         "exit_code": 1,
@@ -1103,6 +1111,52 @@ class CodexInstallTests(unittest.TestCase):
             self.assertFalse(
                 (codex_home / "automations/khaos-brain-system-update").exists()
             )
+
+    def test_reinstall_recovers_system_pause_from_attempt_snapshot(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            codex_home = root / ".codex"
+            shell_bin, git_real, rg_source = _write_fake_tools(root)
+            kwargs = dict(
+                repo_root=repo_root,
+                codex_home=codex_home,
+                shell_bin_dir=shell_bin,
+                git_executable=git_real,
+                rg_source=rg_source,
+                persist_user_shell_path=False,
+                run_history_migration=False,
+            )
+            install_codex_integration(**kwargs)
+            for automation in SURVIVING_AUTOMATIONS:
+                path = codex_home / "automations" / automation / "automation.toml"
+                text = path.read_text(encoding="utf-8").replace(
+                    'status = "ACTIVE"',
+                    'status = "PAUSED"',
+                )
+                path.write_text(text, encoding="utf-8")
+
+            install_codex_integration(
+                **kwargs,
+                automation_state_snapshot={
+                    "states": {
+                        automation_id: "ACTIVE"
+                        for automation_id in SURVIVING_AUTOMATIONS
+                    },
+                    "user_paused": {
+                        automation_id: False
+                        for automation_id in SURVIVING_AUTOMATIONS
+                    },
+                },
+            )
+
+            for automation in SURVIVING_AUTOMATIONS:
+                self.assertEqual(
+                    _automation_status(
+                        codex_home / "automations" / automation / "automation.toml"
+                    ),
+                    "ACTIVE",
+                )
 
     def test_complete_tree_drift_fails_install_check(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]

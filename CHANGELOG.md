@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.6.6 - 2026-07-19
+
+- Replaced unconditional consumer-install assurance with five exact validation owners. Each owner binds its declared source, data, toolchain, environment, and installed-projection components; unchanged terminal-success receipts are reused and only affected owners execute.
+- Applied the same closed affected-only contract to all 17 final-readiness owners. Every owner now reuses only an exact immutable success receipt and proof artifact; failed, timed-out, stale, tampered, missing, duplicate-owned, unmapped, or ambiguous evidence blocks without a run-all route. Full regression retains its exclusive JUnit-validated lane.
+- Removed the unconditional second migration and retrieval campaign after assurance. The single planner now compares declared inputs before and after execution and replans only owners whose inputs changed, with no run-all fallback.
+- Made `install_codex_kb.py --check --json` a bounded read-only currentness audit. It launches zero migration, model, retrieval, pytest, resume, or assurance subprocesses while still failing visibly on stale installation, automation, migration, attempt, or assurance authority.
+- Restricted GitHub push validation to `main` and release tags so pull-request branches no longer run the same suite once for `push` and again for `pull_request`. Tags remain receipt-only and require the exact successful `main` revision before publication.
+- Kept Khaos Brain's sole reasoning dependency on public ResearchGuard and `researchguard.logic`; no standalone LogicGuard import, compatibility reader, alias, or alternate dependency route was introduced.
+
 ## v0.6.5 - 2026-07-18
 
 - Retired the exact `Khaos Brain System Update` scheduled task. Fresh installs, upgrades, repairs, and repeated installs keep it absent while preserving the four scheduled Sleep, Dream, and organization automations.

@@ -10,8 +10,8 @@
 </p>
 <!-- README HERO END -->
 
-- Repository head (`main`) / 仓库主线（`main`）: `v0.6.5`
-- Latest released version / 最新已发布版本: `v0.6.5`
+- Repository head (`main`) / 仓库主线（`main`）: `v0.6.6`
+- Latest released version / 最新已发布版本: `v0.6.6`
 - Project name / 项目名称: `Khaos Brain`
 - English lead content comes first; the full Chinese section follows below. / 英文主内容在前，完整中文部分在后方。
 
@@ -204,13 +204,15 @@ MIT. See [`LICENSE`](./LICENSE).
 
 After the check passes, the machine has the global preflight skill, bounded postflight rules, four scheduled maintenance entries (`KB Sleep`, `KB Dream`, organization contribution, and organization maintenance), plus the manually invoked `khaos-brain-update` Skill. There is no scheduled software-update task. The desktop UI only displays the exact configured Git upstream status; updating starts only when the user explicitly asks AI in the current conversation. Each installed Skill is a self-contained consumer product with its own native checks and receipts; no installed tree contains `.skillguard` or calls SkillGuard. Upgrades remove the retired Architect and system-update surfaces and settle old history, candidate, cache, sandbox, and maintenance debt. Old managed formats are upgrade-only input: the AI-run transaction converts them directly into exact LogicGuard models, scoped ModelMeshes, deterministic projections, and an exact active index, publishes the generation pointer last, deletes retired authority, and requires a residual-zero receipt. Normal operation has no compatibility layer or projection fallback; missing or stale current facts fail visibly. Upgrade-attempt currentness reads one bounded `HEAD.json` and the exact bounded current projection it names; immutable event history and prior attempt directories are never scanned by the ordinary check. The committed lightweight install state binds that same final attempt by exact ID and receipt hash, and an independent post-command check must match both. During a real manual update, all four scheduled automations remain paused while one target-native transaction validates, restores, reads back, runs the normal install check, and marks the update current.
 
+Release readiness is a closed 17-owner graph, not a list of fallback commands. Each source, data, toolchain, environment, or installed-state component has an explicit owner edge. An unchanged owner consumes its exact immutable terminal-success receipt without execution; a changed component invalidates only its declared owners. Failed, timed-out, tampered, missing, duplicate-owned, unmapped, or ambiguous evidence blocks visibly. Only one frozen release snapshot runs the complete foreground campaign, and full regression retains its exclusive JUnit-validated lane.
+
 The exact migration phases, rollback behavior, pause-state preservation, and success gates are documented in [Chaos Brain upgrade contract](docs/chaos_brain_upgrade.md).
 
 # Khaos Brain 中文说明
 
 | 仓库主线 | 最新发布 | 项目 | 许可证 |
 | --- | --- | --- | --- |
-| `v0.6.5` | `v0.6.5` | `Khaos Brain` | MIT |
+| `v0.6.6` | `v0.6.6` | `Khaos Brain` | MIT |
 
 ## 它是什么
 
@@ -357,6 +359,8 @@ Candidate Skills 不会自动安装。只有带 pinned version 和 content-hash 
 Python 依赖只固定到一个公开的 [ResearchGuard v0.1.1](https://github.com/liuyingxuvka/ResearchGuard/releases/tag/v0.1.1) 精确源码提交。Khaos Brain 只导入其中的 `researchguard.logic` 成员；当前 ModelStore、ModelMesh API 以及 `researchguard.logic.model-store.v1` / `researchguard.logic.model-mesh.v1` schema 都由它提供。已经退役的独立 LogicGuard 包既不安装，也不参与运行。
 
 仓库开发与 GitHub Actions 使用 `requirements-dev.txt`，其中额外固定了公开的 [FlowGuard v0.58.4](https://github.com/liuyingxuvka/FlowGuard/releases/tag/v0.58.4) 精确源码提交，用于模型保障测试。ResearchGuard 和 FlowGuard 都只走一个公开 HTTPS 身份；没有 SSH 密钥、私有依赖、镜像、别名、兼容导入、fallback 或第二依赖路径。Khaos Brain 只保留 FlowGuard 项目记录和本项目的可执行模型，不再内置 FlowGuard 影子 Skill 套件、ownership manifest、suite map 或兼容验证器；Codex 使用当前全局 FlowGuard Skill 入口。CI 也会使用公开的 SkillGuard 源码做作者侧合同编译与深度校准，并使用官方 OpenSpec 1.6.0 做规格验证。它们都不会被复制进 Khaos Brain 的消费者安装技能，也不是这些技能日常运行的依赖。每个原生运行器只服从自己的命令合同；解释器身份真正变化时，该运行器的证据会失效。
+
+发布就绪检查是一张封闭的 17-owner 图，不是一串失败后改走别路的命令。源码、数据、工具链、环境和安装状态组件都有明确 owner；未变化的 owner 直接复用自己的精确不可变成功回执，变化只让实际消费该组件的 owner 失效。失败、超时、被篡改、缺失、重复归属、未映射或歧义证据都会明确阻断，绝不会退化成 run-all。只有冻结后的发布快照运行一次完整前台验收，全量回归继续占用独立且经过 JUnit 清单校验的通道。
 
 对很多团队来说，private repository 已经是最简单可靠的 memory backend。
 

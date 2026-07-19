@@ -22,7 +22,7 @@ import re
 import shutil
 import subprocess
 import sys
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping, Sequence
 import xml.etree.ElementTree as ET
 
 
@@ -40,7 +40,8 @@ from local_kb.process_control import run_with_timeout_cleanup  # noqa: E402
 
 DEFAULT_RECEIPT = REPO_ROOT / ".local" / "assurance" / "chaos_brain_readiness.json"
 DEFAULT_EVIDENCE_ROOT = REPO_ROOT / ".local" / "assurance" / "validation-evidence"
-EVIDENCE_SCHEMA = "khaos-brain.validation-evidence.v1"
+EVIDENCE_SCHEMA = "khaos-brain.validation-evidence.v2"
+EVIDENCE_POLICY_VERSION = "khaos-brain.owner-scoped-receipt.v2"
 
 _CHECKBOX_RE = re.compile(r"(?m)^(\s*-\s*\[)[ xX](\])")
 
@@ -74,8 +75,28 @@ def _watched_files(repo_root: Path) -> Iterable[Path]:
         repo_root / ".agents" / "skills",
         repo_root / "templates",
         repo_root / "openspec",
+        repo_root / "schemas",
+        repo_root / ".github",
+        repo_root / "docs",
+        repo_root / "assets",
     )
-    suffixes = {".py", ".md", ".json", ".yaml", ".yml", ".toml", ".template"}
+    suffixes = {
+        ".py",
+        ".md",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".template",
+        ".txt",
+        ".html",
+        ".css",
+        ".js",
+        ".svg",
+        ".png",
+        ".ico",
+        ".csv",
+    }
     for root in roots:
         if not root.exists():
             continue
@@ -95,6 +116,13 @@ def _watched_files(repo_root: Path) -> Iterable[Path]:
         "README.md",
         "VERSION",
         "pyproject.toml",
+        "requirements.txt",
+        "requirements-dev.txt",
+        "CHANGELOG.md",
+        "CONTRIBUTING.md",
+        "LICENSE",
+        "CODEX_PROJECT_SPEC_predictive_kb.md",
+        ".gitignore",
     ):
         path = repo_root / name
         if path.is_file():
@@ -126,6 +154,655 @@ def _source_snapshot(repo_root: Path) -> dict[str, Any]:
         "digest": hashlib.sha256(body).hexdigest(),
         "files": rows,
     }
+
+
+_EXACT_SOURCE_COMPONENTS = {
+    "scripts/check_chaos_brain_readiness.py": "readiness_planner",
+    "tests/test_chaos_brain_readiness.py": "readiness_planner",
+    "tests/test_chaos_brain_readiness_projection.py": "readiness_planner",
+    "scripts/check_khaos_logicguard_runtime.py": "logicguard_runtime_check",
+    "scripts/check_kb_skillguard.py": "author_contract_check",
+    "scripts/build_kb_automation_skillguard_contracts.py": "author_contract_check",
+    "scripts/check_kb_automation_skillguard_depth.py": "author_contract_check",
+    "scripts/check_retired_kb_architect.py": "retired_architect_check",
+    "scripts/check_current_runtime_only.py": "current_runtime_check",
+    "scripts/evaluate_kb_retrieval.py": "retrieval_quality_check",
+    "scripts/install_codex_kb.py": "installation_check",
+    "scripts/check_consumer_install_assurance.py": "installation_check",
+    "scripts/run_flowguard_suite.py": "flowguard_mesh_source",
+    ".flowguard/kb_convergence_upgrade_model.py": "flowguard_convergence_source",
+    ".flowguard/run_kb_convergence_checks.py": "flowguard_convergence_source",
+    ".flowguard/kb_skill_contract_model_common.py": "flowguard_convergence_source",
+    ".flowguard/kb_sleep_skill_contract_model.py": "flowguard_convergence_source",
+    ".flowguard/kb_dream_skill_contract_model.py": "flowguard_convergence_source",
+    ".flowguard/kb_org_contribute_skill_contract_model.py": "flowguard_convergence_source",
+    ".flowguard/kb_org_maintenance_skill_contract_model.py": "flowguard_convergence_source",
+    ".flowguard/khaos_brain_update_skill_contract_model.py": "flowguard_convergence_source",
+    ".flowguard/khaos_brain_logicguard_authority_cutover.py": (
+        "logicguard_authority_cutover_model"
+    ),
+    ".flowguard/khaos_brain_logicguard_field_lifecycle.py": (
+        "logicguard_field_lifecycle_model"
+    ),
+    ".flowguard/khaos_brain_logicguard_model_mesh.py": "logicguard_model_mesh_model",
+    ".flowguard/khaos_brain_logicguard_code_structure.py": (
+        "logicguard_code_structure_model"
+    ),
+    ".flowguard/khaos_brain_logicguard_model_test_alignment.py": (
+        "logicguard_model_test_surface"
+    ),
+    ".flowguard/khaos_brain_logicguard_test_mesh.py": (
+        "logicguard_model_test_surface"
+    ),
+    ".flowguard/khaos_brain_logicguard_runtime_model_miss.py": (
+        "logicguard_runtime_model_miss_model"
+    ),
+    "tests/fixtures/kb_retrieval_eval_cases.json": "retrieval_quality_cases",
+    "tests/test_kb_automation_skillguard.py": "flowguard_contract_tests",
+    "tests/test_kb_flowguard_execution_identity.py": "flowguard_contract_tests",
+}
+
+_SOURCE_COMPONENT_OWNER_EDGES: dict[str, frozenset[str]] = {
+    "runtime_source": frozenset(
+        {
+            "full_regression",
+            "flowguard_models",
+            "flowguard_meshes",
+            "logicguard_runtime",
+            "logicguard_runtime_model_miss",
+            "author_contract_assurance",
+            "retired_architect_absence",
+            "current_runtime_only",
+            "retrieval_quality",
+            "install_health",
+        }
+    ),
+    "runtime_script_source": frozenset(
+        {
+            "full_regression",
+            "flowguard_meshes",
+            "retired_architect_absence",
+            "current_runtime_only",
+            "install_health",
+        }
+    ),
+    "readiness_planner": frozenset(),
+    "logicguard_runtime_check": frozenset(
+        {"full_regression", "logicguard_runtime", "current_runtime_only"}
+    ),
+    "author_contract_check": frozenset(
+        {"full_regression", "author_contract_assurance", "current_runtime_only"}
+    ),
+    "retired_architect_check": frozenset(
+        {"full_regression", "retired_architect_absence"}
+    ),
+    "current_runtime_check": frozenset(
+        {"full_regression", "flowguard_meshes", "current_runtime_only"}
+    ),
+    "retrieval_quality_check": frozenset(
+        {"full_regression", "retrieval_quality", "current_runtime_only"}
+    ),
+    "installation_check": frozenset(
+        {
+            "full_regression",
+            "flowguard_models",
+            "flowguard_meshes",
+            "retired_architect_absence",
+            "current_runtime_only",
+            "install_health",
+        }
+    ),
+    "flowguard_convergence_source": frozenset(
+        {
+            "full_regression",
+            "flowguard_models",
+            "flowguard_meshes",
+            "retired_architect_absence",
+        }
+    ),
+    "flowguard_mesh_source": frozenset(
+        {"full_regression", "flowguard_meshes", "retired_architect_absence"}
+    ),
+    "flowguard_other_source": frozenset(
+        {"full_regression", "flowguard_meshes", "retired_architect_absence"}
+    ),
+    "logicguard_authority_cutover_model": frozenset(
+        {
+            "full_regression",
+            "logicguard_authority_cutover_model",
+            "retired_architect_absence",
+        }
+    ),
+    "logicguard_field_lifecycle_model": frozenset(
+        {
+            "full_regression",
+            "logicguard_field_lifecycle",
+            "retired_architect_absence",
+        }
+    ),
+    "logicguard_model_mesh_model": frozenset(
+        {"full_regression", "logicguard_model_mesh", "retired_architect_absence"}
+    ),
+    "logicguard_code_structure_model": frozenset(
+        {
+            "full_regression",
+            "logicguard_code_structure",
+            "retired_architect_absence",
+        }
+    ),
+    "logicguard_model_test_surface": frozenset(
+        {
+            "full_regression",
+            "logicguard_model_test_contract",
+            "logicguard_test_mesh",
+            "retired_architect_absence",
+        }
+    ),
+    "logicguard_runtime_model_miss_model": frozenset(
+        {
+            "full_regression",
+            "logicguard_runtime_model_miss",
+            "retired_architect_absence",
+        }
+    ),
+    "consumer_skill_source": frozenset(
+        {
+            "full_regression",
+            "flowguard_models",
+            "author_contract_assurance",
+            "retired_architect_absence",
+            "current_runtime_only",
+            "install_health",
+        }
+    ),
+    "author_skill_contract": frozenset(
+        {"full_regression", "author_contract_assurance"}
+    ),
+    "template_source": frozenset(
+        {
+            "full_regression",
+            "retired_architect_absence",
+            "install_health",
+        }
+    ),
+    "product_asset": frozenset({"full_regression", "install_health"}),
+    "runtime_dependency": frozenset(
+        {
+            "full_regression",
+            "logicguard_runtime",
+            "current_runtime_only",
+            "install_health",
+        }
+    ),
+    "test_source": frozenset({"full_regression"}),
+    "flowguard_contract_tests": frozenset(
+        {
+            "full_regression",
+            "flowguard_models",
+            "flowguard_meshes",
+            "author_contract_assurance",
+        }
+    ),
+    "retrieval_quality_cases": frozenset({"full_regression", "retrieval_quality"}),
+    "logicguard_openspec_contract": frozenset({"logicguard_openspec"}),
+    "readiness_openspec_contract": frozenset(),
+    "other_openspec_contract": frozenset(),
+    "release_ci": frozenset(),
+    "campaign_metadata": frozenset(),
+    "runtime_authority_state": frozenset(
+        {"logicguard_runtime", "retrieval_quality"}
+    ),
+    "installed_codex_state": frozenset(
+        {"retired_architect_absence", "install_health"}
+    ),
+    "author_toolchain_state": frozenset({"author_contract_assurance"}),
+}
+
+
+def _classify_watched_source(relative: Path) -> str | None:
+    text = relative.as_posix()
+    exact = _EXACT_SOURCE_COMPONENTS.get(text)
+    if exact:
+        return exact
+    if text.startswith("local_kb/"):
+        return "runtime_source"
+    if text.startswith("scripts/"):
+        return "runtime_script_source"
+    if text.startswith("tests/"):
+        return "test_source"
+    if text.startswith(".flowguard/"):
+        return "flowguard_other_source"
+    if text.startswith(".agents/skills/"):
+        return (
+            "author_skill_contract"
+            if "/.skillguard/" in f"/{text}"
+            else "consumer_skill_source"
+        )
+    if text.startswith("templates/"):
+        return "template_source"
+    if text.startswith("schemas/") or text.startswith("assets/"):
+        return "product_asset"
+    if text.startswith(
+        "openspec/changes/make-khaos-brain-logicguard-native/"
+    ):
+        return "logicguard_openspec_contract"
+    if text.startswith("openspec/changes/make-readiness-affected-only/"):
+        return "readiness_openspec_contract"
+    if text.startswith("openspec/"):
+        return "other_openspec_contract"
+    if text.startswith(".github/"):
+        return "release_ci"
+    if text.startswith("docs/"):
+        return "campaign_metadata"
+    if relative.name in {"requirements.txt", "requirements-dev.txt", "pyproject.toml"}:
+        return "runtime_dependency"
+    if "/" not in text:
+        return "campaign_metadata"
+    return None
+
+
+def _digest_component_rows(rows: Sequence[Mapping[str, Any]]) -> str:
+    body = json.dumps(
+        [dict(row) for row in rows],
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(body).hexdigest()
+
+
+def _tree_component_row(label: str, path: Path) -> dict[str, Any]:
+    resolved = Path(path).resolve()
+    if not resolved.exists():
+        return {"label": label, "kind": "missing", "digest": "", "file_count": 0}
+    if resolved.is_file():
+        return {
+            "label": label,
+            "kind": "file",
+            "digest": hashlib.sha256(resolved.read_bytes()).hexdigest(),
+            "file_count": 1,
+        }
+    manifest = tree_manifest(resolved)
+    return {
+        "label": label,
+        "kind": "tree",
+        "digest": str(manifest.get("digest") or ""),
+        "file_count": int(manifest.get("file_count") or 0),
+    }
+
+
+def _tree_stat_component_row(label: str, path: Path) -> dict[str, Any]:
+    """Bind a content-addressed authority tree to its observed file projection.
+
+    The authority pointer and store manifests carry the cryptographic content
+    identities. The stat projection detects an ordinary byte edit, addition,
+    removal, or replacement without rereading multi-gigabyte immutable
+    histories on every readiness plan.
+    """
+
+    resolved = Path(path).resolve()
+    if not resolved.exists():
+        return {"label": label, "kind": "missing", "digest": "", "file_count": 0}
+    if resolved.is_file():
+        stat = resolved.stat()
+        rows = [
+            {
+                "path": resolved.name,
+                "size": stat.st_size,
+                "mtime_ns": stat.st_mtime_ns,
+            }
+        ]
+    else:
+        rows = []
+        for child in sorted(resolved.rglob("*")):
+            if not child.is_file():
+                continue
+            stat = child.stat()
+            rows.append(
+                {
+                    "path": child.relative_to(resolved).as_posix(),
+                    "size": stat.st_size,
+                    "mtime_ns": stat.st_mtime_ns,
+                }
+            )
+    return {
+        "label": label,
+        "kind": "content-authority-stat-projection",
+        "digest": _digest_component_rows(rows),
+        "file_count": len(rows),
+    }
+
+
+def _safe_current_ref(
+    authority_root: Path,
+    reference: Mapping[str, Any] | None,
+) -> Path | None:
+    relative = str((reference or {}).get("relative_path") or "")
+    if not relative:
+        return None
+    root = authority_root.resolve()
+    candidate = (root / relative).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return None
+    return candidate
+
+
+def _runtime_authority_component(repo_root: Path) -> dict[str, Any]:
+    rows = [
+        _tree_stat_component_row("kb/public", repo_root / "kb" / "public"),
+        _tree_stat_component_row("kb/private", repo_root / "kb" / "private"),
+        _tree_stat_component_row("kb/candidates", repo_root / "kb" / "candidates"),
+        _tree_component_row("kb/indexes", repo_root / "kb" / "indexes"),
+        _tree_component_row("kb/taxonomy.yaml", repo_root / "kb" / "taxonomy.yaml"),
+        _tree_component_row(
+            ".local/khaos-brain/logicguard-authority/current-generation.json",
+            repo_root
+            / ".local"
+            / "khaos-brain"
+            / "logicguard-authority"
+            / "current-generation.json",
+        ),
+        *(
+            _tree_component_row(
+                f".local/khaos-brain/logicguard-authority/{scope}/models/manifest.json",
+                repo_root
+                / ".local"
+                / "khaos-brain"
+                / "logicguard-authority"
+                / scope
+                / "models"
+                / "manifest.json",
+            )
+            for scope in ("public", "private", "candidates")
+        ),
+        *(
+            _tree_component_row(
+                f".local/khaos-brain/logicguard-authority/{scope}/meshes/mesh-manifest.json",
+                repo_root
+                / ".local"
+                / "khaos-brain"
+                / "logicguard-authority"
+                / scope
+                / "meshes"
+                / "mesh-manifest.json",
+            )
+            for scope in ("public", "private", "candidates")
+        ),
+        _tree_component_row(
+            ".local/khaos-brain/logicguard-authority/generations",
+            repo_root / ".local" / "khaos-brain" / "logicguard-authority",
+        ),
+    ]
+    rows[-1] = _tree_stat_component_row(
+        ".local/khaos-brain/logicguard-authority/current-store-projection",
+        repo_root / ".local" / "khaos-brain" / "logicguard-authority",
+    )
+    return {
+        "component_id": "runtime_authority_state",
+        "digest": _digest_component_rows(rows),
+        "file_count": sum(int(row["file_count"]) for row in rows),
+    }
+
+
+def _installed_codex_component(repo_root: Path, codex_home: Path) -> dict[str, Any]:
+    from local_kb.install import (
+        MAINTENANCE_SKILL_NAMES,
+        REPO_AUTOMATION_SPECS,
+        RETIRED_AUTOMATION_IDS,
+        RETIRED_MAINTENANCE_SKILL_IDS,
+    )
+
+    skill_ids = (
+        "predictive-kb-preflight",
+        *MAINTENANCE_SKILL_NAMES,
+        *RETIRED_MAINTENANCE_SKILL_IDS,
+    )
+    automation_ids = (
+        *(str(item["id"]) for item in REPO_AUTOMATION_SPECS),
+        *RETIRED_AUTOMATION_IDS,
+    )
+    install_authority_root = codex_home / ".khaos-brain-install"
+    attempts_root = install_authority_root / "attempts"
+    attempt_head_path = attempts_root / "HEAD.json"
+    try:
+        attempt_head = json.loads(attempt_head_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        attempt_head = {}
+    attempt_current = _safe_current_ref(
+        attempts_root,
+        attempt_head.get("current_ref") if isinstance(attempt_head, Mapping) else {},
+    )
+
+    assurance_root = install_authority_root / "consumer-assurance"
+    assurance_current_path = assurance_root / "current.json"
+    try:
+        assurance_current = json.loads(
+            assurance_current_path.read_text(encoding="utf-8")
+        )
+    except (OSError, json.JSONDecodeError):
+        assurance_current = {}
+    assurance_receipts = (
+        assurance_current.get("owner_receipts")
+        if isinstance(assurance_current, Mapping)
+        and isinstance(assurance_current.get("owner_receipts"), Mapping)
+        else {}
+    )
+
+    activation_root = install_authority_root / "operator-activation"
+    activation_head_path = activation_root / "HEAD.json"
+    try:
+        activation_head = json.loads(
+            activation_head_path.read_text(encoding="utf-8")
+        )
+    except (OSError, json.JSONDecodeError):
+        activation_head = {}
+    activation_receipt = _safe_current_ref(
+        activation_root,
+        activation_head.get("receipt_ref")
+        if isinstance(activation_head, Mapping)
+        else {},
+    )
+
+    rows = [
+        _tree_component_row("codex/AGENTS.md", codex_home / "AGENTS.md"),
+        _tree_component_row(
+            "codex/predictive-kb/install.json",
+            codex_home / "predictive-kb" / "install.json",
+        ),
+        _tree_component_row("codex/install-attempt/HEAD.json", attempt_head_path),
+        _tree_component_row(
+            "codex/install-attempt/current.json",
+            attempt_current
+            if attempt_current is not None
+            else attempts_root / "__missing_current__.json",
+        ),
+        _tree_component_row(
+            "codex/consumer-assurance/current.json",
+            assurance_current_path,
+        ),
+        _tree_component_row(
+            "codex/operator-activation/HEAD.json",
+            activation_head_path,
+        ),
+        _tree_component_row(
+            "codex/operator-activation/current-receipt.json",
+            activation_receipt
+            if activation_receipt is not None
+            else activation_root / "__missing_receipt__.json",
+        ),
+        _tree_component_row(
+            "repo/.local/khaos_brain_update_state.json",
+            repo_root / ".local" / "khaos_brain_update_state.json",
+        ),
+        _tree_component_row(
+            "repo/kb/history/current-migration",
+            repo_root
+            / "kb"
+            / "history"
+            / "migrations"
+            / "kb-maintenance-standard-v5-researchguard-logic-native",
+        ),
+    ]
+    rows.extend(
+        _tree_component_row(f"codex/skills/{skill_id}", codex_home / "skills" / skill_id)
+        for skill_id in skill_ids
+    )
+    rows.extend(
+        _tree_component_row(
+            f"codex/automations/{automation_id}",
+            codex_home / "automations" / automation_id,
+        )
+        for automation_id in automation_ids
+    )
+    rows.extend(
+        _tree_component_row(
+            f"codex/consumer-assurance/{owner}",
+            current_ref
+            if current_ref is not None
+            else assurance_root / f"__missing_{owner}__.json",
+        )
+        for owner, reference in sorted(assurance_receipts.items())
+        for current_ref in (
+            _safe_current_ref(
+                assurance_root,
+                reference if isinstance(reference, Mapping) else {},
+            ),
+        )
+    )
+    return {
+        "component_id": "installed_codex_state",
+        "digest": _digest_component_rows(rows),
+        "file_count": sum(int(row["file_count"]) for row in rows),
+    }
+
+
+def _author_toolchain_component() -> dict[str, Any]:
+    configured = os.environ.get("SKILLGUARD_AUTHOR_COMPILER", "").strip()
+    candidates = (
+        Path(configured) if configured else None,
+        Path.home()
+        / ".codex"
+        / "skills"
+        / "skillguard"
+        / "scripts"
+        / "skillguard_compile.py",
+        REPO_ROOT.parent
+        / "SkillGuard_20260614"
+        / ".agents"
+        / "skills"
+        / "skillguard"
+        / "scripts"
+        / "skillguard_compile.py",
+    )
+    selected = next(
+        (candidate.resolve() for candidate in candidates if candidate and candidate.is_file()),
+        None,
+    )
+    row = _tree_component_row(
+        "skillguard-author-compiler",
+        selected if selected is not None else Path("__missing_skillguard_compiler__"),
+    )
+    return {
+        "component_id": "author_toolchain_state",
+        "digest": _digest_component_rows([row]),
+        "file_count": int(row["file_count"]),
+    }
+
+
+def _build_component_inventory(
+    repo_root: Path,
+    codex_home: Path,
+) -> dict[str, Any]:
+    component_rows: dict[str, list[dict[str, Any]]] = {}
+    path_components: dict[str, set[str]] = {}
+    for path in _watched_files(repo_root):
+        relative = path.relative_to(repo_root)
+        component = _classify_watched_source(relative)
+        text = relative.as_posix()
+        if component is not None:
+            path_components.setdefault(text, set()).add(component)
+            semantic = _semantic_bytes(path, relative)
+            component_rows.setdefault(component, []).append(
+                {
+                    "path": text,
+                    "semantic_sha256": hashlib.sha256(semantic).hexdigest(),
+                }
+            )
+        else:
+            path_components.setdefault(text, set())
+
+    issues = [
+        (
+            f"unmapped-watched-input:{path}"
+            if not components
+            else f"ambiguous-watched-input:{path}:{','.join(sorted(components))}"
+        )
+        for path, components in sorted(path_components.items())
+        if len(components) != 1
+    ]
+    unknown_components = sorted(
+        component
+        for component in component_rows
+        if component not in _SOURCE_COMPONENT_OWNER_EDGES
+    )
+    issues.extend(f"unknown-component:{component}" for component in unknown_components)
+
+    components: dict[str, dict[str, Any]] = {}
+    for component, rows in sorted(component_rows.items()):
+        ordered = sorted(rows, key=lambda row: str(row["path"]))
+        components[component] = {
+            "component_id": component,
+            "digest": _digest_component_rows(ordered),
+            "file_count": len(ordered),
+        }
+    for external in (
+        _runtime_authority_component(repo_root),
+        _installed_codex_component(repo_root, codex_home),
+        _author_toolchain_component(),
+    ):
+        components[str(external["component_id"])] = external
+
+    return {
+        "schema_version": "khaos-brain.readiness-component-inventory.v1",
+        "components": components,
+        "watched_file_count": len(path_components),
+        "issues": issues,
+        "ok": not issues,
+    }
+
+
+def _owner_component_snapshots(
+    commands: Mapping[str, Sequence[str]],
+    inventory: Mapping[str, Any],
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    available = (
+        inventory.get("components")
+        if isinstance(inventory.get("components"), Mapping)
+        else {}
+    )
+    owners: dict[str, dict[str, Any]] = {}
+    issues = list(inventory.get("issues") or [])
+    for owner in sorted(commands):
+        rows = [
+            {
+                "component_id": component_id,
+                "digest": str(component.get("digest") or ""),
+                "file_count": int(component.get("file_count") or 0),
+            }
+            for component_id, component in sorted(available.items())
+            if owner in _SOURCE_COMPONENT_OWNER_EDGES.get(component_id, frozenset())
+            and isinstance(component, Mapping)
+        ]
+        if not rows:
+            issues.append(f"owner-without-components:{owner}")
+            continue
+        owners[owner] = {
+            "owner": owner,
+            "components": rows,
+            "digest": _digest_component_rows(rows),
+        }
+    return owners, sorted(set(issues))
 
 
 def _tree_python_digest(root: Path) -> str:
@@ -259,6 +936,7 @@ def _verifier_fingerprint() -> dict[str, Any]:
         research_logic,
     )
     payload = {
+        "evidence_policy_version": EVIDENCE_POLICY_VERSION,
         "python_executable": str(Path(sys.executable).resolve()),
         "python_version": platform.python_version(),
         "platform": platform.platform(),
@@ -274,25 +952,83 @@ def _verifier_fingerprint() -> dict[str, Any]:
 
 
 def _environment_contract(repo_root: Path) -> dict[str, str]:
-    import flowguard
-    import researchguard
-    from researchguard import logic as research_logic
-
-    flowguard_identity = _flowguard_toolchain_identity(flowguard)
-    researchguard_logic_identity = _researchguard_logic_toolchain_identity(
-        researchguard,
-        research_logic,
-    )
     return {
         "cwd": str(repo_root.resolve()),
         "KHAOS_BRAIN_ASSURANCE_ACTIVE": "1",
         "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
         "python_executable": str(Path(sys.executable).resolve()),
-        "flowguard_toolchain_digest": str(flowguard_identity["digest"]),
-        "researchguard_logic_toolchain_digest": str(
-            researchguard_logic_identity["digest"]
-        ),
     }
+
+
+_FLOWGUARD_TOOLCHAIN_OWNERS = frozenset(
+    {
+        "flowguard_models",
+        "flowguard_meshes",
+        "logicguard_authority_cutover_model",
+        "logicguard_field_lifecycle",
+        "logicguard_model_mesh",
+        "logicguard_code_structure",
+        "logicguard_model_test_contract",
+        "logicguard_test_mesh",
+        "logicguard_runtime_model_miss",
+        "full_regression",
+    }
+)
+_RESEARCHGUARD_TOOLCHAIN_OWNERS = frozenset(
+    {
+        "logicguard_runtime",
+        "logicguard_runtime_model_miss",
+        "retrieval_quality",
+        "current_runtime_only",
+        "install_health",
+        "full_regression",
+    }
+)
+
+
+def _owner_verifier_fingerprint(
+    owner: str,
+    verifier_fingerprint: Mapping[str, Any],
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "evidence_policy_version": EVIDENCE_POLICY_VERSION,
+        "python_executable": str(verifier_fingerprint.get("python_executable") or ""),
+        "python_version": str(verifier_fingerprint.get("python_version") or ""),
+        "platform": str(verifier_fingerprint.get("platform") or ""),
+    }
+    if owner == "full_regression":
+        payload["pytest_version"] = str(
+            verifier_fingerprint.get("pytest_version") or ""
+        )
+    if owner in _FLOWGUARD_TOOLCHAIN_OWNERS:
+        toolchain = verifier_fingerprint.get("flowguard_toolchain")
+        payload["flowguard_toolchain"] = (
+            {
+                "digest": str(toolchain.get("digest") or ""),
+                "file_count": int(toolchain.get("file_count") or 0),
+            }
+            if isinstance(toolchain, Mapping)
+            else {}
+        )
+    if owner in _RESEARCHGUARD_TOOLCHAIN_OWNERS:
+        toolchain = verifier_fingerprint.get("researchguard_logic_toolchain")
+        payload["researchguard_logic_toolchain"] = (
+            {
+                "digest": str(toolchain.get("digest") or ""),
+                "file_count": int(toolchain.get("file_count") or 0),
+                "version": str(toolchain.get("version") or ""),
+                "model_store_schema": str(
+                    toolchain.get("model_store_schema") or ""
+                ),
+                "mesh_schema": str(toolchain.get("mesh_schema") or ""),
+            }
+            if isinstance(toolchain, Mapping)
+            else {}
+        )
+    payload["digest"] = _digest_component_rows(
+        [{"field": key, "value": value} for key, value in sorted(payload.items())]
+    )
+    return payload
 
 
 def _semantic_argv(command: list[str]) -> list[str]:
@@ -305,14 +1041,14 @@ def _semantic_argv(command: list[str]) -> list[str]:
 def _command_identity(
     command: list[str],
     *,
-    source_digest: str,
+    owner_component_digest: str,
     verifier_digest: str,
     environment_contract: dict[str, str],
 ) -> str:
     payload = {
         "argv": _semantic_argv(command),
         "executable_identity": _executable_identity(command[0]),
-        "source_digest": source_digest,
+        "owner_component_digest": owner_component_digest,
         "verifier_digest": verifier_digest,
         "environment_contract": environment_contract,
     }
@@ -587,8 +1323,8 @@ def _run(
     repo_root: Path,
     *,
     evidence_dir: Path,
-    source_snapshot: dict[str, Any],
-    verifier_fingerprint: dict[str, Any],
+    owner_component_snapshot: dict[str, Any],
+    owner_verifier_fingerprint: dict[str, Any],
     inventory_revision: str = "",
     timeout_seconds: int = 3600,
 ) -> tuple[str, dict[str, Any]]:
@@ -604,8 +1340,8 @@ def _run(
     env_contract = _environment_contract(repo_root)
     identity = _command_identity(
         command,
-        source_digest=str(source_snapshot["digest"]),
-        verifier_digest=str(verifier_fingerprint["digest"]),
+        owner_component_digest=str(owner_component_snapshot["digest"]),
+        verifier_digest=str(owner_verifier_fingerprint["digest"]),
         environment_contract=env_contract,
     )
     timed_out = False
@@ -661,10 +1397,31 @@ def _run(
     terminal_status = (
         "timeout" if timed_out else "passed" if exit_code == 0 else "failed"
     )
-    try:
-        json_payload = json.loads(stdout)
-    except json.JSONDecodeError:
+    stdout_bytes = stdout.encode("utf-8")
+    json_payload_limit_bytes = 1_048_576
+    if len(stdout_bytes) > json_payload_limit_bytes:
         json_payload = None
+        json_payload_projection = {
+            "status": "omitted-oversize",
+            "source_bytes": len(stdout_bytes),
+            "limit_bytes": json_payload_limit_bytes,
+        }
+    else:
+        try:
+            json_payload = json.loads(stdout)
+        except json.JSONDecodeError:
+            json_payload = None
+            json_payload_projection = {
+                "status": "not-json",
+                "source_bytes": len(stdout_bytes),
+                "limit_bytes": json_payload_limit_bytes,
+            }
+        else:
+            json_payload_projection = {
+                "status": "embedded",
+                "source_bytes": len(stdout_bytes),
+                "limit_bytes": json_payload_limit_bytes,
+            }
     proof_path = junit_path if junit_path and junit_path.is_file() else stdout_path
     receipt = {
         "schema_version": EVIDENCE_SCHEMA,
@@ -679,9 +1436,11 @@ def _run(
         "cwd": str(repo_root.resolve()),
         "environment_contract": env_contract,
         "input_fingerprints": {
-            "source": source_snapshot["digest"],
-            "verifier": verifier_fingerprint["digest"],
+            "owner_components": owner_component_snapshot["digest"],
+            "verifier": owner_verifier_fingerprint["digest"],
         },
+        "owner_components": list(owner_component_snapshot.get("components") or []),
+        "owner_verifier_fingerprint": owner_verifier_fingerprint,
         "inventory_revision": inventory_revision,
         "started_at": started.isoformat(),
         "finished_at": finished.isoformat(),
@@ -698,11 +1457,12 @@ def _run(
         "ok": exit_code == 0 and not timed_out,
         "stdout_path": str(stdout_path.resolve()),
         "stderr_path": str(stderr_path.resolve()),
-        "stdout_sha256": hashlib.sha256(stdout.encode("utf-8")).hexdigest(),
+        "stdout_sha256": hashlib.sha256(stdout_bytes).hexdigest(),
         "stderr_sha256": hashlib.sha256(stderr.encode("utf-8")).hexdigest(),
         "stdout_tail": stdout[-6000:],
         "stderr_tail": stderr[-6000:],
         "json_payload": json_payload,
+        "json_payload_projection": json_payload_projection,
         "junit": junit,
         "covered_node_ids": list(junit.get("covered_node_ids", [])),
         "skipped_node_ids": list(junit.get("skipped_node_ids", [])),
@@ -718,35 +1478,33 @@ def _run(
     return name, receipt
 
 
-def _current_full_regression_receipt(
+def _current_owner_receipt(
     current_manifest_path: Path | None,
+    owner_name: str,
     command: list[str],
     repo_root: Path,
     *,
-    source_snapshot: dict[str, Any],
-    verifier_fingerprint: dict[str, Any],
+    owner_component_snapshot: dict[str, Any],
+    owner_verifier_fingerprint: dict[str, Any],
+    current_manifest: Mapping[str, Any] | None = None,
 ) -> dict[str, Any] | None:
-    """Return one still-current immutable full-regression owner receipt.
-
-    Only the expensive repository-wide pytest owner is eligible. The receipt
-    is reusable only when its canonical bytes, proof artifact, JUnit inventory,
-    owner inputs, command semantics, and execution environment all still match.
-    An unrelated aggregate sibling being added or removed does not stale this
-    owner receipt; any owner input change does.
-    """
+    """Return one exact immutable success receipt for the requested owner."""
 
     if current_manifest_path is None:
         return None
     current_manifest_path = Path(current_manifest_path).resolve()
     evidence_root = current_manifest_path.parent
-    try:
-        manifest = json.loads(current_manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
+    if current_manifest is None:
+        try:
+            manifest = json.loads(current_manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+    else:
+        manifest = current_manifest
     if not isinstance(manifest, dict) or manifest.get("schema_version") != EVIDENCE_SCHEMA:
         return None
     entries = manifest.get("entries")
-    entry = entries.get("full_regression") if isinstance(entries, dict) else None
+    entry = entries.get(owner_name) if isinstance(entries, dict) else None
     if not isinstance(entry, dict):
         return None
     raw_receipt_path = str(entry.get("receipt_path") or "")
@@ -769,12 +1527,12 @@ def _current_full_regression_receipt(
     if not isinstance(receipt, dict):
         return None
 
-    source_digest = str(source_snapshot.get("digest") or "")
-    verifier_digest = str(verifier_fingerprint.get("digest") or "")
+    owner_component_digest = str(owner_component_snapshot.get("digest") or "")
+    verifier_digest = str(owner_verifier_fingerprint.get("digest") or "")
     environment_contract = _environment_contract(repo_root)
     identity = _command_identity(
         command,
-        source_digest=source_digest,
+        owner_component_digest=owner_component_digest,
         verifier_digest=verifier_digest,
         environment_contract=environment_contract,
     )
@@ -788,28 +1546,39 @@ def _current_full_regression_receipt(
         return None
     if receipt.get("identity_fingerprint") != identity:
         return None
-    if receipt.get("receipt_id") != f"validation:full_regression:{identity}":
+    if receipt.get("receipt_id") != f"validation:{owner_name}:{identity}":
         return None
-    if stored_inputs != {"source": source_digest, "verifier": verifier_digest}:
+    if stored_inputs != {
+        "owner_components": owner_component_digest,
+        "verifier": verifier_digest,
+    }:
+        return None
+    if receipt.get("owner_components") != list(
+        owner_component_snapshot.get("components") or []
+    ):
+        return None
+    if receipt.get("owner_verifier_fingerprint") != owner_verifier_fingerprint:
         return None
     if receipt.get("environment_contract") != environment_contract:
+        return None
+    if receipt.get("executable_identity") != _executable_identity(command[0]):
         return None
     if receipt.get("cwd") != str(repo_root.resolve()):
         return None
     if not (
         receipt.get("schema_version") == EVIDENCE_SCHEMA
-        and receipt.get("name") == "full_regression"
+        and receipt.get("name") == owner_name
         and receipt.get("execution") == "executed"
         and receipt.get("terminal_status") == "passed"
         and receipt.get("ok") is True
         and receipt.get("timed_out") is False
+        and receipt.get("cleanup_confirmed") is True
         and receipt.get("exit_code") == 0
     ):
         return None
 
     proof = receipt.get("proof_artifact_ref")
-    junit = receipt.get("junit")
-    if not isinstance(proof, dict) or not isinstance(junit, dict):
+    if not isinstance(proof, dict):
         return None
     raw_proof_path = str(proof.get("path") or "")
     if not raw_proof_path or not str(proof.get("sha256") or ""):
@@ -822,14 +1591,18 @@ def _current_full_regression_receipt(
         return None
     if hashlib.sha256(proof_bytes).hexdigest() != str(proof["sha256"]):
         return None
-    observed_junit = _junit_summary(proof_path, repo_root)
-    if not (
-        observed_junit == junit
-        and junit.get("present") is True
-        and not junit.get("parse_error")
-        and int(junit.get("testcase_count") or 0) > 0
-    ):
-        return None
+    if owner_name == "full_regression":
+        junit = receipt.get("junit")
+        if not isinstance(junit, dict):
+            return None
+        observed_junit = _junit_summary(proof_path, repo_root)
+        if not (
+            observed_junit == junit
+            and junit.get("present") is True
+            and not junit.get("parse_error")
+            and int(junit.get("testcase_count") or 0) > 0
+        ):
+            return None
     return {
         "receipt": receipt,
         "receipt_path": receipt_path,
@@ -838,29 +1611,78 @@ def _current_full_regression_receipt(
     }
 
 
-def _materialize_full_regression_reuse(
+def _materialize_owner_reuse(
     reusable: dict[str, Any],
     *,
+    owner_name: str,
     evidence_dir: Path,
     inventory_revision: str,
 ) -> dict[str, Any]:
     """Project an exact prior owner receipt into the current aggregate run."""
 
     source_path = Path(reusable["receipt_path"]).resolve()
-    receipt = dict(reusable["receipt"])
+    source_receipt = dict(reusable["receipt"])
     evidence_dir.mkdir(parents=True, exist_ok=True)
-    alias_path = evidence_dir / "full_regression.receipt.json"
-    shutil.copyfile(source_path, alias_path)
-    alias_hash = hashlib.sha256(alias_path.read_bytes()).hexdigest()
-    if alias_hash != reusable["receipt_sha256"]:
-        raise RuntimeError("materialized full-regression receipt hash changed")
+    projection_path = evidence_dir / f"{owner_name}.receipt.json"
+    receipt = {
+        key: value
+        for key, value in source_receipt.items()
+        if key
+        not in {
+            "json_payload",
+            "json_payload_projection",
+            "receipt_path",
+            "receipt_sha256",
+            "reuse_ticket",
+        }
+    }
+    raw_json_payload = source_receipt.get("json_payload")
+    if raw_json_payload is not None:
+        encoded_payload = json.dumps(
+            raw_json_payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        if len(encoded_payload) <= 1_048_576:
+            receipt["json_payload"] = raw_json_payload
+            receipt["json_payload_projection"] = {
+                "status": "embedded",
+                "source_bytes": len(encoded_payload),
+                "limit_bytes": 1_048_576,
+            }
+        else:
+            receipt["json_payload"] = None
+            receipt["json_payload_projection"] = {
+                "status": "omitted-oversize",
+                "source_bytes": len(encoded_payload),
+                "limit_bytes": 1_048_576,
+            }
+    else:
+        receipt["json_payload"] = None
+        receipt["json_payload_projection"] = dict(
+            source_receipt.get("json_payload_projection")
+            or {
+                "status": "not-json",
+                "source_bytes": 0,
+                "limit_bytes": 1_048_576,
+            }
+        )
+    receipt["compacted_from"] = {
+        "receipt_path": str(source_path),
+        "receipt_sha256": reusable["receipt_sha256"],
+    }
+    projection_path.write_text(
+        json.dumps(receipt, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    projection_hash = hashlib.sha256(projection_path.read_bytes()).hexdigest()
     source_inventory = str(receipt.get("inventory_revision") or "")
     return {
         **receipt,
         "execution": "reused",
         "inventory_revision": inventory_revision,
-        "receipt_path": str(alias_path.resolve()),
-        "receipt_sha256": alias_hash,
+        "receipt_path": str(projection_path.resolve()),
+        "receipt_sha256": projection_hash,
         "reuse_ticket": {
             "source_receipt_id": receipt["receipt_id"],
             "source_identity_fingerprint": receipt["identity_fingerprint"],
@@ -880,56 +1702,85 @@ def _execute_plan(
     repo_root: Path,
     *,
     evidence_dir: Path,
-    source_snapshot: dict[str, Any],
+    owner_component_snapshots: Mapping[str, dict[str, Any]],
     verifier_fingerprint: dict[str, Any],
     inventory_revision: str = "",
     current_manifest_path: Path | None = None,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, int]]:
+    current_manifest: Mapping[str, Any] | None = None
+    if current_manifest_path is not None:
+        try:
+            loaded_manifest = json.loads(
+                Path(current_manifest_path).resolve().read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError):
+            pass
+        else:
+            if isinstance(loaded_manifest, Mapping):
+                current_manifest = loaded_manifest
     env_contract = _environment_contract(repo_root)
     owner_by_identity: dict[str, str] = {}
     owners: dict[str, list[str]] = {}
-    aliases: dict[str, str] = {}
+    owner_verifiers: dict[str, dict[str, Any]] = {}
     for name, command in commands.items():
+        snapshot = owner_component_snapshots.get(name)
+        if not isinstance(snapshot, Mapping):
+            raise RuntimeError(f"Readiness owner lacks a component snapshot: {name}")
+        owner_verifier = _owner_verifier_fingerprint(name, verifier_fingerprint)
+        owner_verifiers[name] = owner_verifier
         identity = _command_identity(
             command,
-            source_digest=str(source_snapshot["digest"]),
-            verifier_digest=str(verifier_fingerprint["digest"]),
+            owner_component_digest=str(snapshot["digest"]),
+            verifier_digest=str(owner_verifier["digest"]),
             environment_contract=env_contract,
         )
         owner = owner_by_identity.setdefault(identity, name)
-        if owner == name:
-            owners[name] = command
-        else:
-            aliases[name] = owner
+        if owner != name:
+            raise RuntimeError(
+                "Duplicate readiness execution identity has multiple owners: "
+                f"{owner}, {name}"
+            )
+        owners[name] = command
 
     results: dict[str, dict[str, Any]] = {}
+    pending: dict[str, list[str]] = {}
+    for name, command in owners.items():
+        reusable = _current_owner_receipt(
+            current_manifest_path,
+            name,
+            command,
+            repo_root,
+            owner_component_snapshot=dict(owner_component_snapshots[name]),
+            owner_verifier_fingerprint=owner_verifiers[name],
+            current_manifest=current_manifest,
+        )
+        if reusable is None:
+            pending[name] = command
+        else:
+            results[name] = _materialize_owner_reuse(
+                reusable,
+                owner_name=name,
+                evidence_dir=evidence_dir,
+                inventory_revision=inventory_revision,
+            )
+    current_manifest = None
+    loaded_manifest = None
+
     # The repository-wide suite is the sole owner of capability pytest. Run it
     # first on its exclusive lane; no other maintenance unit consumes or
     # projects this receipt as its own evidence.
-    if "full_regression" in owners:
-        reusable = _current_full_regression_receipt(
-            current_manifest_path,
-            owners["full_regression"],
+    if "full_regression" in pending:
+        name, result = _run(
+            ("full_regression", pending.pop("full_regression")),
             repo_root,
-            source_snapshot=source_snapshot,
-            verifier_fingerprint=verifier_fingerprint,
+            evidence_dir=evidence_dir,
+            owner_component_snapshot=dict(
+                owner_component_snapshots["full_regression"]
+            ),
+            owner_verifier_fingerprint=owner_verifiers["full_regression"],
+            inventory_revision=inventory_revision,
         )
-        if reusable is not None:
-            results["full_regression"] = _materialize_full_regression_reuse(
-                reusable,
-                evidence_dir=evidence_dir,
-                inventory_revision=inventory_revision,
-            )
-        else:
-            name, result = _run(
-                ("full_regression", owners["full_regression"]),
-                repo_root,
-                evidence_dir=evidence_dir,
-                source_snapshot=source_snapshot,
-                verifier_fingerprint=verifier_fingerprint,
-                inventory_revision=inventory_revision,
-            )
-            results[name] = result
+        results[name] = result
 
     # Performance evidence and real scheduled production are both
     # resource-sensitive.  Keep them out of the ordinary parallel pool, then
@@ -940,8 +1791,8 @@ def _execute_plan(
     exclusive_names = set(exclusive_sequence)
     parallel = {
         name: cmd
-        for name, cmd in owners.items()
-        if name != "full_regression" and name not in exclusive_names
+        for name, cmd in pending.items()
+        if name not in exclusive_names
     }
     with ThreadPoolExecutor(max_workers=min(4, max(1, len(parallel)))) as executor:
         results.update(
@@ -950,8 +1801,10 @@ def _execute_plan(
                     item,
                     repo_root,
                     evidence_dir=evidence_dir,
-                    source_snapshot=source_snapshot,
-                    verifier_fingerprint=verifier_fingerprint,
+                    owner_component_snapshot=dict(
+                        owner_component_snapshots[item[0]]
+                    ),
+                    owner_verifier_fingerprint=owner_verifiers[item[0]],
                     inventory_revision=inventory_revision,
                     timeout_seconds=3600,
                 ),
@@ -960,32 +1813,19 @@ def _execute_plan(
         )
 
     for name in exclusive_sequence:
-        if name not in owners:
+        if name not in pending:
             continue
         owner_name, result = _run(
-            (name, owners[name]),
+            (name, pending[name]),
             repo_root,
             evidence_dir=evidence_dir,
-            source_snapshot=source_snapshot,
-            verifier_fingerprint=verifier_fingerprint,
+            owner_component_snapshot=dict(owner_component_snapshots[name]),
+            owner_verifier_fingerprint=owner_verifiers[name],
             inventory_revision=inventory_revision,
             timeout_seconds=AGGREGATE_ASSURANCE_TIMEOUT_SECONDS,
         )
         results[owner_name] = result
 
-    for alias, owner in aliases.items():
-        source = results[owner]
-        results[alias] = {
-            **source,
-            "name": alias,
-            "execution": "reused",
-            "reuse_ticket": {
-                "source_receipt_id": source["receipt_id"],
-                "source_identity_fingerprint": source["identity_fingerprint"],
-                "scope_relation": "exact-command-identity",
-                "current": True,
-            },
-        }
     counts = Counter(
         row["identity_fingerprint"]
         for row in results.values()
@@ -1065,17 +1905,92 @@ def build_report(
         junit_path=junit_path,
     )
     inventory_revision = _inventory_revision(repo_root, commands)
+    component_inventory_before = _build_component_inventory(repo_root, codex_home)
+    owner_snapshots_before, planning_issues = _owner_component_snapshots(
+        commands,
+        component_inventory_before,
+    )
+    if planning_issues:
+        planning_entry = {
+            "schema_version": EVIDENCE_SCHEMA,
+            "receipt_id": f"validation:owner_component_plan:{run_id}",
+            "name": "owner_component_plan",
+            "execution": "blocked",
+            "terminal_status": "blocked",
+            "timed_out": False,
+            "cleanup_confirmed": True,
+            "exit_code": 2,
+            "ok": False,
+            "issues": planning_issues,
+        }
+        blocked_manifest = {
+            "schema_version": EVIDENCE_SCHEMA,
+            "run_id": run_id,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "repo_root": str(repo_root),
+            "codex_home": str(codex_home),
+            "pre_restore": pre_restore,
+            "inventory_revision": inventory_revision,
+            "source_snapshot_before": before,
+            "component_inventory_before": component_inventory_before,
+            "entries": {"owner_component_plan": planning_entry},
+            "ok": False,
+        }
+        manifest_ref = _write_json(
+            evidence_dir / "manifest.json",
+            blocked_manifest,
+        )
+        return {
+            "schema_version": 2,
+            "check": "chaos-brain-aggregate-readiness",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "repo_root": str(repo_root),
+            "codex_home": str(codex_home),
+            "pre_restore": pre_restore,
+            "ok": False,
+            "source_snapshot_before": before,
+            "source_snapshot_after": before,
+            "source_stable_during_checks": True,
+            "owner_components_stable_during_checks": False,
+            "component_planning_issues": planning_issues,
+            "checks": {"owner_component_plan": planning_entry},
+            "failed_checks": ["owner_component_plan"],
+            "evidence_manifest": manifest_ref,
+            "evidence_run_id": run_id,
+            "exact_execution_identity_counts": {},
+            "duplicate_exact_executions": [],
+            "claim_boundary": (
+                "Planning stopped before validation because the closed owner-component "
+                "inventory was incomplete or ambiguous. No run-all route was selected."
+            ),
+        }
     results, identity_counts = _execute_plan(
         commands,
         repo_root,
         evidence_dir=evidence_dir,
-        source_snapshot=before,
+        owner_component_snapshots=owner_snapshots_before,
         verifier_fingerprint=verifier,
         inventory_revision=inventory_revision,
         current_manifest_path=Path(evidence_root).resolve() / "current.json",
     )
 
     leaf_after = _source_snapshot(repo_root)
+    component_inventory_after_leaf = _build_component_inventory(repo_root, codex_home)
+    owner_snapshots_after_leaf, after_leaf_issues = _owner_component_snapshots(
+        commands,
+        component_inventory_after_leaf,
+    )
+    owner_components_stable_after_leaf = (
+        not after_leaf_issues
+        and {
+            name: str(snapshot["digest"])
+            for name, snapshot in owner_snapshots_before.items()
+        }
+        == {
+            name: str(snapshot["digest"])
+            for name, snapshot in owner_snapshots_after_leaf.items()
+        }
+    )
     manifest: dict[str, Any] = {
         "schema_version": EVIDENCE_SCHEMA,
         "run_id": run_id,
@@ -1087,6 +2002,14 @@ def build_report(
         "source_snapshot_before": before,
         "source_snapshot_after_leaf_execution": leaf_after,
         "source_stable_during_leaf_execution": before["digest"] == leaf_after["digest"],
+        "component_inventory_before": component_inventory_before,
+        "component_inventory_after_leaf_execution": component_inventory_after_leaf,
+        "owner_component_snapshots_before": owner_snapshots_before,
+        "owner_component_snapshots_after_leaf_execution": owner_snapshots_after_leaf,
+        "owner_components_stable_during_leaf_execution": (
+            owner_components_stable_after_leaf
+        ),
+        "component_planning_issues_after_leaf_execution": after_leaf_issues,
         "verifier_fingerprint": verifier,
         "entries": results,
         "exact_execution_identity_counts": identity_counts,
@@ -1129,9 +2052,32 @@ def build_report(
     }
 
     after = _source_snapshot(repo_root)
-    source_stable = before["digest"] == after["digest"]
+    component_inventory_after = _build_component_inventory(repo_root, codex_home)
+    owner_snapshots_after, after_issues = _owner_component_snapshots(
+        commands,
+        component_inventory_after,
+    )
+    owner_components_stable = (
+        not after_issues
+        and {
+            name: str(snapshot["digest"])
+            for name, snapshot in owner_snapshots_before.items()
+        }
+        == {
+            name: str(snapshot["digest"])
+            for name, snapshot in owner_snapshots_after.items()
+        }
+    )
+    source_stable = (
+        before["digest"] == after["digest"]
+        and owner_components_stable
+    )
     manifest["entries"] = results
     manifest["source_snapshot_after"] = after
+    manifest["component_inventory_after"] = component_inventory_after
+    manifest["owner_component_snapshots_after"] = owner_snapshots_after
+    manifest["owner_components_stable"] = owner_components_stable
+    manifest["component_planning_issues_after"] = after_issues
     manifest["source_stable"] = source_stable
     manifest["ok"] = (
         source_stable
@@ -1152,6 +2098,8 @@ def build_report(
         "source_snapshot_before": before,
         "source_snapshot_after": after,
         "source_stable_during_checks": source_stable,
+        "owner_components_stable_during_checks": owner_components_stable,
+        "component_planning_issues": after_issues,
         "verifier_fingerprint": verifier,
         "checks": results,
         "failed_checks": [name for name, item in results.items() if not item.get("ok")],

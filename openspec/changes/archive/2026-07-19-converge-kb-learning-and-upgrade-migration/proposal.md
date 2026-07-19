@@ -20,6 +20,17 @@ an author-side school and examiner, not a consumer runtime.
   exclude them completely from consumer installations and ordinary projects.
 - Make the manual updater close its exact restore, final health, CURRENT, and
   cleanup route with its own native receipt.
+- Make installation currentness a shallow read-only audit that never launches
+  migrations, model regressions, retrieval evaluation, or another validation
+  owner.
+- Give every expensive consumer-assurance check an exact input-component
+  identity so unchanged owners reuse one immutable success receipt and only
+  affected owners execute. Late data admission invalidates only the owners
+  whose declared data inputs changed; it never causes an unconditional second
+  aggregate campaign.
+- Run repository validation once per pull request or exact `main` source
+  revision. A release tag only verifies the successful exact-`main` receipt
+  and never owns another test execution.
 - Keep official OpenSpec external and unmanaged by SkillGuard.
 - Preserve transactional installation, exact user pause state, rollback,
   LogicGuard authority, FlowGuard behavior checks, retrieval quality, direct
@@ -28,8 +39,8 @@ an author-side school and examiner, not a consumer runtime.
 ## Impact
 
 - Affected code: maintenance runners, consumer projection, installer,
-  readiness aggregation, model-test alignment, manual update, and retirement
-  checks.
+  affected-owner assurance, readiness aggregation, model-test alignment,
+  manual update, CI trigger ownership, and retirement checks.
 - Affected artifacts: five author-side contracts, FlowGuard models, OpenSpec
   specifications, tests, installed skills, and local installation receipts.
 - Out of scope: guaranteeing compatibility with arbitrary third-party skills

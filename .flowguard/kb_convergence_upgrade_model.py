@@ -39,6 +39,25 @@ AUTOMATION_CHECK_KINDS = (
     "depth-positive",
     "depth-shallow",
 )
+FINAL_READINESS_OWNER_IDS = (
+    "flowguard-models",
+    "flowguard-meshes",
+    "logicguard-authority-cutover-model",
+    "logicguard-field-lifecycle",
+    "logicguard-model-mesh",
+    "logicguard-code-structure",
+    "logicguard-model-test-contract",
+    "logicguard-test-mesh",
+    "logicguard-runtime-model-miss",
+    "logicguard-runtime",
+    "logicguard-openspec",
+    "author-contract-assurance",
+    "retired-architect-absence",
+    "current-runtime-only",
+    "retrieval-quality",
+    "full-regression",
+    "install-health",
+)
 
 
 def automation_manifest_check_ids(skill_id: str) -> tuple[str, ...]:
@@ -68,6 +87,28 @@ class ConsumerInput:
     attempt_manifest_binding_current: bool = True
     attempt_history_scan_count: int = 0
     attempt_manifest_fallback_used: bool = False
+    currentness_read_only: bool = True
+    currentness_owner_execution_count: int = 0
+    toolchain_content_matches: bool = True
+    toolchain_location_differs: bool = False
+    assurance_receipt_bounded: bool = True
+    automation_runtime_status: str = "ACTIVE"
+    automation_user_paused: bool = False
+    recoverable_upgrade_attempt: bool = False
+    recovery_snapshot_current: bool = True
+    changed_component_ids: tuple[str, ...] = ()
+    declared_owner_ids: tuple[str, ...] = ()
+    affected_owner_ids: tuple[str, ...] = ()
+    reusable_owner_ids: tuple[str, ...] = ()
+    executed_owner_ids: tuple[str, ...] = ()
+    unknown_component_ids: tuple[str, ...] = ()
+    ambiguous_component_ids: tuple[str, ...] = ()
+    late_affected_owner_ids: tuple[str, ...] = ()
+    late_executed_owner_ids: tuple[str, ...] = ()
+    timeout_cleanup_confirmed: bool = True
+    tag_matches_main: bool = True
+    main_validation_receipt_current: bool = True
+    tag_suite_execution_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -98,6 +139,30 @@ class ConsumerState:
     upgrade_attempt_manifest_binding_current: bool = False
     upgrade_attempt_history_scan_count: int = 0
     upgrade_attempt_manifest_fallback_used: bool = False
+    installation_currentness_status: str = "unknown"
+    installation_currentness_owner_execution_count: int = 0
+    toolchain_receipt_status: str = "unknown"
+    toolchain_content_matches: bool = False
+    toolchain_location_differs: bool = False
+    assurance_receipt_bounded: bool = False
+    restored_automation_status: str = ""
+    restored_automation_user_paused: bool = False
+    automation_recovery_snapshot_status: str = "not_applicable"
+    assurance_plan_status: str = "unknown"
+    assurance_changed_component_ids: tuple[str, ...] = ()
+    assurance_declared_owner_ids: tuple[str, ...] = ()
+    assurance_affected_owner_ids: tuple[str, ...] = ()
+    assurance_reused_owner_ids: tuple[str, ...] = ()
+    assurance_executed_owner_ids: tuple[str, ...] = ()
+    assurance_unknown_component_ids: tuple[str, ...] = ()
+    assurance_ambiguous_component_ids: tuple[str, ...] = ()
+    late_replan_status: str = "unknown"
+    late_affected_owner_ids: tuple[str, ...] = ()
+    late_executed_owner_ids: tuple[str, ...] = ()
+    timed_out_owner_evidence_reusable: bool = False
+    timeout_cleanup_status: str = "not_applicable"
+    release_tag_status: str = "unknown"
+    tag_suite_execution_count: int = 0
 
 
 def _append_unique(values: tuple[str, ...], item: str) -> tuple[str, ...]:
@@ -353,6 +418,219 @@ class ConsumerIndependenceBlock:
                 ),
             )
 
+        if input_obj.kind == "audit_install_currentness":
+            current = bool(
+                input_obj.currentness_read_only
+                and input_obj.currentness_owner_execution_count == 0
+            )
+            label = (
+                "installation_currentness_read_only"
+                if current
+                else "installation_currentness_executed_owner_blocked"
+            )
+            return (
+                FunctionResult(
+                    ConsumerOutput(label),
+                    replace(
+                        state,
+                        installation_currentness_status=(
+                            "current" if current else "blocked"
+                        ),
+                        installation_currentness_owner_execution_count=(
+                            input_obj.currentness_owner_execution_count
+                        ),
+                    ),
+                    label=label,
+                ),
+            )
+
+        if input_obj.kind == "audit_toolchain_receipt":
+            current = bool(
+                input_obj.toolchain_content_matches
+                and input_obj.assurance_receipt_bounded
+            )
+            label = (
+                "content_bound_toolchain_receipt_current"
+                if current
+                else "toolchain_receipt_blocked"
+            )
+            return (
+                FunctionResult(
+                    ConsumerOutput(label),
+                    replace(
+                        state,
+                        toolchain_receipt_status=(
+                            "current" if current else "blocked"
+                        ),
+                        toolchain_content_matches=(
+                            input_obj.toolchain_content_matches
+                        ),
+                        toolchain_location_differs=(
+                            input_obj.toolchain_location_differs
+                        ),
+                        assurance_receipt_bounded=(
+                            input_obj.assurance_receipt_bounded
+                        ),
+                    ),
+                    label=label,
+                ),
+            )
+
+        if input_obj.kind == "restore_automation_intent":
+            if (
+                input_obj.recoverable_upgrade_attempt
+                and not input_obj.recovery_snapshot_current
+            ):
+                return (
+                    FunctionResult(
+                        ConsumerOutput(
+                            "missing_recovery_snapshot_direct_repair_blocked"
+                        ),
+                        replace(
+                            state,
+                            restored_automation_status="",
+                            restored_automation_user_paused=False,
+                            automation_recovery_snapshot_status="blocked",
+                        ),
+                        label="missing_recovery_snapshot_direct_repair_blocked",
+                    ),
+                )
+            target_status = (
+                "PAUSED" if input_obj.automation_user_paused else "ACTIVE"
+            )
+            label = (
+                "user_pause_intent_restored"
+                if input_obj.automation_user_paused
+                else "system_pause_reactivated"
+            )
+            return (
+                FunctionResult(
+                    ConsumerOutput(label),
+                    replace(
+                        state,
+                        restored_automation_status=target_status,
+                        restored_automation_user_paused=(
+                            input_obj.automation_user_paused
+                        ),
+                        automation_recovery_snapshot_status=(
+                            "current"
+                            if input_obj.recoverable_upgrade_attempt
+                            else "not_applicable"
+                        ),
+                    ),
+                    label=label,
+                ),
+            )
+
+        if input_obj.kind == "plan_affected_assurance":
+            declared = tuple(sorted(set(input_obj.declared_owner_ids)))
+            affected = tuple(sorted(set(input_obj.affected_owner_ids)))
+            reusable = tuple(sorted(set(input_obj.reusable_owner_ids)))
+            executed = tuple(sorted(set(input_obj.executed_owner_ids)))
+            unknown = tuple(sorted(set(input_obj.unknown_component_ids)))
+            ambiguous = tuple(sorted(set(input_obj.ambiguous_component_ids)))
+            valid = bool(
+                not unknown
+                and not ambiguous
+                and executed == affected
+                and not set(executed).intersection(reusable)
+                and (
+                    not declared
+                    or set(declared) == set(affected).union(reusable)
+                )
+            )
+            label = (
+                "affected_assurance_plan_stable"
+                if valid
+                else "affected_assurance_plan_blocked"
+            )
+            return (
+                FunctionResult(
+                    ConsumerOutput(label),
+                    replace(
+                        state,
+                        assurance_plan_status="stable" if valid else "blocked",
+                        assurance_changed_component_ids=tuple(
+                            sorted(set(input_obj.changed_component_ids))
+                        ),
+                        assurance_declared_owner_ids=declared,
+                        assurance_affected_owner_ids=affected,
+                        assurance_reused_owner_ids=reusable,
+                        assurance_executed_owner_ids=executed,
+                        assurance_unknown_component_ids=unknown,
+                        assurance_ambiguous_component_ids=ambiguous,
+                    ),
+                    label=label,
+                ),
+            )
+
+        if input_obj.kind == "replan_late_assurance_inputs":
+            affected = tuple(sorted(set(input_obj.late_affected_owner_ids)))
+            executed = tuple(sorted(set(input_obj.late_executed_owner_ids)))
+            valid = executed == affected
+            label = (
+                "late_inputs_affected_only_replanned"
+                if valid
+                else "late_inputs_run_all_blocked"
+            )
+            return (
+                FunctionResult(
+                    ConsumerOutput(label),
+                    replace(
+                        state,
+                        late_replan_status="stable" if valid else "blocked",
+                        late_affected_owner_ids=affected,
+                        late_executed_owner_ids=executed,
+                    ),
+                    label=label,
+                ),
+            )
+
+        if input_obj.kind == "validation_owner_timeout":
+            label = (
+                "timeout_descendants_zero_evidence_invalid"
+                if input_obj.timeout_cleanup_confirmed
+                else "timeout_cleanup_unconfirmed_blocked"
+            )
+            return (
+                FunctionResult(
+                    ConsumerOutput(label),
+                    replace(
+                        state,
+                        timed_out_owner_evidence_reusable=False,
+                        timeout_cleanup_status=(
+                            "descendants_zero"
+                            if input_obj.timeout_cleanup_confirmed
+                            else "cleanup_unconfirmed"
+                        ),
+                    ),
+                    label=label,
+                ),
+            )
+
+        if input_obj.kind == "verify_release_tag":
+            current = bool(
+                input_obj.tag_matches_main
+                and input_obj.main_validation_receipt_current
+                and input_obj.tag_suite_execution_count == 0
+            )
+            label = (
+                "release_tag_consumed_main_receipt"
+                if current
+                else "release_tag_receipt_gate_blocked"
+            )
+            return (
+                FunctionResult(
+                    ConsumerOutput(label),
+                    replace(
+                        state,
+                        release_tag_status="verified" if current else "blocked",
+                        tag_suite_execution_count=input_obj.tag_suite_execution_count,
+                    ),
+                    label=label,
+                ),
+            )
+
         if input_obj.kind == "third_party_overlap":
             return (
                 FunctionResult(
@@ -472,6 +750,111 @@ def _attempt_currentness_has_no_history_or_manifest_fallback(
     return InvariantResult.pass_()
 
 
+def _installation_currentness_never_executes_owner(
+    state: ConsumerState, trace: object
+) -> InvariantResult:
+    del trace
+    if (
+        state.installation_currentness_status == "current"
+        and state.installation_currentness_owner_execution_count != 0
+    ):
+        return InvariantResult.fail(
+            "installation currentness launched a validation owner"
+        )
+    return InvariantResult.pass_()
+
+
+def _toolchain_receipt_is_content_bound_and_bounded(
+    state: ConsumerState, trace: object
+) -> InvariantResult:
+    del trace
+    if state.toolchain_receipt_status != "current":
+        return InvariantResult.pass_()
+    if (
+        not state.toolchain_content_matches
+        or not state.assurance_receipt_bounded
+    ):
+        return InvariantResult.fail(
+            "current toolchain receipt is path-bound, content-stale, or unbounded"
+        )
+    return InvariantResult.pass_()
+
+
+def _automation_restoration_follows_user_pause_intent(
+    state: ConsumerState, trace: object
+) -> InvariantResult:
+    del trace
+    if not state.restored_automation_status:
+        return InvariantResult.pass_()
+    if state.automation_recovery_snapshot_status == "blocked":
+        return InvariantResult.fail(
+            "automation restored despite a missing recovery snapshot"
+        )
+    expected = (
+        "PAUSED" if state.restored_automation_user_paused else "ACTIVE"
+    )
+    if state.restored_automation_status != expected:
+        return InvariantResult.fail(
+            "transient runtime pause overrode the current user-pause intent"
+        )
+    return InvariantResult.pass_()
+
+
+def _assurance_executes_only_affected_owners(
+    state: ConsumerState, trace: object
+) -> InvariantResult:
+    del trace
+    if state.assurance_plan_status != "stable":
+        return InvariantResult.pass_()
+    if (
+        state.assurance_unknown_component_ids
+        or state.assurance_ambiguous_component_ids
+        or (
+            state.assurance_declared_owner_ids
+            and set(state.assurance_declared_owner_ids)
+            != set(state.assurance_affected_owner_ids).union(
+                state.assurance_reused_owner_ids
+            )
+        )
+        or set(state.assurance_executed_owner_ids)
+        != set(state.assurance_affected_owner_ids)
+        or set(state.assurance_executed_owner_ids).intersection(
+            state.assurance_reused_owner_ids
+        )
+    ):
+        return InvariantResult.fail(
+            "stable assurance plan did not execute exactly the affected owners"
+        )
+    return InvariantResult.pass_()
+
+
+def _late_inputs_never_trigger_run_all(
+    state: ConsumerState, trace: object
+) -> InvariantResult:
+    del trace
+    if state.late_replan_status != "stable":
+        return InvariantResult.pass_()
+    if set(state.late_executed_owner_ids) != set(state.late_affected_owner_ids):
+        return InvariantResult.fail(
+            "late input replanning executed an unaffected owner"
+        )
+    return InvariantResult.pass_()
+
+
+def _release_tag_is_receipt_only(
+    state: ConsumerState, trace: object
+) -> InvariantResult:
+    del trace
+    if (
+        state.release_tag_status == "verified"
+        and state.tag_suite_execution_count != 0
+    ):
+        return InvariantResult.fail(
+            "release tag reran the repository suite"
+        )
+    return InvariantResult.pass_()
+
+
 CONSUMER_INVARIANTS = (
     Invariant(
         "consumer_has_no_author_control",
@@ -503,6 +886,37 @@ CONSUMER_INVARIANTS = (
         "Currentness reads one bounded HEAD/current binding, requires the committed "
         "install state to bind its exact receipt, and uses no history scan or manifest fallback.",
         _attempt_currentness_has_no_history_or_manifest_fallback,
+    ),
+    Invariant(
+        "installation_currentness_is_read_only",
+        "Installation currentness launches zero validation owners.",
+        _installation_currentness_never_executes_owner,
+    ),
+    Invariant(
+        "toolchain_receipt_is_content_bound_and_bounded",
+        "Toolchain currentness ignores absolute location when portable content "
+        "matches and never embeds complete owner traces.",
+        _toolchain_receipt_is_content_bound_and_bounded,
+    ),
+    Invariant(
+        "automation_restoration_follows_user_pause_intent",
+        "A safety pause never becomes a permanent user pause.",
+        _automation_restoration_follows_user_pause_intent,
+    ),
+    Invariant(
+        "assurance_executes_only_affected_owners",
+        "A stable assurance plan executes exactly its affected owners.",
+        _assurance_executes_only_affected_owners,
+    ),
+    Invariant(
+        "late_inputs_never_trigger_run_all",
+        "Late input drift replans only owners with changed declared inputs.",
+        _late_inputs_never_trigger_run_all,
+    ),
+    Invariant(
+        "release_tag_is_receipt_only",
+        "A verified release tag consumes exact-main evidence without test execution.",
+        _release_tag_is_receipt_only,
     ),
 )
 
@@ -578,6 +992,98 @@ CONSUMER_INPUTS = (
     ConsumerInput(
         "check_upgrade_attempt_current",
         attempt_manifest_binding_current=False,
+    ),
+    ConsumerInput("audit_install_currentness"),
+    ConsumerInput(
+        "audit_install_currentness",
+        currentness_owner_execution_count=1,
+    ),
+    ConsumerInput(
+        "audit_toolchain_receipt",
+        toolchain_content_matches=True,
+        toolchain_location_differs=True,
+        assurance_receipt_bounded=True,
+    ),
+    ConsumerInput(
+        "audit_toolchain_receipt",
+        toolchain_content_matches=False,
+        toolchain_location_differs=False,
+        assurance_receipt_bounded=True,
+    ),
+    ConsumerInput(
+        "audit_toolchain_receipt",
+        toolchain_content_matches=True,
+        toolchain_location_differs=False,
+        assurance_receipt_bounded=False,
+    ),
+    ConsumerInput(
+        "restore_automation_intent",
+        automation_runtime_status="PAUSED",
+        automation_user_paused=False,
+        recoverable_upgrade_attempt=True,
+        recovery_snapshot_current=True,
+    ),
+    ConsumerInput(
+        "restore_automation_intent",
+        automation_runtime_status="PAUSED",
+        automation_user_paused=True,
+    ),
+    ConsumerInput(
+        "restore_automation_intent",
+        automation_runtime_status="PAUSED",
+        automation_user_paused=False,
+        recoverable_upgrade_attempt=True,
+        recovery_snapshot_current=False,
+    ),
+    ConsumerInput(
+        "plan_affected_assurance",
+        changed_component_ids=("retrieval-data",),
+        affected_owner_ids=("retrieval-quality",),
+        reusable_owner_ids=(
+            "consumer-projections",
+            "current-runtime",
+            "flow-model",
+            "reasoning-runtime",
+        ),
+        executed_owner_ids=("retrieval-quality",),
+    ),
+    ConsumerInput(
+        "plan_affected_assurance",
+        changed_component_ids=("unknown",),
+        unknown_component_ids=("unknown",),
+        executed_owner_ids=(
+            "consumer-projections",
+            "current-runtime",
+            "flow-model",
+            "reasoning-runtime",
+            "retrieval-quality",
+        ),
+    ),
+    ConsumerInput(
+        "replan_late_assurance_inputs",
+        late_affected_owner_ids=("retrieval-quality",),
+        late_executed_owner_ids=("retrieval-quality",),
+    ),
+    ConsumerInput(
+        "replan_late_assurance_inputs",
+        late_affected_owner_ids=("retrieval-quality",),
+        late_executed_owner_ids=(
+            "consumer-projections",
+            "current-runtime",
+            "flow-model",
+            "reasoning-runtime",
+            "retrieval-quality",
+        ),
+    ),
+    ConsumerInput("validation_owner_timeout"),
+    ConsumerInput(
+        "validation_owner_timeout",
+        timeout_cleanup_confirmed=False,
+    ),
+    ConsumerInput("verify_release_tag"),
+    ConsumerInput(
+        "verify_release_tag",
+        tag_suite_execution_count=1,
     ),
     ConsumerInput("third_party_overlap"),
 )

@@ -53,6 +53,33 @@ The installer SHALL own clean consumer projection and transactional activation.
 The final readiness evaluator SHALL aggregate these current owners without
 rerunning one skill's test as another skill's proof.
 
+Every expensive assurance owner SHALL declare an exact input-component
+identity and SHALL produce one immutable terminal-success receipt. An
+unchanged owner SHALL consume its exact receipt without execution. A changed
+component SHALL invalidate only owners that explicitly consume that component.
+An unmapped or ambiguous component MUST block instead of falling back to a
+run-all plan.
+
+Toolchain component identity SHALL be derived from portable content rather
+than its absolute frozen or live installation path. Each owner receipt SHALL
+retain a bounded decision summary plus the exact raw-output hash and byte
+count; the currentness authority MUST NOT embed the owner's complete model
+trace. Planner source SHALL be part of the top-level currentness identity but
+SHALL NOT be an input of every native validation owner. A planner-only change
+MUST reissue currentness with zero native owner executions.
+
+The installation currentness command SHALL be read-only and SHALL NOT launch a
+migration, model regression, retrieval evaluation, pytest process, assurance
+owner, resume command, or other validation subprocess. It SHALL compare
+current source-to-installed consumer bytes, automation specifications and
+states, the sole current migration and upgrade-attempt authorities, and exact
+assurance receipt identities.
+
+If declared owner inputs change while an upgrade assurance campaign is
+running, the installer SHALL replan after the campaign and execute only owners
+whose inputs changed. It MUST NOT unconditionally repeat migration, retrieval,
+or the complete assurance campaign merely because time elapsed.
+
 Current-machine activation SHALL bind one exact maintained-skill inventory
 schema. That schema SHALL list all five maintained consumer skills, classify
 exactly four as scheduled, and classify only `khaos-brain-update` as
@@ -69,6 +96,14 @@ receipt self-validation, SHALL restore all four managed automations to
 `PAUSED`. An `ACTIVE` state without one current validated activation receipt
 MUST NOT be accepted as completion.
 
+Before changing any automation to a safety `PAUSED` state, the installer SHALL
+bind all four original statuses and pause intents into the current upgrade
+attempt. A failed retry SHALL reuse that exact snapshot rather than treat the
+installer-created TOML state as user intent. Outside a recoverable attempt,
+the Codex-owned TOML status remains the user-visible intent. An old
+recoverable attempt without the snapshot MUST block until an explicit direct
+repair snapshot is supplied.
+
 The activation receipt SHALL bind one deterministic installation-currentness
 projection. The full history-migration validation MUST pass and remain visible
 as runtime evidence, but volatile validation diagnostics MUST NOT participate
@@ -84,10 +119,48 @@ turn a changed migration authority into a current installation.
 - **WHEN** an execution owner is interrupted or times out
 - **THEN** its evidence is non-reusable until the entire descendant process tree is confirmed stopped
 
+#### Scenario: Installation currentness is checked
+- **WHEN** an operator runs `install_codex_kb.py --check --json`
+- **THEN** the command reads bounded current authorities and exact installed projections
+- **AND** it launches zero validation subprocesses and writes no migration, model, retrieval, assurance, or activation state
+
+#### Scenario: One owner input changes
+- **WHEN** a component mapped only to retrieval quality changes after a prior successful campaign
+- **THEN** the retrieval-quality owner executes once and every unchanged owner receipt is reused
+- **AND** no run-all or fallback route is selected
+
+#### Scenario: A frozen toolchain copy matches the live package
+- **WHEN** the two package roots differ but their portable content manifests are identical
+- **THEN** the owner receipt remains current without execution
+- **AND** the bounded currentness authority does not copy the complete native model output
+
+#### Scenario: Only the assurance planner changes
+- **WHEN** native owner commands and all declared owner inputs are unchanged
+- **THEN** the top-level currentness authority is reissued with zero native owner executions
+
+#### Scenario: Data changes during assurance
+- **WHEN** a concurrent writer changes a declared data input while owners are executing
+- **THEN** the stable post-campaign plan invalidates only owners that consume that data input
+- **AND** restoration remains blocked until those owners pass against the stable identity
+
+#### Scenario: A release tag is pushed
+- **WHEN** the tag resolves to the exact successful `main` revision
+- **THEN** the tag lane verifies the existing successful main receipt without running the repository suite again
+- **AND** a tag without that exact receipt is rejected
+
 #### Scenario: Readiness contains all five maintained skills
 - **WHEN** current author and consumer assurance report the four scheduled skills plus `khaos-brain-update`
 - **THEN** activation validates the complete five-skill inventory
 - **AND** it activates and reads back only the four scheduled automations
+
+#### Scenario: A failed upgrade left an enabled automation safely paused
+- **WHEN** the live automation is `PAUSED` and the failed attempt snapshot binds its original state as `ACTIVE` with `user_paused=false`
+- **THEN** a successful retry restores it to the declared `ACTIVE` policy
+- **AND** no runtime pause is promoted into a user preference
+
+#### Scenario: A user paused an automation outside an upgrade
+- **WHEN** no recoverable attempt owns a safety pause and the Codex TOML is `PAUSED`
+- **THEN** a later installation preserves that user-visible paused state
 
 #### Scenario: An inventory uses an old or ambiguous shape
 - **WHEN** the activation receipt omits the manual-only classification, overlaps the scheduled and manual sets, or does not exhaust the five maintained skills
