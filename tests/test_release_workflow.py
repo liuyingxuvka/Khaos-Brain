@@ -48,7 +48,7 @@ def test_researchguard_dependency_uses_one_public_pinned_path() -> None:
     pinned_dependency = (
         "researchguard @ "
         "git+https://github.com/liuyingxuvka/ResearchGuard.git"
-        "@31daa62268e2d57ae61e9833a0686a6c612e4cfc"
+        "@1e731fd85c229a11f8e14e639705ad30ac080768"
     )
 
     assert pinned_dependency in requirements
@@ -66,5 +66,5 @@ def test_ci_pins_final_flowguard_validation_commit() -> None:
     assert (
         "flowguard @ "
         "git+https://github.com/liuyingxuvka/FlowGuard.git"
-        "@7c2046bfb0a5ad458deefcbb4edbf8f3b90b7dc3"
+        "@97d2b0e6660fb2298decc9d4f86b4a16a3f8b7fd"
     ) in requirements

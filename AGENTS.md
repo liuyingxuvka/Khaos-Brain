@@ -145,7 +145,7 @@ Project FlowGuard record:
 <!-- flowguard-rule:project.rendered_versions -->
 
 Current adoption record:
-- FlowGuard check-engine version: `0.58.4`
+- FlowGuard check-engine version: `0.58.5`
 - FlowGuard schema version: `1.0`
 
 <!-- flowguard-rule:project.preflight_version_gate -->

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6.7 - 2026-07-19
+
+- Pinned the sole public reasoning dependency to ResearchGuard v0.1.2 commit `1e731fd85c229a11f8e14e639705ad30ac080768`; Khaos Brain continues to import only `researchguard.logic`, with no standalone LogicGuard package, repository, alias, compatibility reader, or fallback dependency.
+- Pinned development and release validation to FlowGuard v0.58.5 commit `97d2b0e6660fb2298decc9d4f86b4a16a3f8b7fd` and SkillGuard v0.3.5 commit `b20feaf0718cb9a37f9a2d0e3aaeb8e7601cadce`, including the corrected consumer-suite version authority and cross-platform canonical text identity.
+- Preserved affected-only verification as the normal rule: reuse exact terminal-success receipts for unchanged owners, execute only failed or invalidated owner chains, and reserve one complete campaign for a frozen release snapshot.
+- Clarified that Sleep, Dream, and organization maintenance are scheduled, while software update remains an explicit current-conversation AI action; no scheduled system-update surface was restored.
+
 ## v0.6.6 - 2026-07-19
 
 - Replaced unconditional consumer-install assurance with five exact validation owners. Each owner binds its declared source, data, toolchain, environment, and installed-projection components; unchanged terminal-success receipts are reused and only affected owners execute.

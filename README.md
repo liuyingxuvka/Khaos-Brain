@@ -10,8 +10,8 @@
 </p>
 <!-- README HERO END -->
 
-- Repository head (`main`) / 仓库主线（`main`）: `v0.6.6`
-- Latest released version / 最新已发布版本: `v0.6.6`
+- Repository head (`main`) / 仓库主线（`main`）: `v0.6.7`
+- Latest released version / 最新已发布版本: `v0.6.7`
 - Project name / 项目名称: `Khaos Brain`
 - English lead content comes first; the full Chinese section follows below. / 英文主内容在前，完整中文部分在后方。
 
@@ -27,7 +27,7 @@ It does not save vague memories such as "remember this next time." It stores bou
 
 - It turns "remember this" into a LogicGuard model whose conclusion, support, assumptions, counterarguments, boundaries, and missing evidence can be inspected separately.
 - It keeps agent memory local, file-based, Git-versioned, and inspectable instead of hiding it in an opaque memory service.
-- It gives memory a fully automatic maintenance rhythm: exact-model retrieval/write-back, incremental Sleep model consolidation, immutable Dream pressure tests, system updates, and optional organization maintenance.
+- It gives memory an automatic maintenance rhythm: exact-model retrieval/write-back, incremental Sleep model consolidation, immutable Dream pressure tests, and optional organization maintenance. Software updates remain an explicit current-conversation AI action.
 - It makes Skill sharing more useful by pairing a Skill with the experience card that explains when and why to use it.
 
 ## Product Preview
@@ -212,7 +212,7 @@ The exact migration phases, rollback behavior, pause-state preservation, and suc
 
 | 仓库主线 | 最新发布 | 项目 | 许可证 |
 | --- | --- | --- | --- |
-| `v0.6.6` | `v0.6.6` | `Khaos Brain` | MIT |
+| `v0.6.7` | `v0.6.7` | `Khaos Brain` | MIT |
 
 ## 它是什么
 

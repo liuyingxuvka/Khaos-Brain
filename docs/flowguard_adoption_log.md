@@ -2204,3 +2204,42 @@ un_khaos_brain_conformance.py` - conformance replay passed lane lock, organizati
 ### Next Actions
 - python -m flowguard project-audit --root . --json
 - Rerun affected FlowGuard model checks and focused tests before broad confidence.
+
+
+## flowguard-project-upgrade - FlowGuard project upgrade record update
+
+- Project: Knowledge_20260419
+- Trigger reason: target project requires current semantic adoption and version records
+- Status: completed
+- Skill decision: used_flowguard
+- Started: 2026-07-19T20:38:57+00:00
+- Ended: 2026-07-19T20:38:57+00:00
+- Duration seconds: 0.000
+- Commands OK: True
+
+### Model Files
+- none recorded
+
+### Commands
+- OK (0.000s): `managed adoption rule-set preflight` - generated block contains every required stable rule
+- OK (0.000s): `package-authority/global-consumer validation` - pass
+- OK (0.000s): `post-write project adoption audit` - semantic and version parity after write
+
+### Findings
+- adoption_record_written: FlowGuard project AGENTS block and manifest were written or refreshed.
+
+### Counterexamples
+- none recorded
+
+### Friction Points
+- none recorded
+
+### Skipped Steps
+- Project adoption does not replace executable model checks, tests, replay, or closure evidence.
+
+### Risk Evidence Summary
+- none recorded
+
+### Next Actions
+- python -m flowguard project-audit --root . --json
+- Rerun affected FlowGuard model checks and focused tests before broad confidence.

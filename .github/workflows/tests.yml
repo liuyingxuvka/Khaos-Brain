@@ -14,7 +14,7 @@ jobs:
     if: ${{ ! startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     env:
-      SKILLGUARD_COMMIT: ab92d6c5829504d48c358fb04263469d2ee822ab
+      SKILLGUARD_COMMIT: b20feaf0718cb9a37f9a2d0e3aaeb8e7601cadce
       CODEX_KB_AUTOMATION_MODEL: ci-current-model
       CODEX_KB_AUTOMATION_REASONING_EFFORT: xhigh
 
