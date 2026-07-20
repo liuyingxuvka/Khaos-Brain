@@ -45,8 +45,8 @@
 
 ## 7. OpenSpec And Release Closure
 
-- [ ] 7.1 Verify implementation against proposal/design/specs/tasks, sync delta specs, and archive `repair-sleep-active-index-recovery` only after runtime recovery evidence is current.
+- [x] 7.1 Verify implementation against proposal/design/specs/tasks, sync delta specs, and archive `repair-sleep-active-index-recovery` only after runtime recovery evidence is current.
 - [x] 7.2 Perform the repository release audit across VERSION, README, local/remote Git, tags, GitHub Release state, latest-tag target, and release-worthy delta.
-- [ ] 7.3 Select the next version, update version/release notes, create the release commit, then create and verify the tag target.
-- [ ] 7.4 Push the branch and tag, create the GitHub Release, and verify remote branch/tag/release identities and required workflow evidence.
-- [ ] 7.5 Record the structured KB postflight observation, reconcile final Git/install/automation/process/receipt state, and close the continuous goal only when every required stage is terminal.
+- [x] 7.3 Select the next version, update version/release notes, create the release commit, then create and verify the tag target.
+- [x] 7.4 Push the branch and tag, create the GitHub Release, and verify remote branch/tag/release identities and required workflow evidence.
+- [x] 7.5 Record the structured KB postflight observation, reconcile final Git/install/automation/process/receipt state, and close the continuous goal only when every required stage is terminal.
