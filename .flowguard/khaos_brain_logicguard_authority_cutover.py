@@ -36,6 +36,10 @@ MODEL_ID = "khaos_brain_logicguard_authority_cutover"
 @dataclass(frozen=True)
 class Event:
     kind: str
+    publisher_id: str = "local_kb.maintenance_migration"
+    invalidation_marker_present: bool = False
+    marker_token_current: bool = True
+    publication_validated: bool = True
 
 
 @dataclass(frozen=True)
@@ -53,6 +57,7 @@ class State:
     projection_validated: bool = False
     projection_published: bool = False
     index_published: bool = False
+    index_invalidation_marker_present: bool = False
     zero_legacy_residuals: bool = False
     generation_current: bool = False
     prior_generation_authoritative: bool = True
@@ -214,6 +219,7 @@ class CommitSleepModelChangeBlock:
         "projection_validated",
         "projection_published",
         "index_published",
+        "index_invalidation_marker_present",
     )
     writes = (
         "mesh_revision",
@@ -238,9 +244,33 @@ class CommitSleepModelChangeBlock:
             action = "projection_published"
             reason = "The verified projection is staged after canonical commits."
         elif event.kind == "publish_index":
-            new = replace(state, index_published=True)
-            action = "active_index_published"
-            reason = "The active index generation binds the exact projection/model/mesh authority."
+            authorized = event.publisher_id in {
+                "local_kb.lifecycle.run_incremental_sleep",
+                "local_kb.maintenance_migration",
+            }
+            publication_ok = bool(
+                authorized
+                and event.marker_token_current
+                and event.publication_validated
+            )
+            new = replace(
+                state,
+                index_published=publication_ok,
+                index_invalidation_marker_present=(
+                    event.invalidation_marker_present and not publication_ok
+                ),
+                unauthorized_authority_write=not authorized,
+            )
+            action = (
+                "active_index_published"
+                if publication_ok
+                else "active_index_publication_blocked"
+            )
+            reason = (
+                "The active index binds one exact validated generation under an authorized publisher."
+                if publication_ok
+                else "Publication is blocked before authority write or marker removal."
+            )
         elif event.kind == "unauthorized_authority_write":
             new = replace(state, unauthorized_authority_write=True)
             action = "unauthorized_authority_write"
@@ -464,6 +494,8 @@ def model_first_publication(state: State, _trace: object) -> InvariantResult:
         return InvariantResult.fail("Projection published before exact model/mesh commit and validation.")
     if state.index_published and not state.projection_published:
         return InvariantResult.fail("Active index published before the verified projection generation.")
+    if state.index_published and state.index_invalidation_marker_present:
+        return InvariantResult.fail("Active index was published while invalidation remained durable.")
     return InvariantResult.pass_()
 
 
@@ -673,6 +705,16 @@ KNOWN_BADS: dict[str, tuple[State, tuple[Event, ...]]] = {
     "standalone_yaml_authority": (CURRENT_STATE, (Event("legacy_reader_used"),)),
     "projection_before_model": (State(), (Event("publish_projection"),)),
     "index_before_projection": (State(), (Event("publish_index"),)),
+    "unauthorized_index_publisher": (
+        State(projection_published=True),
+        (
+            Event(
+                "publish_index",
+                publisher_id="local_kb.search.search_with_receipt",
+                invalidation_marker_present=True,
+            ),
+        ),
+    ),
     "partial_migration_marked_current": (
         State(),
         (Event("begin_cutover"), Event("commit_model"), Event("mark_current")),

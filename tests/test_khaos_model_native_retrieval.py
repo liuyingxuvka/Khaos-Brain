@@ -125,7 +125,12 @@ def activate_model_native_fixture(root: Path) -> None:
         projection_count=len(manifest),
         actor="test",
     )
-    rebuild_active_index(root, reason="test:model-native-retrieval", authority_generation=generation)
+    rebuild_active_index(
+        root,
+        reason="test:model-native-retrieval",
+        authority_generation=generation,
+        publisher_id="local_kb.lifecycle.run_incremental_sleep",
+    )
     publish_authority_generation(root, generation, writer="local_kb.lifecycle.run_incremental_sleep")
     write_maintenance_state(
         root,

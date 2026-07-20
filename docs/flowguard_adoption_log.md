@@ -2243,3 +2243,29 @@ un_khaos_brain_conformance.py` - conformance replay passed lane lock, organizati
 ### Next Actions
 - python -m flowguard project-audit --root . --json
 - Rerun affected FlowGuard model checks and focused tests before broad confidence.
+## repair-sleep-active-index-recovery - Bounded Sleep recovery and publisher closure
+
+- Project: Knowledge_20260419
+- Trigger: a 900-second Sleep run timed out after durable invalidation because candidate lifecycle events replayed the large ledger one at a time.
+- Status: completed for model, code, tests, installation, runtime recovery, and automation restoration; release identity remains separately owned.
+- FlowGuard route: existing-model preflight, Model Miss review, model-test alignment, TestMesh, and DevelopmentProcessFlow.
+
+### Current evidence
+
+- All-model receipt: `flowguard-suite:95db30e9b7118ae7e031998f015a977ec85b9bbe12b6f636aa8fd2a903f25560` (2,485 states; 10,738 traces; zero violations).
+- Aggregate manifest: `.local/assurance/validation-evidence/20260720T221331443521Z-d9a204c1f223/manifest.json` (`b4a73a05cb8cdced09521fa0ad818cf7c9803cd94de8e8d8962984f487ff75ef`).
+- Installation: `install-1784585576304-ac5b259b`; independent check passed with `strong_session_defaults=true`.
+- One canonical Sleep recovery: `native-kb-sleep-maintenance-20260720T214504643510Z-ec405741`; watermark 8768 to 8865; active-index generation 149; invalidation marker absent; full and fast validation passed.
+- Downstream lanes: retrieval on generation 149, Dream `native-kb-dream-pass-20260720T221654511113Z-9d930492`, organization contribution `native-kb-organization-contribute-20260720T222640839665Z-a0fd8728`, and organization maintenance `native-kb-organization-maintenance-20260720T222723430568Z-aec806d7` all completed.
+- Automation restoration: all four managed automations are `ACTIVE`, `user_paused=false`, with schedules 12:00, 13:00, 13:11, and 15:33 and model policy `gpt-5.6-sol/xhigh`.
+
+### Model-miss corrections
+
+- Candidate creation, parking, reopening, promotion, downgrade, and calibration now belong to the same bounded lifecycle transition family.
+- Active-index rebuild requires an explicit authorized publisher; normal Sleep and versioned migration are the only publishers.
+- Focused diagnostics may run independently, but the final all-model and full-test evidence has one foreground owner after peer writes and inputs are frozen.
+- A failed or interrupted owner never authorizes a retry until its full descendant process tree is confirmed absent.
+
+### Claim boundary
+
+This entry proves the current model/test/install/runtime recovery and automation identities listed above. Git commit, tag, remote branch, and GitHub Release remain separate evidence until the release owner completes them.

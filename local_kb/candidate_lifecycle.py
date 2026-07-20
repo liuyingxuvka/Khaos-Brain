@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-import json
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -13,11 +13,9 @@ from local_kb.lifecycle import (
     content_fingerprint,
     evidence_items_for_observation,
     load_lifecycle_state,
-    transition_entry,
 )
 from local_kb.store import (
     candidate_dir,
-    history_events_path,
     load_yaml_file,
 )
 
@@ -25,27 +23,69 @@ from local_kb.store import (
 CANDIDATE_DECISION_DAYS = 7
 
 
+@dataclass
+class CandidateLifecyclePlan:
+    """Task-local lifecycle projection plus ordered events for one Sleep cycle."""
+
+    entry_states: dict[str, dict[str, Any]]
+    known_history_event_ids: set[str]
+    events: list[dict[str, Any]] = field(default_factory=list)
+
+    @classmethod
+    def from_lifecycle_state(
+        cls,
+        lifecycle_state: Mapping[str, Any],
+        *,
+        known_history_event_ids: set[str],
+    ) -> "CandidateLifecyclePlan":
+        entries = lifecycle_state.get("entries", {})
+        return cls(
+            entry_states={
+                str(entry_id): dict(state)
+                for entry_id, state in (
+                    entries.items() if isinstance(entries, Mapping) else []
+                )
+                if isinstance(state, Mapping)
+            },
+            known_history_event_ids=set(known_history_event_ids),
+        )
+
+    def stage_transition(self, **kwargs: Any) -> str:
+        event = build_entry_transition_event(**kwargs)
+        self.events.append(event)
+        entry_id = str(event.get("item_id") or "")
+        prior = dict(self.entry_states.get(entry_id, {}))
+        prior.update(
+            {
+                "entry_id": entry_id,
+                "status": str(event.get("to_state") or ""),
+                "retrieval_eligible": bool(
+                    event.get("retrieval_eligible", False)
+                ),
+                "reopen_condition": dict(
+                    event.get("reopen_condition", {})
+                    if isinstance(event.get("reopen_condition"), Mapping)
+                    else {}
+                ),
+                "evidence_fingerprint": str(
+                    event.get("evidence_fingerprint") or ""
+                ),
+                "decision_deadline": str(
+                    event.get("decision_deadline") or ""
+                ),
+                "latest_event_id": str(
+                    event.get("idempotency_key") or ""
+                ),
+            }
+        )
+        self.entry_states[entry_id] = prior
+        return str(event.get("idempotency_key") or "")
+
+
 def _predictive_block(observation: Mapping[str, Any]) -> dict[str, Any]:
     context = observation.get("context", {}) if isinstance(observation.get("context"), Mapping) else {}
     predictive = context.get("predictive_observation", {}) if isinstance(context.get("predictive_observation"), Mapping) else {}
     return dict(predictive)
-
-
-def _history_event_exists(repo_root: Path, event_id: str) -> bool:
-    path = history_events_path(repo_root)
-    if not path.exists():
-        return False
-    with path.open("r", encoding="utf-8") as handle:
-        for raw_line in handle:
-            if event_id not in raw_line:
-                continue
-            try:
-                payload = json.loads(raw_line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(payload, dict) and str(payload.get("event_id") or "") == event_id:
-                return True
-    return False
 
 
 def build_candidate_from_observation(
@@ -119,6 +159,7 @@ def create_or_reuse_candidate(
     *,
     run_id: str,
     evidence_grade: str,
+    lifecycle_plan: CandidateLifecyclePlan,
     staged_upserts: dict[str, dict[str, Any]] | None = None,
     deferred_history_events: list[dict[str, Any]] | None = None,
     catalog_entries: Sequence[Any] | None = None,
@@ -179,7 +220,7 @@ def create_or_reuse_candidate(
         decision_deadline = str(entry["decision_deadline"])
     observation_id = str(observation.get("event_id") or "")
     event_id = f"candidate-created:{entry_id}:{observation_id}"
-    if created and not _history_event_exists(repo_root, event_id):
+    if created and event_id not in lifecycle_plan.known_history_event_ids:
         history_event = build_history_event(
                 "candidate-created",
                 event_id=event_id,
@@ -201,13 +242,13 @@ def create_or_reuse_candidate(
             deferred_history_events.append(history_event)
         else:
             record_history_event(repo_root, history_event)
+        lifecycle_plan.known_history_event_ids.add(event_id)
     evidence_fingerprint = content_fingerprint([entry_id, observation_id, evidence_grade])
-    state = load_lifecycle_state(repo_root, repair_projection=False).get("entries", {}).get(entry_id, {})
+    state = lifecycle_plan.entry_states.get(entry_id, {})
     current_status = str(state.get("status") or "") if isinstance(state, Mapping) else ""
     prior_fingerprint = str(state.get("evidence_fingerprint") or "") if isinstance(state, Mapping) else ""
     if created or not current_status:
-        transition_entry(
-            repo_root,
+        lifecycle_plan.stage_transition(
             entry_id=entry_id,
             from_state="candidate",
             to_state="candidate",
@@ -224,8 +265,7 @@ def create_or_reuse_candidate(
         # A single observation is not independent promotion evidence.  Closing
         # it immediately keeps the active backlog bounded while preserving a
         # precise machine-evaluable reopen rule.
-        transition_entry(
-            repo_root,
+        lifecycle_plan.stage_transition(
             entry_id=entry_id,
             from_state="candidate",
             to_state="parked",
@@ -248,8 +288,7 @@ def create_or_reuse_candidate(
         decision_deadline = (
             datetime.now(timezone.utc) + timedelta(days=CANDIDATE_DECISION_DAYS)
         ).replace(microsecond=0).isoformat()
-        transition_entry(
-            repo_root,
+        lifecycle_plan.stage_transition(
             entry_id=entry_id,
             from_state="parked",
             to_state="candidate",
@@ -270,6 +309,11 @@ def create_or_reuse_candidate(
         "created": created,
         "decision_deadline": decision_deadline,
         "status": current_status or "parked",
+        "lifecycle_event_keys": [
+            str(event.get("idempotency_key") or "")
+            for event in lifecycle_plan.events
+            if str(event.get("item_id") or "") == entry_id
+        ],
     }
 
 
@@ -321,7 +365,8 @@ def review_entry_lifecycles(
     unchanged_parked_skipped = 0
     unchanged_calibration_skipped = 0
     calibration_snapshot_events: list[dict[str, Any]] = []
-    decisions: list[str] = []
+    decision_events: list[dict[str, Any]] = []
+    decision_keys: list[str] = []
     due_entry_ids: set[str] = set()
     review_now = datetime.now(timezone.utc)
     for entry_id, state in sorted(lifecycle.get("entries", {}).items()):
@@ -399,8 +444,7 @@ def review_entry_lifecycles(
             continue
         reviewed += 1
         if calibration["downgrade_required"] and current_status == "trusted":
-            result = transition_entry(
-                repo_root,
+            event = build_entry_transition_event(
                 entry_id=entry_id,
                 from_state="trusted",
                 to_state="parked",
@@ -418,7 +462,8 @@ def review_entry_lifecycles(
                 evidence_fingerprint=str(calibration.get("evidence_digest") or ""),
                 decision_receipt=calibration,
             )
-            decisions.append(str(result.get("event", {}).get("lifecycle_event_id") or result.get("idempotency_key") or ""))
+            decision_events.append(event)
+            decision_keys.append(str(event.get("idempotency_key") or ""))
             downgraded += 1
             continue
         structure_ok, structure_issues = _entry_structure_is_promotable(entries[entry_id].data)
@@ -430,8 +475,7 @@ def review_entry_lifecycles(
                 except ValueError:
                     expired = True
                 if expired:
-                    result = transition_entry(
-                        repo_root,
+                    event = build_entry_transition_event(
                         entry_id=entry_id,
                         from_state="candidate",
                         to_state="parked",
@@ -449,7 +493,10 @@ def review_entry_lifecycles(
                         evidence_fingerprint=str(calibration.get("evidence_digest") or ""),
                         decision_receipt={**calibration, "structure_issues": structure_issues},
                     )
-                    decisions.append(str(result.get("event", {}).get("lifecycle_event_id") or result.get("idempotency_key") or ""))
+                    decision_events.append(event)
+                    decision_keys.append(
+                        str(event.get("idempotency_key") or "")
+                    )
                     parked += 1
                     continue
             if current_status in {"parked", "trusted", "candidate"}:
@@ -483,8 +530,7 @@ def review_entry_lifecycles(
                 )
             continue
         if current_status == "parked":
-            result = transition_entry(
-                repo_root,
+            event = build_entry_transition_event(
                 entry_id=entry_id,
                 from_state="parked",
                 to_state="candidate",
@@ -499,12 +545,12 @@ def review_entry_lifecycles(
                 event_type="entry-reopened",
                 decision_receipt={**calibration, "structure_issues": structure_issues},
             )
-            decisions.append(str(result.get("event", {}).get("lifecycle_event_id") or result.get("idempotency_key") or ""))
+            decision_events.append(event)
+            decision_keys.append(str(event.get("idempotency_key") or ""))
             reopened += 1
             current_status = "candidate"
         if current_status == "candidate":
-            result = transition_entry(
-                repo_root,
+            event = build_entry_transition_event(
                 entry_id=entry_id,
                 from_state="candidate",
                 to_state="trusted",
@@ -518,18 +564,26 @@ def review_entry_lifecycles(
                 event_type="candidate-transition",
                 decision_receipt={**calibration, "structure_issues": structure_issues},
             )
-            decisions.append(str(result.get("event", {}).get("lifecycle_event_id") or result.get("idempotency_key") or ""))
+            decision_events.append(event)
+            decision_keys.append(str(event.get("idempotency_key") or ""))
             promoted += 1
+    staged_review_events = [*decision_events, *calibration_snapshot_events]
     calibration_snapshot_result = commit_lifecycle_events(
         repo_root,
-        calibration_snapshot_events,
-    ) if calibration_snapshot_events else {
+        staged_review_events,
+        expected_event_digest=str(lifecycle.get("event_digest") or ""),
+        expected_last_sequence=int(lifecycle.get("last_sequence") or 0),
+    ) if staged_review_events else {
         "created_count": 0,
         "reused_count": 0,
         "requested_count": 0,
         "events": [],
+        "event_ids_by_key": {},
+        "state": lifecycle,
+        "replay_pass_count": 0,
+        "atomic_batch_count": 0,
     }
-    lifecycle_after = load_lifecycle_state(repo_root, repair_projection=False)
+    lifecycle_after = calibration_snapshot_result["state"]
     projection_validation = lifecycle_after.get("validation", {})
     projection_issues = (
         [str(item) for item in projection_validation.get("issues", [])]
@@ -544,7 +598,25 @@ def review_entry_lifecycles(
     issues = list(projection_issues)
     if due_remaining:
         issues.append(f"{len(due_remaining)} due candidate lifecycle decision(s) remain open")
-    decision_ids = [item for item in decisions if item]
+    event_ids_by_key = calibration_snapshot_result.get("event_ids_by_key", {})
+    created_keys = {
+        str(event.get("idempotency_key") or "")
+        for event in calibration_snapshot_result.get("events", [])
+        if isinstance(event, Mapping)
+    }
+    reused_keys = {
+        str(key)
+        for key in calibration_snapshot_result.get("reused_keys", [])
+    }
+    calibration_keys = {
+        str(event.get("idempotency_key") or "")
+        for event in calibration_snapshot_events
+    }
+    decision_ids = [
+        str(event_ids_by_key.get(key) or key)
+        for key in decision_keys
+        if key
+    ]
     decision_count = promoted + downgraded + reopened + parked
     if len(decision_ids) != decision_count:
         issues.append(
@@ -556,8 +628,19 @@ def review_entry_lifecycles(
         "reviewed": reviewed,
         "unchanged_parked_skipped": unchanged_parked_skipped,
         "unchanged_calibration_skipped": unchanged_calibration_skipped,
-        "calibration_snapshot_count": int(calibration_snapshot_result.get("created_count") or 0),
-        "calibration_snapshot_reused": int(calibration_snapshot_result.get("reused_count") or 0),
+        "calibration_snapshot_count": len(calibration_keys & created_keys),
+        "calibration_snapshot_reused": len(calibration_keys & reused_keys),
+        "lifecycle_batch": {
+            key: int(calibration_snapshot_result.get(key) or 0)
+            for key in (
+                "requested_count",
+                "created_count",
+                "reused_count",
+                "residual_count",
+                "replay_pass_count",
+                "atomic_batch_count",
+            )
+        },
         "promoted": promoted,
         "downgraded": downgraded,
         "reopened": reopened,

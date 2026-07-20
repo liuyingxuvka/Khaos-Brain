@@ -730,6 +730,238 @@ def _scenario_report() -> dict[str, Any]:
     ).to_dict()
 
 
+def _lifecycle_scenarios() -> tuple[Scenario, ...]:
+    workflow = model.lifecycle_convergence_workflow()
+    stage = model.LifecycleInput("stage_lifecycle_batch", planned_event_count=500)
+    commit = model.LifecycleInput(
+        "commit_lifecycle_batch",
+        planned_event_count=500,
+        created_event_count=500,
+    )
+    return (
+        Scenario(
+            "candidate_events_commit_in_one_bounded_batch",
+            "Candidate and observation lifecycle events share one atomic batch.",
+            model.LifecycleState(),
+            (stage, commit),
+            ScenarioExpectation(
+                required_trace_labels=(
+                    "lifecycle_batch_staged",
+                    "lifecycle_batch_committed_once",
+                )
+            ),
+            workflow=workflow,
+            invariants=model.LIFECYCLE_INVARIANTS,
+        ),
+        Scenario(
+            "timeout_after_commit_stays_fail_closed",
+            "A native timeout after durable lifecycle mutation leaves the index invalid.",
+            model.LifecycleState(),
+            (
+                stage,
+                commit,
+                model.LifecycleInput(
+                    "native_timeout_after_lifecycle_commit",
+                    cleanup_confirmed=True,
+                ),
+            ),
+            ScenarioExpectation(
+                required_trace_labels=(
+                    "lifecycle_batch_committed_once",
+                    "timeout_visible_index_remains_invalid",
+                ),
+                forbidden_trace_labels=(
+                    "active_index_rebuilt_and_watermark_committed",
+                ),
+            ),
+            workflow=workflow,
+            invariants=model.LIFECYCLE_INVARIANTS,
+        ),
+        Scenario(
+            "next_sleep_recovers_exact_invalidated_state",
+            "The next authorized Sleep rebuilds and commits one final watermark.",
+            model.LifecycleState(),
+            (
+                stage,
+                commit,
+                model.LifecycleInput(
+                    "native_timeout_after_lifecycle_commit",
+                    cleanup_confirmed=True,
+                ),
+                model.LifecycleInput("next_sleep_recovery"),
+            ),
+            ScenarioExpectation(
+                required_trace_labels=(
+                    "timeout_visible_index_remains_invalid",
+                    "active_index_rebuilt_and_watermark_committed",
+                )
+            ),
+            workflow=workflow,
+            invariants=model.LIFECYCLE_INVARIANTS,
+        ),
+        Scenario(
+            "stale_planning_snapshot_writes_nothing",
+            "A batch planned from stale lifecycle state fails before invalidation.",
+            model.LifecycleState(),
+            (
+                model.LifecycleInput(
+                    "commit_lifecycle_batch",
+                    planned_event_count=1,
+                    snapshot_current=False,
+                ),
+            ),
+            ScenarioExpectation(
+                required_trace_labels=("stale_lifecycle_snapshot_blocked",),
+                forbidden_trace_labels=("lifecycle_batch_committed_once",),
+            ),
+            workflow=workflow,
+            invariants=model.LIFECYCLE_INVARIANTS,
+        ),
+        Scenario(
+            "unauthorized_index_publisher_is_rejected",
+            "A retrieval caller cannot publish or clear the active-index marker.",
+            model.LifecycleState(
+                active_index_state="invalidated_pending_rebuild",
+                invalidation_token="sleep-cycle-token",
+                authority_stamp_published=False,
+                watermark_committed=False,
+                target_terminal_receipt_present=False,
+            ),
+            (
+                model.LifecycleInput(
+                    "publish_active_index",
+                    publisher_id="local_kb.search.search_with_receipt",
+                ),
+            ),
+            ScenarioExpectation(
+                expected_status="violation",
+                expected_violation_names=(
+                    "active_index_publication_has_one_authorized_owner",
+                ),
+                required_trace_labels=("active_index_publication_blocked",),
+                forbidden_trace_labels=(
+                    "active_index_rebuilt_and_watermark_committed",
+                ),
+            ),
+            workflow=workflow,
+            invariants=model.LIFECYCLE_INVARIANTS,
+        ),
+    )
+
+
+def _lifecycle_model_report() -> dict[str, Any]:
+    risk_intent = RiskIntent(
+        failure_modes=(
+            "per-candidate full lifecycle replay",
+            "timeout after durable invalidation before index publication",
+            "unauthorized active-index publication",
+            "stale planning snapshot committed",
+        ),
+        protected_error_classes=(
+            "unbounded_lifecycle_replay",
+            "stale_index_success",
+            "unauthorized_index_publisher",
+            "lifecycle_snapshot_drift",
+        ),
+        protected_harms=(
+            "Sleep exceeds its native timeout",
+            "retrieval consumes an invalidated index",
+        ),
+        must_model_state=tuple(model.LifecycleState.__dataclass_fields__),
+        must_model_side_effects=(
+            "atomic lifecycle batch commit",
+            "durable active-index invalidation",
+            "validated active-index publication",
+            "Sleep watermark commit",
+        ),
+        completion_evidence=(
+            "two replay passes per lifecycle batch",
+            "exact invalidation token",
+            "authorized publisher identity",
+            "current authority stamp and watermark",
+        ),
+        hard_invariants=tuple(item.name for item in model.LIFECYCLE_INVARIANTS),
+        known_bad_cases=("unauthorized_index_publisher",),
+        adversarial_inputs=(
+            "250 new candidates",
+            "stale lifecycle snapshot",
+            "native timeout after lifecycle commit",
+            "marker-token race",
+        ),
+        blindspots=("physical storage throughput remains production evidence",),
+        template_no_match_reason=(
+            "The existing LifecycleConvergenceBlock is the exact product owner."
+        ),
+    )
+    plan = FlowGuardCheckPlan(
+        workflow=model.lifecycle_convergence_workflow(),
+        initial_states=(model.LifecycleState(),),
+        external_inputs=model.LIFECYCLE_INPUTS,
+        invariants=model.LIFECYCLE_INVARIANTS,
+        max_sequence_length=4,
+        required_labels=(
+            "lifecycle_batch_staged",
+            "lifecycle_batch_committed_once",
+            "stale_lifecycle_snapshot_blocked",
+            "timeout_visible_index_remains_invalid",
+            "active_index_publication_blocked",
+            "active_index_rebuilt_and_watermark_committed",
+        ),
+        scenarios=_lifecycle_scenarios(),
+        risk_profile=RiskProfile(
+            modeled_boundary=(
+                "Sleep lifecycle staging through active-index/watermark closure"
+            ),
+            risk_classes=("conformance", "performance", "side_effect"),
+            risk_intent=risk_intent,
+        ),
+        template_reuse_review=TemplateReuseReview(
+            no_match_reason=risk_intent.template_no_match_reason,
+            searched_layers=("project-local",),
+        ),
+        template_harvest_review=TemplateHarvestReview(
+            disposition="not_harvestable",
+            not_harvestable_reason="not_reusable_project_specific",
+        ),
+        minimum_model_contract=MinimumModelContract(
+            protected_error_classes=risk_intent.protected_error_classes,
+            modeled_state=risk_intent.must_model_state,
+            modeled_side_effects=risk_intent.must_model_side_effects,
+            completion_evidence=risk_intent.completion_evidence,
+            known_bad_cases=risk_intent.known_bad_cases,
+        ),
+        known_bad_proofs=(
+            KnownBadProof(
+                "unauthorized_index_publisher",
+                protected_error_class="unauthorized_index_publisher",
+                method="scenario_expected_invariant_violation",
+                observed_status="failed",
+                observed_failure=(
+                    "active_index_publication_has_one_authorized_owner"
+                ),
+                evidence_id=(
+                    "sleep-timeout:unauthorized-active-index-publication"
+                ),
+            ),
+        ),
+        metadata={
+            "observed_timeout_run_id": (
+                "native-kb-sleep-maintenance-20260720T100219848122Z-58af370c"
+            ),
+            "model_miss_types": ("state_too_coarse", "evidence_overclaimed"),
+        },
+    )
+    return run_model_first_checks(plan).to_dict()
+
+
+def _lifecycle_scenario_report() -> dict[str, Any]:
+    return review_scenarios(
+        _lifecycle_scenarios(),
+        default_workflow=model.lifecycle_convergence_workflow(),
+        default_invariants=model.LIFECYCLE_INVARIANTS,
+    ).to_dict()
+
+
 def _contract_report() -> dict[str, Any]:
     skills: dict[str, dict[str, Any]] = {}
     evidence_owners: dict[str, str] = {}
@@ -781,21 +1013,31 @@ def _report_ok(report: dict[str, Any]) -> bool:
 def build_report() -> dict[str, Any]:
     model_report = _model_report()
     scenarios = _scenario_report()
+    lifecycle_model = _lifecycle_model_report()
+    lifecycle_scenarios = _lifecycle_scenario_report()
     contracts = _contract_report()
     scenario_ok = scenarios.get("ok") is True
     report = {
-        "schema_version": "khaos-brain.flowguard-consumer-independence.v1",
-        "ok": _report_ok(model_report) and scenario_ok and contracts["ok"],
+        "schema_version": "khaos-brain.flowguard-convergence.v2",
+        "ok": (
+            _report_ok(model_report)
+            and scenario_ok
+            and _report_ok(lifecycle_model)
+            and lifecycle_scenarios.get("ok") is True
+            and contracts["ok"]
+        ),
         "projection_digest": _projection_digest(),
         "model": model_report,
         "scenarios": scenarios,
+        "lifecycle_model": lifecycle_model,
+        "lifecycle_scenarios": lifecycle_scenarios,
         "contracts": contracts,
         "claim_boundary": (
             "Executable FlowGuard evidence for clean consumer distribution, "
             "target-native completion, independent test ownership, and direct "
             "manual-update closure, exact scheduled/manual-only activation inventory, "
             "and bounded pointer-only upgrade currentness. It does not guarantee "
-            "third-party skill compatibility."
+            "third-party skill compatibility or current production recovery."
         ),
     }
     return report

@@ -30,11 +30,13 @@ BINDINGS = (
     ("req.authority.atomic-publication", "contract.lifecycle.publish-complete-generation", "local_kb/lifecycle.py", "run_incremental_sleep", "tests/test_khaos_sleep_model_maintenance.py"),
     ("req.authority.privacy", "contract.models.validate-scope", "local_kb/logicguard_models.py", "normalize_authority_scope", "tests/test_khaos_logicguard_models.py"),
     ("req.maintenance.sleep-owner", "contract.lifecycle.sleep-owner", "local_kb/lifecycle.py", "run_incremental_sleep", "tests/test_khaos_sleep_model_maintenance.py"),
+    ("req.maintenance.lifecycle-batch", "contract.lifecycle.bounded-candidate-batch", "local_kb/lifecycle.py", "_run_incremental_sleep_locked", "tests/test_kb_lifecycle.py"),
     ("req.maintenance.mesh-consolidation", "contract.maintenance.publish-model-generation", "local_kb/model_maintenance.py", "publish_sleep_model_generation", "tests/test_khaos_sleep_model_maintenance.py"),
     ("req.maintenance.gap-review", "contract.maintenance.summarize-model-gaps", "local_kb/model_maintenance.py", "_gap_summary", "tests/test_khaos_sleep_model_maintenance.py"),
     ("req.maintenance.dream-read-only", "contract.dream.run-read-only", "local_kb/dream.py", "run_dream_maintenance", "tests/test_kb_dream.py"),
     ("req.maintenance.dream-convergence", "contract.dream.fingerprint-experiment", "local_kb/dream.py", "_evidence_fingerprint", "tests/test_kb_dream.py"),
     ("req.retrieval.current-index", "contract.search.current-index-only", "local_kb/search.py", "search_with_receipt", "tests/test_khaos_model_native_retrieval.py"),
+    ("req.retrieval.publisher-authority", "contract.index.explicit-publisher", "local_kb/active_index.py", "rebuild_active_index", "tests/test_kb_retrieval_calibration.py"),
     ("req.retrieval.neighborhood", "contract.models.materialize-neighborhood", "local_kb/logicguard_models.py", "materialize_bound_neighborhood", "tests/test_khaos_model_native_retrieval.py"),
     ("req.retrieval.ranking", "contract.search.rank-entry-then-grounded-neighborhood", "local_kb/search.py", "search_model_bound_entries", "tests/test_khaos_model_native_retrieval.py"),
     ("req.retrieval.desktop", "contract.desktop.render-exact-model-detail", "local_kb/ui_data.py", "build_card_detail_payload", "tests/test_kb_desktop_ui.py"),
@@ -66,6 +68,8 @@ KNOWN_BAD_TARGET_IDS = (
     "bad.private-cross-scope-edge",
     "bad.retrieval-without-neighborhood",
     "bad.performance-small-fixture-overclaim",
+    "bad.per-candidate-full-lifecycle-replay",
+    "bad.unauthorized-active-index-publisher",
 )
 
 EXPECTED_PLANNING_GAP_CODES = {
@@ -89,7 +93,10 @@ def build_plan() -> ModelTestAlignmentPlan:
             required=True,
             required_test_kinds=(
                 ("happy_path", "same_class")
-                if obligation_id == "req.retrieval.performance"
+                if obligation_id in {
+                    "req.retrieval.performance",
+                    "req.maintenance.lifecycle-batch",
+                }
                 else ("happy_path",)
             ),
             risk_level="high",
@@ -145,6 +152,28 @@ def build_plan() -> ModelTestAlignmentPlan:
         test_kind="same_class",
         covered_obligations=("req.retrieval.performance",),
         covered_code_contracts=(performance_contract_id,),
+        assertion_scope="external_contract",
+        evidence_role="primary",
+    ))
+    lifecycle_contract_id = next(
+        contract_id
+        for obligation_id, contract_id, _path, _symbol, _test_path in BINDINGS
+        if obligation_id == "req.maintenance.lifecycle-batch"
+    )
+    evidence = (*evidence, TestEvidence(
+        evidence_id="evidence.planned.req.maintenance.lifecycle-batch.same-class-family",
+        test_name="planned::req.maintenance.lifecycle-batch::same-class-family",
+        path="tests/test_kb_lifecycle.py",
+        command=(
+            "python -m pytest -q tests/test_kb_lifecycle.py -k "
+            "'candidate_events_commit_in_one_bounded_batch or "
+            "candidate_transition_family_retry_is_bounded'"
+        ),
+        result_status="not_run",
+        evidence_current=True,
+        test_kind="same_class",
+        covered_obligations=("req.maintenance.lifecycle-batch",),
+        covered_code_contracts=(lifecycle_contract_id,),
         assertion_scope="external_contract",
         evidence_role="primary",
     ))

@@ -540,6 +540,7 @@ def publish_sleep_model_generation(
                 root,
                 reason=reason,
                 authority_generation=None if pointer_exists else generation_before,
+                publisher_id=actor,
             )
         if not pointer_exists:
             publish_authority_generation(root, generation_before, writer=actor)
@@ -743,7 +744,12 @@ def publish_sleep_model_generation(
             root,
             [(root / row["path"], row["projection"]) for row in projected_rows],
         )
-        index_receipt = rebuild_active_index(root, reason=reason, authority_generation=generation)
+        index_receipt = rebuild_active_index(
+            root,
+            reason=reason,
+            authority_generation=generation,
+            publisher_id=actor,
+        )
         published = publish_authority_generation(root, generation, writer=actor)
         index_validation = validate_active_index(root)
         if not index_validation.get("ok"):

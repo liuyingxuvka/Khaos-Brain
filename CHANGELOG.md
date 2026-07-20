@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.6.8 - 2026-07-20
+
+- Replaced per-candidate lifecycle publication during Sleep with deterministic bounded atomic batches. Candidate creation, parking, reopening, promotion, downgrade, and calibration now preserve exact order and stable idempotency while using at most one lifecycle replay before and after each batch.
+- Made interrupted Sleep recovery convergent: a later canonical Sleep owner reuses already-durable candidate and lifecycle identities, appends only missing events, keeps residual work visible, and never falls back to per-event publication or counts partial work twice.
+- Required every active-index rebuild to carry an explicit authorized publisher identity. Normal runtime accepts only canonical Sleep, versioned migration owns upgrade-time publication, and unauthorized callers fail before any index, authority, or invalidation-marker write.
+- Added OpenSpec requirements, FlowGuard model-miss closure, same-class known-bad cases, and regression coverage for production-scale replay, partial-timeout retry, marker-token races, unauthorized publishers, and fail-closed retrieval, Dream, and organization lanes.
+- Recovered the local runtime through one canonical Sleep run, verified active-index generation 149 and downstream lanes, synchronized installer-managed skills and automations, and restored all four scheduled automations to their intended active state.
+- Corrected README dependency versions and release delivery language. This is a source-only release; no prebuilt Windows executable is attached.
+
 ## v0.6.7 - 2026-07-19
 
 - Pinned the sole public reasoning dependency to ResearchGuard v0.1.2 commit `1e731fd85c229a11f8e14e639705ad30ac080768`; Khaos Brain continues to import only `researchguard.logic`, with no standalone LogicGuard package, repository, alias, compatibility reader, or fallback dependency.

@@ -9,9 +9,18 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from local_kb.candidate_lifecycle import create_or_reuse_candidate
+from local_kb.candidate_lifecycle import (
+    CandidateLifecyclePlan,
+    create_or_reuse_candidate,
+)
 from local_kb.feedback import build_observation
-from local_kb.lifecycle import admit_observation, classify_observation, dispose_observation, load_lifecycle_state
+from local_kb.lifecycle import (
+    admit_observation,
+    classify_observation,
+    commit_lifecycle_events,
+    dispose_observation,
+    load_lifecycle_state,
+)
 from local_kb.logicguard_models import (
     build_authority_generation_payload,
     load_authority_generation,
@@ -524,11 +533,27 @@ class KbHistoryMigrationTests(unittest.TestCase):
             for observation in observations[:10]:
                 admit_observation(repo_root, observation)
                 decision = classify_observation(observation)
+                lifecycle_before = load_lifecycle_state(repo_root)
+                lifecycle_plan = CandidateLifecyclePlan.from_lifecycle_state(
+                    lifecycle_before,
+                    known_history_event_ids=set(),
+                )
                 candidate = create_or_reuse_candidate(
                     repo_root,
                     observation,
                     run_id="legacy-per-item",
                     evidence_grade=str(decision.get("evidence_grade") or "weak"),
+                    lifecycle_plan=lifecycle_plan,
+                )
+                commit_lifecycle_events(
+                    repo_root,
+                    lifecycle_plan.events,
+                    expected_event_digest=str(
+                        lifecycle_before.get("event_digest") or ""
+                    ),
+                    expected_last_sequence=int(
+                        lifecycle_before.get("last_sequence") or 0
+                    ),
                 )
                 decision.update(
                     {

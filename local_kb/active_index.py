@@ -18,6 +18,7 @@ from local_kb.lifecycle import (
 )
 from local_kb.models import Entry
 from local_kb.logicguard_models import (
+    AUTHORITY_GENERATION_WRITERS,
     ExactBindingError,
     load_authority_generation,
     validate_authority_generation_payload,
@@ -38,6 +39,7 @@ ACTIVE_INDEX_AUTHORITY_PATH = Path("kb") / "indexes" / "active-authority.json"
 ACTIVE_INDEX_INVALIDATION_PATH = Path("kb") / "indexes" / "active-invalidated.json"
 INDEX_SCOPES = ("public", "private", "candidates")
 TERMINAL_STATUSES = {"merged", "rejected", "superseded", "parked", "retired", "deprecated", "history_only"}
+ACTIVE_INDEX_PUBLISHERS = frozenset(AUTHORITY_GENERATION_WRITERS)
 _INDEXED_SOURCE_VALIDATION_CACHE_LIMIT = 32
 _INDEXED_SOURCE_VALIDATION_CACHE: dict[tuple[Any, ...], tuple[str, ...]] = {}
 _INDEXED_SOURCE_VALIDATION_CACHE_LOCK = RLock()
@@ -524,11 +526,16 @@ def _activate_built_index(
     *,
     payload: Mapping[str, Any],
     captured_invalidation_token: str | None,
+    publisher_id: str,
 ) -> dict[str, Any]:
     # The same lock serializes entry transitions. This closes the final
     # check/publish/delete race without holding it during the expensive scan.
     from local_kb.lifecycle import _lifecycle_lock
 
+    if publisher_id not in ACTIVE_INDEX_PUBLISHERS:
+        raise PermissionError(
+            f"Unauthorized active-index publisher: {publisher_id or '<missing>'}"
+        )
     with _lifecycle_lock(repo_root):
         current_token = _invalidation_token(repo_root)
         if current_token != captured_invalidation_token:
@@ -552,7 +559,12 @@ def rebuild_active_index(
     *,
     reason: str = "manual",
     authority_generation: Mapping[str, Any] | None = None,
+    publisher_id: str,
 ) -> dict[str, Any]:
+    if publisher_id not in ACTIVE_INDEX_PUBLISHERS:
+        raise PermissionError(
+            f"Unauthorized active-index publisher: {publisher_id or '<missing>'}"
+        )
     started = perf_counter()
     candidate_generation = (
         validate_authority_generation_payload(authority_generation)
@@ -680,6 +692,7 @@ def rebuild_active_index(
         repo_root,
         payload=payload,
         captured_invalidation_token=captured_invalidation_token,
+        publisher_id=publisher_id,
     )
     current_generation = None
     try:
@@ -705,6 +718,7 @@ def rebuild_active_index(
         "build_duration_ms": payload["build_duration_ms"],
         "authority_digest": str(authority.get("authority_digest") or ""),
         "fast_validation_duration_ms": fast_validation.get("duration_ms"),
+        "publisher_id": publisher_id,
     }
 
 

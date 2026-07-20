@@ -384,6 +384,7 @@ def _empty_replay() -> dict[str, Any]:
         "observations": {},
         "entries": {},
         "idempotency_keys": [],
+        "idempotency_event_ids": {},
         "validation": {"ok": True, "issues": []},
     }
 
@@ -393,6 +394,7 @@ def replay_lifecycle(repo_root: Path) -> dict[str, Any]:
     entries: dict[str, dict[str, Any]] = {}
     idempotency_keys: list[str] = []
     seen_idempotency_keys: set[str] = set()
+    idempotency_event_ids: dict[str, str] = {}
     issues: list[str] = []
     expected_sequence = 1
     event_count = 0
@@ -418,6 +420,9 @@ def replay_lifecycle(repo_root: Path) -> dict[str, Any]:
         else:
             idempotency_keys.append(key)
             seen_idempotency_keys.add(key)
+            idempotency_event_ids[key] = str(
+                event.get("lifecycle_event_id") or key
+            )
         event_type = str(event.get("event_type") or "")
         item_id = str(event.get("item_id") or "").strip()
         if event_type == "observation-admitted":
@@ -484,6 +489,7 @@ def replay_lifecycle(repo_root: Path) -> dict[str, Any]:
         "observations": observations,
         "entries": entries,
         "idempotency_keys": idempotency_keys,
+        "idempotency_event_ids": idempotency_event_ids,
         "validation": {"ok": not issues, "issues": issues},
     }
 
@@ -566,6 +572,9 @@ def commit_lifecycle_event(repo_root: Path, event: Mapping[str, Any]) -> dict[st
 def commit_lifecycle_events(
     repo_root: Path,
     events: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...],
+    *,
+    expected_event_digest: str,
+    expected_last_sequence: int,
 ) -> dict[str, Any]:
     """Commit many lifecycle events with one replay before and after the batch.
 
@@ -577,7 +586,24 @@ def commit_lifecycle_events(
     requested = [dict(event) for event in events]
     with _lifecycle_lock(repo_root, timeout_seconds=30.0):
         state = replay_lifecycle(repo_root)
+        if (
+            str(state.get("event_digest") or "")
+            != str(expected_event_digest or "")
+            or int(state.get("last_sequence") or 0)
+            != int(expected_last_sequence)
+        ):
+            raise RuntimeError(
+                "Lifecycle authority changed after batch planning"
+            )
         known_keys = set(state.get("idempotency_keys") or [])
+        event_ids_by_key = {
+            str(key): str(value)
+            for key, value in (
+                state.get("idempotency_event_ids", {}).items()
+                if isinstance(state.get("idempotency_event_ids"), Mapping)
+                else []
+            )
+        }
         next_sequence = int(state.get("last_sequence") or 0)
         created_events: list[dict[str, Any]] = []
         reused_keys: list[str] = []
@@ -598,6 +624,7 @@ def commit_lifecycle_events(
             }
             created_events.append(payload)
             known_keys.add(key)
+            event_ids_by_key[key] = str(payload["lifecycle_event_id"])
         index_affecting = [
             event
             for event in created_events
@@ -621,9 +648,13 @@ def commit_lifecycle_events(
             "requested_count": len(requested),
             "events": created_events,
             "reused_keys": reused_keys,
+            "event_ids_by_key": event_ids_by_key,
             "state": next_state,
             "replay_pass_count": 2,
-            "atomic_batch_count": 1 if created_events else 0,
+            "atomic_batch_count": 1 if requested else 0,
+            "residual_count": (
+                len(requested) - len(created_events) - len(reused_keys)
+            ),
         }
 
 
@@ -1025,6 +1056,15 @@ def _run_incremental_sleep_locked(
         if str(row.get("event_id") or "")
     }
     lifecycle_before = load_lifecycle_state(repo_root)
+    from local_kb.candidate_lifecycle import (
+        CandidateLifecyclePlan,
+        create_or_reuse_candidate,
+    )
+
+    candidate_lifecycle_plan = CandidateLifecyclePlan.from_lifecycle_state(
+        lifecycle_before,
+        known_history_event_ids=known_history_event_ids,
+    )
     observations_before = lifecycle_before.get("observations", {})
     opening_backlog = sum(
         1
@@ -1104,13 +1144,12 @@ def _run_incremental_sleep_locked(
             known_history_event_ids.add(observation_id)
         selected = classify_observation(observation)
         if selected.get("disposition") == "candidate":
-            from local_kb.candidate_lifecycle import create_or_reuse_candidate
-
             candidate = create_or_reuse_candidate(
                 repo_root,
                 observation,
                 run_id=clean_run_id,
                 evidence_grade=str(selected.get("evidence_grade") or "weak"),
+                lifecycle_plan=candidate_lifecycle_plan,
                 staged_upserts=staged_model_upserts,
                 deferred_history_events=deferred_candidate_history,
                 catalog_entries=get_candidate_catalog_entries(),
@@ -1162,13 +1201,12 @@ def _run_incremental_sleep_locked(
             continue
         selected = classify_observation(source_event)
         if selected.get("disposition") == "candidate":
-            from local_kb.candidate_lifecycle import create_or_reuse_candidate
-
             candidate = create_or_reuse_candidate(
                 repo_root,
                 source_event,
                 run_id=clean_run_id,
                 evidence_grade=str(selected.get("evidence_grade") or "weak"),
+                lifecycle_plan=candidate_lifecycle_plan,
                 staged_upserts=staged_model_upserts,
                 deferred_history_events=deferred_candidate_history,
                 catalog_entries=get_candidate_catalog_entries(),
@@ -1223,13 +1261,12 @@ def _run_incremental_sleep_locked(
                 break
             selected = classify_observation(row)
             if selected.get("disposition") == "candidate":
-                from local_kb.candidate_lifecycle import create_or_reuse_candidate
-
                 candidate = create_or_reuse_candidate(
                     repo_root,
                     row,
                     run_id=clean_run_id,
                     evidence_grade=str(selected.get("evidence_grade") or "weak"),
+                    lifecycle_plan=candidate_lifecycle_plan,
                     staged_upserts=staged_model_upserts,
                     deferred_history_events=deferred_candidate_history,
                     catalog_entries=get_candidate_catalog_entries(),
@@ -1264,23 +1301,79 @@ def _run_incremental_sleep_locked(
         "requested_count": 0,
         "created_count": 0,
         "reused_count": 0,
+        "candidate_requested_count": 0,
+        "candidate_created_count": 0,
+        "candidate_reused_count": 0,
+        "total_requested_count": 0,
+        "total_created_count": 0,
+        "total_reused_count": 0,
+        "residual_count": 0,
         "replay_pass_count": 0,
         "atomic_batch_count": 0,
     }
-    if lifecycle_batch_events:
+    candidate_lifecycle_event_keys = {
+        str(event.get("idempotency_key") or "")
+        for event in candidate_lifecycle_plan.events
+        if str(event.get("idempotency_key") or "")
+    }
+    combined_lifecycle_events = [
+        *candidate_lifecycle_plan.events,
+        *lifecycle_batch_events,
+    ]
+    if combined_lifecycle_events:
         committed_batch = commit_lifecycle_events(
             repo_root,
-            lifecycle_batch_events,
+            combined_lifecycle_events,
+            expected_event_digest=str(
+                lifecycle_before.get("event_digest") or ""
+            ),
+            expected_last_sequence=int(
+                lifecycle_before.get("last_sequence") or 0
+            ),
+        )
+        created_event_keys = {
+            str(event.get("idempotency_key") or "")
+            for event in committed_batch.get("events", [])
+            if isinstance(event, Mapping)
+        }
+        reused_event_keys = {
+            str(key) for key in committed_batch.get("reused_keys", [])
+        }
+        candidate_lifecycle_created = len(
+            candidate_lifecycle_event_keys & created_event_keys
+        )
+        candidate_lifecycle_reused = len(
+            candidate_lifecycle_event_keys & reused_event_keys
         )
         lifecycle_batch = {
-            key: int(committed_batch.get(key) or 0)
-            for key in (
-                "requested_count",
-                "created_count",
-                "reused_count",
-                "replay_pass_count",
-                "atomic_batch_count",
-            )
+            "requested_count": len(lifecycle_batch_events),
+            "created_count": int(committed_batch.get("created_count") or 0)
+            - candidate_lifecycle_created,
+            "reused_count": int(committed_batch.get("reused_count") or 0)
+            - candidate_lifecycle_reused,
+            "candidate_requested_count": len(
+                candidate_lifecycle_plan.events
+            ),
+            "candidate_created_count": candidate_lifecycle_created,
+            "candidate_reused_count": candidate_lifecycle_reused,
+            "total_requested_count": int(
+                committed_batch.get("requested_count") or 0
+            ),
+            "total_created_count": int(
+                committed_batch.get("created_count") or 0
+            ),
+            "total_reused_count": int(
+                committed_batch.get("reused_count") or 0
+            ),
+            "residual_count": int(
+                committed_batch.get("residual_count") or 0
+            ),
+            "replay_pass_count": int(
+                committed_batch.get("replay_pass_count") or 0
+            ),
+            "atomic_batch_count": int(
+                committed_batch.get("atomic_batch_count") or 0
+            ),
         }
         created_events = committed_batch.get("events", [])
         newly_admitted += sum(
@@ -1289,13 +1382,11 @@ def _run_incremental_sleep_locked(
             if isinstance(event, Mapping)
             and str(event.get("event_type") or "") == "observation-admitted"
         )
+        event_ids_by_key = committed_batch.get("event_ids_by_key", {})
         disposition_ids_by_key = {
-            str(event.get("idempotency_key") or ""): str(
-                event.get("lifecycle_event_id") or ""
-            )
-            for event in created_events
-            if isinstance(event, Mapping)
-            and str(event.get("event_type") or "") == "observation-disposition"
+            key: str(event_ids_by_key.get(key) or key)
+            for key in batch_disposition_keys
+            if key
         }
         dispositions.extend(
             disposition_ids_by_key.get(key) or key
@@ -1423,6 +1514,7 @@ def _run_incremental_sleep_locked(
                 rebuilt_receipt = rebuild_active_index(
                     repo_root,
                     reason=f"sleep:{clean_run_id}:final-no-delta-index-owner",
+                    publisher_id="local_kb.lifecycle.run_incremental_sleep",
                 )
                 rebuilt_validation = validate_active_index(repo_root)
                 index_refresh = {

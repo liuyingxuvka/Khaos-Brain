@@ -4,9 +4,11 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import yaml
 
+from local_kb.active_index import active_index_invalidation_path, invalidate_active_index
 from local_kb.dream import (
     _logicguard_dream_probe,
     run_dream_maintenance as _run_dream_maintenance,
@@ -62,6 +64,25 @@ def write_dream_process_entry(repo_root: Path) -> None:
 
 
 class DreamMaintenanceTests(unittest.TestCase):
+    def test_dream_fails_closed_before_downstream_work_when_index_is_invalidated(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            activate_current_kb_runtime(repo_root)
+            invalidate_active_index(repo_root, reason="test-dream-fail-closed")
+
+            with patch(
+                "local_kb.dream.load_history_events",
+                side_effect=AssertionError("Dream downstream history load must not run"),
+            ) as downstream:
+                with self.assertRaisesRegex(RuntimeError, "durably invalidated pending rebuild"):
+                    _run_dream_maintenance(
+                        repo_root=repo_root,
+                        run_id="kb-dream-invalidated-index",
+                    )
+
+            downstream.assert_not_called()
+            self.assertTrue(active_index_invalidation_path(repo_root).is_file())
+
     def test_dream_probe_covers_model_roles_cross_edge_and_neighbor_pin(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)

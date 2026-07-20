@@ -266,14 +266,21 @@
           "coverage_shard_ids": [],
           "current": false,
           "evidence_state": "missing",
-          "metadata": {},
+          "metadata": {
+            "model_miss_id": "miss:kb-sleep:timeout-after-lifecycle-invalidation",
+            "observed_run_id": "native-kb-sleep-maintenance-20260720T100219848122Z-58af370c",
+            "observed_native_timeout_seconds": 900
+          },
           "model_obligation_ids": [
             "obligation:sleep-no-delta-single-owner"
           ],
           "proof_artifact_ids": [],
           "risk_gate_ids": [],
           "test_evidence_ids": [
-            "test:sleep-no-delta-single-owner"
+            "test:sleep-no-delta-single-owner",
+            "test:tests/test_kb_lifecycle.py::KbLifecycleTests::test_candidate_events_commit_in_one_bounded_batch",
+            "test:tests/test_kb_lifecycle.py::KbLifecycleTests::test_candidate_transition_family_retry_is_bounded",
+            "test:tests/test_kb_retrieval_calibration.py::KbRetrievalCalibrationTests::test_rebuild_requires_authorized_publisher"
           ],
           "test_mesh_state": "shard_current"
         },
@@ -283,16 +290,22 @@
           "calibration-only-active-index-invalidation",
           "handoff-acknowledgement-before-model-publication",
           "dream-handoff-per-item-lifecycle-replay",
-          "quadratic-lifecycle-idempotency-lookup"
+          "quadratic-lifecycle-idempotency-lookup",
+          "per-candidate-full-lifecycle-replay",
+          "unauthorized-active-index-publication",
+          "timeout-represented-as-sleep-success"
         ],
-        "expected_result": "Sleep publishes the model at most once, persists one same-state calibration snapshot for each new parked evidence digest, gives final index validation to one owner, settles pending Dream handoff observations through the same bounded atomic lifecycle batch, replays lifecycle duplicate membership in linear event-count work, and acknowledges handoffs only after model publication commits",
+        "expected_result": "Sleep stages every same-cycle candidate and observation transition from one current lifecycle snapshot, commits each phase through one atomic batch with exactly two full replays, publishes the model at most once, persists one same-state calibration snapshot for each new parked evidence digest, gives final index validation to one explicitly authorized owner, and acknowledges handoffs only after model publication commits",
         "expected_terminal": "no_delta_reused_or_current_index_rebuilt_once",
         "external_differences": [],
-        "failure_boundary": "a duplicate model publication, missing calibration watermark, calibration-only eligibility invalidation, per-handoff full lifecycle replay, quadratic duplicate-key work inside one replay, or handoff acknowledgement before model commit blocks convergence",
+        "failure_boundary": "a duplicate model publication, stale planning snapshot, per-candidate or per-handoff full lifecycle replay, quadratic duplicate-key work, unauthorized index publisher, marker-token drift, missing calibration watermark, handoff acknowledgement before model commit, or native timeout before index/watermark closure blocks convergence visibly while retrieval stays fail-closed",
         "in_scope": true,
         "label": "Converge no-delta Sleep through one model publication and one evidence watermark",
         "lookup_binding": {
-          "error_signatures": [],
+          "error_signatures": [
+            "native timeout after 900.0s",
+            "active index is durably invalidated pending rebuild"
+          ],
           "metadata": {},
           "path_patterns": [
             "local_kb/lifecycle.py",
@@ -305,7 +318,10 @@
             "duplicate model publication",
             "Dream handoff batch",
             "lifecycle replay linear index",
-            "Dream handoff acknowledgement"
+            "Dream handoff acknowledgement",
+            "candidate lifecycle batch",
+            "active index publisher",
+            "timeout recovery"
           ],
           "tool_ids": [],
           "workflow_families": [
@@ -313,8 +329,11 @@
             "candidate_calibration"
           ]
         },
-        "metadata": {},
-        "miss_origin_state": "no_miss",
+        "metadata": {
+          "model_miss_closure": ".flowguard/kb_sleep_timeout_model_miss.py",
+          "generalized_case_id": "case:sleep:same-cycle-lifecycle-batch-family"
+        },
+        "miss_origin_state": "same_class_seed",
         "model_sync_state": "owner_model_current",
         "owner": "",
         "path_authority": {
@@ -364,7 +383,9 @@
           "entry calibration watermark",
           "active index when retrieval eligibility is stale"
         ],
-        "supporting_model_ids": [],
+        "supporting_model_ids": [
+          "kb_sleep_timeout_model_miss"
+        ],
         "surface_delegation_only": false,
         "trigger": "the current model is unchanged or parked evidence changes without satisfying reopening",
         "validation_boundary": "FlowGuard known-bad proofs, focused Sleep tests, real no-delta receipt, and aggregate readiness",

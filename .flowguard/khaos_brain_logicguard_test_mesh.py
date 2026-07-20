@@ -23,7 +23,7 @@ from khaos_brain_logicguard_model_test_alignment import BINDINGS
 
 
 PARENT_SUITE_ID = "suite:khaos-logicguard-native:parent"
-INVENTORY_REVISION = "khaos-logicguard-native-inventory-v2-runtime-scale"
+INVENTORY_REVISION = "khaos-logicguard-native-inventory-v3-sleep-timeout-recovery"
 RECEIPT_ROOT = ".local/verification/khaos-logicguard-native"
 FINAL_COMMAND = "python scripts/check_khaos_logicguard_native_readiness.py --json"
 
@@ -52,9 +52,10 @@ SUITE_SPECS = (
     ),
     (
         "suite:sleep-dream",
-        "python -m pytest -q tests/test_khaos_sleep_model_maintenance.py tests/test_kb_dream.py",
+        "python -m pytest -q tests/test_khaos_sleep_model_maintenance.py tests/test_kb_sleep_convergence.py tests/test_kb_lifecycle.py tests/test_kb_dream.py",
         (
             "req.maintenance.sleep-owner",
+            "req.maintenance.lifecycle-batch",
             "req.maintenance.mesh-consolidation",
             "req.maintenance.gap-review",
             "req.maintenance.dream-read-only",
@@ -66,9 +67,10 @@ SUITE_SPECS = (
     ),
     (
         "suite:retrieval-ui-performance",
-        "python -m pytest -q tests/test_khaos_model_native_retrieval.py tests/test_kb_desktop_ui.py tests/test_khaos_model_runtime_readiness.py",
+        "python -m pytest -q tests/test_khaos_model_native_retrieval.py tests/test_kb_retrieval_calibration.py tests/test_kb_desktop_ui.py tests/test_khaos_model_runtime_readiness.py",
         (
             "req.retrieval.current-index",
+            "req.retrieval.publisher-authority",
             "req.retrieval.neighborhood",
             "req.retrieval.ranking",
             "req.retrieval.desktop",
@@ -158,6 +160,7 @@ FRESHNESS_SELECTORS = (
     "templates/**/*.md",
     "templates/**/*.json",
     "openspec/changes/make-khaos-brain-logicguard-native/**",
+    "openspec/changes/repair-sleep-active-index-recovery/**",
     "PROJECT_SPEC.md",
     "README.md",
     "AGENTS.md",

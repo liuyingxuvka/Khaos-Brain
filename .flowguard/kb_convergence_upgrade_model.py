@@ -650,6 +650,300 @@ def consumer_independence_workflow() -> Workflow:
     )
 
 
+@dataclass(frozen=True)
+class LifecycleInput:
+    """One bounded Sleep lifecycle or active-index publication action."""
+
+    kind: str
+    planned_event_count: int = 0
+    created_event_count: int = 0
+    reused_event_count: int = 0
+    snapshot_current: bool = True
+    publisher_id: str = "local_kb.lifecycle.run_incremental_sleep"
+    marker_token_current: bool = True
+    validation_complete: bool = True
+    cleanup_confirmed: bool = True
+
+
+@dataclass(frozen=True)
+class LifecycleOutput:
+    label: str
+
+
+@dataclass(frozen=True)
+class LifecycleState:
+    """Authoritative lifecycle/index state owned by LifecycleConvergenceBlock."""
+
+    active_index_state: str = "valid_current"
+    invalidation_token: str = ""
+    staged_event_count: int = 0
+    committed_event_count: int = 0
+    reused_event_count: int = 0
+    lifecycle_batch_count: int = 0
+    lifecycle_replay_pass_count: int = 0
+    authority_stamp_published: bool = True
+    watermark_committed: bool = True
+    watermark_version: int = 1
+    failure_visible: bool = False
+    wrapper_failure_receipt_present: bool = False
+    target_terminal_receipt_present: bool = True
+    timeout_cleanup_confirmed: bool = True
+    unauthorized_publication_count: int = 0
+
+
+ACTIVE_INDEX_PUBLISHERS = (
+    "local_kb.lifecycle.run_incremental_sleep",
+    "local_kb.maintenance_migration",
+)
+
+
+class LifecycleConvergenceBlock:
+    """Input x State -> Set(Output x State) for bounded lifecycle convergence."""
+
+    name = "LifecycleConvergenceBlock"
+    reads = tuple(LifecycleState.__dataclass_fields__)
+    writes = reads
+    accepted_input_type = LifecycleInput
+    input_description = "one staged batch, timeout, or authorized index publication"
+    output_description = "one bounded commit, visible failure, or current index"
+    idempotency = "stable lifecycle event ids plus the exact invalidation token"
+
+    def apply(
+        self, input_obj: LifecycleInput, state: LifecycleState
+    ) -> Iterable[FunctionResult]:
+        if input_obj.kind == "stage_lifecycle_batch":
+            return (
+                FunctionResult(
+                    LifecycleOutput("lifecycle_batch_staged"),
+                    replace(
+                        state,
+                        staged_event_count=input_obj.planned_event_count,
+                    ),
+                    label="lifecycle_batch_staged",
+                ),
+            )
+
+        if input_obj.kind == "commit_lifecycle_batch":
+            if not input_obj.snapshot_current:
+                return (
+                    FunctionResult(
+                        LifecycleOutput("stale_lifecycle_snapshot_blocked"),
+                        replace(state, failure_visible=True),
+                        label="stale_lifecycle_snapshot_blocked",
+                    ),
+                )
+            return (
+                FunctionResult(
+                    LifecycleOutput("lifecycle_batch_committed_once"),
+                    replace(
+                        state,
+                        active_index_state="invalidated_pending_rebuild",
+                        invalidation_token="sleep-cycle-token",
+                        committed_event_count=(
+                            state.committed_event_count
+                            + input_obj.created_event_count
+                        ),
+                        reused_event_count=(
+                            state.reused_event_count
+                            + input_obj.reused_event_count
+                        ),
+                        lifecycle_batch_count=state.lifecycle_batch_count + 1,
+                        lifecycle_replay_pass_count=(
+                            state.lifecycle_replay_pass_count + 2
+                        ),
+                        authority_stamp_published=False,
+                        watermark_committed=False,
+                        target_terminal_receipt_present=False,
+                    ),
+                    label="lifecycle_batch_committed_once",
+                ),
+            )
+
+        if input_obj.kind == "native_timeout_after_lifecycle_commit":
+            return (
+                FunctionResult(
+                    LifecycleOutput("timeout_visible_index_remains_invalid"),
+                    replace(
+                        state,
+                        failure_visible=True,
+                        wrapper_failure_receipt_present=True,
+                        target_terminal_receipt_present=False,
+                        timeout_cleanup_confirmed=input_obj.cleanup_confirmed,
+                    ),
+                    label="timeout_visible_index_remains_invalid",
+                ),
+            )
+
+        if input_obj.kind in {"publish_active_index", "next_sleep_recovery"}:
+            authorized = input_obj.publisher_id in ACTIVE_INDEX_PUBLISHERS
+            can_publish = bool(
+                authorized
+                and state.active_index_state == "invalidated_pending_rebuild"
+                and state.invalidation_token
+                and input_obj.marker_token_current
+                and input_obj.validation_complete
+            )
+            if not can_publish:
+                return (
+                    FunctionResult(
+                        LifecycleOutput("active_index_publication_blocked"),
+                        replace(
+                            state,
+                            failure_visible=True,
+                            unauthorized_publication_count=(
+                                state.unauthorized_publication_count
+                                + (0 if authorized else 1)
+                            ),
+                        ),
+                        label="active_index_publication_blocked",
+                    ),
+                )
+            return (
+                FunctionResult(
+                    LifecycleOutput("active_index_rebuilt_and_watermark_committed"),
+                    replace(
+                        state,
+                        active_index_state="valid_current",
+                        invalidation_token="",
+                        authority_stamp_published=True,
+                        watermark_committed=True,
+                        watermark_version=state.watermark_version + 1,
+                        failure_visible=False,
+                        wrapper_failure_receipt_present=False,
+                        target_terminal_receipt_present=True,
+                    ),
+                    label="active_index_rebuilt_and_watermark_committed",
+                ),
+            )
+
+        return ()
+
+
+def lifecycle_convergence_workflow() -> Workflow:
+    return Workflow(
+        (LifecycleConvergenceBlock(),),
+        name="khaos_brain_lifecycle_convergence",
+    )
+
+
+def _active_index_is_fail_closed(
+    state: LifecycleState, trace: object
+) -> InvariantResult:
+    del trace
+    if state.active_index_state == "valid_current" and state.invalidation_token:
+        return InvariantResult.fail(
+            "active index is current while a durable invalidation token remains"
+        )
+    if state.active_index_state == "invalidated_pending_rebuild" and (
+        state.authority_stamp_published or state.watermark_committed
+    ):
+        return InvariantResult.fail(
+            "invalidated index published authority or advanced the Sleep watermark"
+        )
+    return InvariantResult.pass_()
+
+
+def _lifecycle_batches_have_bounded_replay(
+    state: LifecycleState, trace: object
+) -> InvariantResult:
+    del trace
+    if state.lifecycle_replay_pass_count != state.lifecycle_batch_count * 2:
+        return InvariantResult.fail(
+            "lifecycle replay count is not exactly two per atomic batch"
+        )
+    return InvariantResult.pass_()
+
+
+def _active_index_publication_has_one_authorized_owner(
+    state: LifecycleState, trace: object
+) -> InvariantResult:
+    del trace
+    if state.unauthorized_publication_count:
+        return InvariantResult.fail(
+            "an unauthorized caller attempted active-index publication"
+        )
+    return InvariantResult.pass_()
+
+
+def _lifecycle_event_idempotency_is_monotonic(
+    state: LifecycleState, trace: object
+) -> InvariantResult:
+    del trace
+    if state.committed_event_count < 0 or state.reused_event_count < 0:
+        return InvariantResult.fail(
+            "lifecycle idempotency accounting became negative"
+        )
+    return InvariantResult.pass_()
+
+
+def _timeout_never_becomes_success(
+    state: LifecycleState, trace: object
+) -> InvariantResult:
+    del trace
+    if state.wrapper_failure_receipt_present and not state.failure_visible:
+        return InvariantResult.fail(
+            "a timed-out wrapper episode was represented as current success"
+        )
+    if state.wrapper_failure_receipt_present and state.target_terminal_receipt_present:
+        return InvariantResult.fail(
+            "a wrapper failure receipt was substituted for the target Sleep terminal"
+        )
+    return InvariantResult.pass_()
+
+
+LIFECYCLE_INVARIANTS = (
+    Invariant(
+        "active_index_is_fail_closed",
+        "Invalidated index state remains unavailable until exact publication closes.",
+        _active_index_is_fail_closed,
+    ),
+    Invariant(
+        "lifecycle_batches_have_bounded_replay",
+        "Each atomic lifecycle batch performs exactly one pre/post replay pair.",
+        _lifecycle_batches_have_bounded_replay,
+    ),
+    Invariant(
+        "active_index_publication_has_one_authorized_owner",
+        "Only canonical Sleep and versioned migration publish the active index.",
+        _active_index_publication_has_one_authorized_owner,
+    ),
+    Invariant(
+        "lifecycle_event_idempotency_is_monotonic",
+        "Created and reused stable lifecycle event identities are monotonic.",
+        _lifecycle_event_idempotency_is_monotonic,
+    ),
+    Invariant(
+        "timeout_never_becomes_success",
+        "A native timeout stays a visible non-success until a later Sleep closes.",
+        _timeout_never_becomes_success,
+    ),
+)
+
+
+LIFECYCLE_INPUTS = (
+    LifecycleInput("stage_lifecycle_batch", planned_event_count=500),
+    LifecycleInput(
+        "commit_lifecycle_batch",
+        planned_event_count=500,
+        created_event_count=500,
+    ),
+    LifecycleInput(
+        "commit_lifecycle_batch",
+        planned_event_count=500,
+        created_event_count=0,
+        reused_event_count=500,
+    ),
+    LifecycleInput(
+        "commit_lifecycle_batch",
+        planned_event_count=1,
+        snapshot_current=False,
+    ),
+    LifecycleInput("native_timeout_after_lifecycle_commit"),
+    LifecycleInput("next_sleep_recovery"),
+    LifecycleInput("publish_active_index", marker_token_current=False),
+)
+
+
 def _no_author_control_in_consumer(
     state: ConsumerState, trace: object
 ) -> InvariantResult:
@@ -1090,7 +1384,6 @@ CONSUMER_INPUTS = (
 
 
 # Stable owner names retained for the surrounding LogicGuard mesh.
-LifecycleConvergenceBlock = ConsumerIndependenceBlock
 UpgradeMigrationBlock = ConsumerIndependenceBlock
 AutomationRuntimeAssuranceBlock = ConsumerIndependenceBlock
 
@@ -1106,9 +1399,16 @@ __all__ = [
     "ConsumerOutput",
     "ConsumerState",
     "ConsumerIndependenceBlock",
+    "LifecycleInput",
+    "LifecycleOutput",
+    "LifecycleState",
+    "LifecycleConvergenceBlock",
+    "LIFECYCLE_INVARIANTS",
+    "LIFECYCLE_INPUTS",
     "CONSUMER_INVARIANTS",
     "CONSUMER_INITIAL_STATES",
     "CONSUMER_INPUTS",
     "automation_manifest_check_ids",
     "consumer_independence_workflow",
+    "lifecycle_convergence_workflow",
 ]

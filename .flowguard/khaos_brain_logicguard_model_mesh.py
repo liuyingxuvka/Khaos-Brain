@@ -32,16 +32,16 @@ def children() -> tuple[ChildModelEvidence, ...]:
     return (
         ChildModelEvidence(
             model_id=LIFECYCLE,
-            evidence_id="focused:lifecycle-known-bad-13-of-13:20260714",
-            risk_boundary="observation/candidate lifecycle, eligibility, Sleep watermark, and active-index publication",
-            inputs_accepted=("observation", "candidate transition", "Sleep commit result", "Dream handoff acknowledgement"),
+            evidence_id="focused:lifecycle-batch-timeout-recovery:20260720",
+            risk_boundary="observation/candidate lifecycle batching, eligibility, timeout recovery, Sleep watermark, and authorized active-index publication",
+            inputs_accepted=("observation", "staged candidate transition batch", "Sleep commit result", "native timeout", "next Sleep recovery", "Dream handoff acknowledgement"),
             outputs_emitted=(
                 "lifecycle_delta_selected",
                 "retrieval_eligibility_snapshot",
                 "sleep_watermark_committed",
                 "active_index_generation_published",
             ),
-            state_owned=("entry_lifecycle_state", "retrieval_eligibility", "sleep_watermark", "active_index_pointer"),
+            state_owned=("entry_lifecycle_state", "retrieval_eligibility", "sleep_watermark", "active_index_pointer", "active_index_invalidation_token"),
             side_effects_owned=("lifecycle_event_commit", "active_index_publication", "sleep_watermark_advance"),
             functional_areas=("lifecycle_and_index",),
             contracts_in=("contract:authority.complete_generation",),
@@ -49,9 +49,9 @@ def children() -> tuple[ChildModelEvidence, ...]:
             depends_on=(GOVERNANCE, AUTHORITY),
             evidence_tier="hazard_green",
             functions_owned=("LifecycleConvergenceBlock",),
-            invariants_owned=("eligible_status_only", "watermark_after_complete_commit"),
-            risk_classes=("lifecycle_debt", "stale_index", "watermark_partial_commit"),
-            validation_evidence=("model_check:pass", "known_bad:13/13 rejected"),
+            invariants_owned=("eligible_status_only", "watermark_after_complete_commit", "bounded_replay_per_batch", "authorized_index_publisher", "timeout_never_becomes_success"),
+            risk_classes=("lifecycle_debt", "stale_index", "watermark_partial_commit", "native_timeout_after_invalidation"),
+            validation_evidence=("model_check:lifecycle-convergence-v2:pass", "model_miss:sleep-timeout-recovery:closed", "known_bad:unauthorized-publisher-rejected"),
         ),
         ChildModelEvidence(
             model_id=GOVERNANCE,

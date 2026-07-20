@@ -8,7 +8,11 @@ from unittest.mock import patch
 
 import local_kb.active_index as active_index_module
 from local_kb.active_index import (
+    active_index_authority_path,
+    active_index_invalidation_path,
+    active_index_path,
     load_active_entries,
+    rebuild_active_index,
     validate_active_index,
     validate_active_index_fast,
 )
@@ -85,6 +89,22 @@ def card(
 
 
 class KbRetrievalCalibrationTests(unittest.TestCase):
+    def test_rebuild_requires_authorized_publisher(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            with self.assertRaisesRegex(
+                PermissionError,
+                "Unauthorized active-index publisher",
+            ):
+                rebuild_active_index(
+                    repo_root,
+                    reason="unauthorized-test",
+                    publisher_id="local_kb.search.search_with_receipt",
+                )
+            self.assertFalse(active_index_path(repo_root).exists())
+            self.assertFalse(active_index_authority_path(repo_root).exists())
+            self.assertFalse(active_index_invalidation_path(repo_root).exists())
+
     def test_verified_contradiction_immediately_suspends_trusted_retrieval(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)

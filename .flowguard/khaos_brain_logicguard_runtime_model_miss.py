@@ -12,6 +12,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from kb_sleep_timeout_model_miss import build_report as build_sleep_timeout_report
+
 from flowguard import (
     FALSE_NEGATIVE_CAUSE_SCOPE_OVERCLAIM,
     MODEL_MATURATION_SIGNAL_CODE_BOUNDARY_MISMATCH,
@@ -187,6 +189,7 @@ def build_report() -> dict[str, object]:
         )
     )
 
+    sleep_timeout = build_sleep_timeout_report()
     ok = bool(
         backfeed.disposition == MODEL_MISS_BACKFEED_REUSE_EXISTING
         and backfeed.primary_context is not None
@@ -194,6 +197,7 @@ def build_report() -> dict[str, object]:
         and false_negative.ok
         and maturation.ok
         and closure.ok
+        and sleep_timeout["ok"]
     )
     return {
         "artifact_type": "khaos_brain_logicguard_runtime_model_miss_review",
@@ -203,6 +207,7 @@ def build_report() -> dict[str, object]:
         "false_negative": false_negative.to_dict(),
         "maturation": maturation.to_dict(),
         "same_class_closure": closure.to_dict(),
+        "sleep_timeout_recovery": sleep_timeout,
         "claim_boundary": (
             "This closes the observed 3427-card performance false negative and its "
             "declared same-class scale case for the current code and evidence identities. "

@@ -19,6 +19,10 @@ from local_kb.feedback import (
     record_observation_result,
 )
 from local_kb.history import record_history_event
+from local_kb.candidate_lifecycle import (
+    CandidateLifecyclePlan,
+    create_or_reuse_candidate,
+)
 from local_kb.lifecycle import (
     LIFECYCLE_WRITER_LOCK_TIMEOUT_SECONDS,
     admit_observation,
@@ -348,6 +352,7 @@ class KbLifecycleTests(unittest.TestCase):
                 "target_id": "",
                 "evidence_grade": "medium",
             }
+            lifecycle_before = load_lifecycle_state(repo_root)
             commit_lifecycle_events(
                 repo_root,
                 [
@@ -357,6 +362,12 @@ class KbLifecycleTests(unittest.TestCase):
                         decision=decision,
                     )
                 ],
+                expected_event_digest=str(
+                    lifecycle_before.get("event_digest") or ""
+                ),
+                expected_last_sequence=int(
+                    lifecycle_before.get("last_sequence") or 0
+                ),
             )
 
             with patch(
@@ -433,6 +444,8 @@ class KbLifecycleTests(unittest.TestCase):
                 for entry in entries
             },
             "validation": {"ok": True, "issues": []},
+            "event_digest": content_fingerprint([]),
+            "last_sequence": 0,
         }
         evidence_index = {
             "sentinel": "one-shared-index",
@@ -767,7 +780,18 @@ class KbLifecycleTests(unittest.TestCase):
                 )
 
             with patch("local_kb.lifecycle.replay_lifecycle", wraps=replay_lifecycle) as replay:
-                first = commit_lifecycle_events(repo_root, events)
+                lifecycle_before = load_lifecycle_state(repo_root)
+                replay.reset_mock()
+                first = commit_lifecycle_events(
+                    repo_root,
+                    events,
+                    expected_event_digest=str(
+                        lifecycle_before.get("event_digest") or ""
+                    ),
+                    expected_last_sequence=int(
+                        lifecycle_before.get("last_sequence") or 0
+                    ),
+                )
             self.assertEqual(replay.call_count, 2)
             self.assertEqual(first["created_count"], 500)
             self.assertEqual(first["replay_pass_count"], 2)
@@ -775,11 +799,205 @@ class KbLifecycleTests(unittest.TestCase):
             self.assertTrue(validate_lifecycle(repo_root)["ok"])
 
             with patch("local_kb.lifecycle.replay_lifecycle", wraps=replay_lifecycle) as replay:
-                repeated = commit_lifecycle_events(repo_root, events)
+                lifecycle_before = load_lifecycle_state(repo_root)
+                replay.reset_mock()
+                repeated = commit_lifecycle_events(
+                    repo_root,
+                    events,
+                    expected_event_digest=str(
+                        lifecycle_before.get("event_digest") or ""
+                    ),
+                    expected_last_sequence=int(
+                        lifecycle_before.get("last_sequence") or 0
+                    ),
+                )
             self.assertEqual(replay.call_count, 2)
             self.assertEqual(repeated["created_count"], 0)
             self.assertEqual(repeated["reused_count"], 500)
             self.assertEqual(repeated["state"]["event_count"], 500)
+
+    def test_candidate_events_commit_in_one_bounded_batch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            lifecycle_before = load_lifecycle_state(repo_root)
+            plan = CandidateLifecyclePlan.from_lifecycle_state(
+                lifecycle_before,
+                known_history_event_ids=set(),
+            )
+            staged_upserts: dict[str, dict[str, object]] = {}
+            first_observation = build_observation(
+                task_summary="One bounded candidate",
+                route_hint="system/bounded-candidate",
+                scenario="The same candidate receives independent evidence.",
+                action_taken="Stage its lifecycle transitions.",
+                observed_result="The candidate remains bounded.",
+                suggested_action="new-candidate",
+                outcome="success",
+            )
+            second_observation = {
+                **first_observation,
+                "event_id": "observation:bounded-candidate:second",
+            }
+            first = create_or_reuse_candidate(
+                repo_root,
+                first_observation,
+                run_id="candidate-batch",
+                evidence_grade="weak",
+                lifecycle_plan=plan,
+                staged_upserts=staged_upserts,
+                deferred_history_events=[],
+                catalog_entries=[],
+            )
+            second = create_or_reuse_candidate(
+                repo_root,
+                second_observation,
+                run_id="candidate-batch",
+                evidence_grade="medium",
+                lifecycle_plan=plan,
+                staged_upserts=staged_upserts,
+                deferred_history_events=[],
+                catalog_entries=[],
+            )
+            self.assertEqual(first["entry_id"], second["entry_id"])
+            self.assertEqual(
+                [
+                    (event["from_state"], event["to_state"])
+                    for event in plan.events
+                ],
+                [
+                    ("candidate", "candidate"),
+                    ("candidate", "parked"),
+                    ("parked", "candidate"),
+                ],
+            )
+            with patch(
+                "local_kb.lifecycle.replay_lifecycle",
+                wraps=replay_lifecycle,
+            ) as replay:
+                committed = commit_lifecycle_events(
+                    repo_root,
+                    plan.events,
+                    expected_event_digest=str(
+                        lifecycle_before.get("event_digest") or ""
+                    ),
+                    expected_last_sequence=int(
+                        lifecycle_before.get("last_sequence") or 0
+                    ),
+                )
+            self.assertEqual(replay.call_count, 2)
+            self.assertEqual(committed["created_count"], 3)
+            self.assertEqual(committed["residual_count"], 0)
+            self.assertEqual(
+                committed["state"]["entries"][first["entry_id"]]["status"],
+                "candidate",
+            )
+
+    def test_candidate_transition_family_retry_is_bounded(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            lifecycle_before = load_lifecycle_state(repo_root)
+            plan = CandidateLifecyclePlan.from_lifecycle_state(
+                lifecycle_before,
+                known_history_event_ids=set(),
+            )
+            staged_upserts: dict[str, dict[str, object]] = {}
+            for index in range(250):
+                observation = build_observation(
+                    task_summary=f"Bounded candidate {index}",
+                    route_hint=f"system/bounded/{index}",
+                    scenario=f"Candidate scale scenario {index}",
+                    action_taken="Stage one create/park pair.",
+                    observed_result=f"Candidate {index} remains parked.",
+                    suggested_action="new-candidate",
+                    outcome="success",
+                )
+                create_or_reuse_candidate(
+                    repo_root,
+                    observation,
+                    run_id="candidate-scale-batch",
+                    evidence_grade="weak",
+                    lifecycle_plan=plan,
+                    staged_upserts=staged_upserts,
+                    deferred_history_events=[],
+                    catalog_entries=[],
+                )
+            self.assertEqual(len(plan.events), 500)
+            with patch(
+                "local_kb.lifecycle.replay_lifecycle",
+                wraps=replay_lifecycle,
+            ) as replay:
+                first = commit_lifecycle_events(
+                    repo_root,
+                    plan.events,
+                    expected_event_digest=str(
+                        lifecycle_before.get("event_digest") or ""
+                    ),
+                    expected_last_sequence=int(
+                        lifecycle_before.get("last_sequence") or 0
+                    ),
+                )
+            self.assertEqual(replay.call_count, 2)
+            self.assertEqual(first["created_count"], 500)
+            retry_base = first["state"]
+            with patch(
+                "local_kb.lifecycle.replay_lifecycle",
+                wraps=replay_lifecycle,
+            ) as replay:
+                retry = commit_lifecycle_events(
+                    repo_root,
+                    plan.events,
+                    expected_event_digest=str(
+                        retry_base.get("event_digest") or ""
+                    ),
+                    expected_last_sequence=int(
+                        retry_base.get("last_sequence") or 0
+                    ),
+                )
+            self.assertEqual(replay.call_count, 2)
+            self.assertEqual(retry["created_count"], 0)
+            self.assertEqual(retry["reused_count"], 500)
+            self.assertEqual(retry["residual_count"], 0)
+            self.assertEqual(retry["state"]["event_count"], 500)
+
+    def test_stale_lifecycle_batch_fails_before_invalidation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            observation = build_observation(
+                task_summary="Stale batch planning fixture",
+                outcome="success",
+            )
+            stale_base = load_lifecycle_state(repo_root)
+            admit_observation(repo_root, observation)
+            marker = (
+                repo_root / "kb" / "indexes" / "active-invalidated.json"
+            )
+            marker.unlink(missing_ok=True)
+            event = build_observation_disposition_event(
+                observation,
+                run_id="stale-batch",
+                decision={
+                    "disposition": "history_only",
+                    "reason": "The stale batch must not commit.",
+                    "target_id": "",
+                    "evidence_grade": "medium",
+                },
+            )
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "Lifecycle authority changed after batch planning",
+            ):
+                commit_lifecycle_events(
+                    repo_root,
+                    [event],
+                    expected_event_digest=str(
+                        stale_base.get("event_digest") or ""
+                    ),
+                    expected_last_sequence=int(
+                        stale_base.get("last_sequence") or 0
+                    ),
+                )
+            self.assertFalse(marker.exists())
+            self.assertEqual(load_lifecycle_state(repo_root)["event_count"], 1)
 
     def test_replay_lifecycle_uses_a_linear_idempotency_index(self) -> None:
         def replay_duration(event_count: int) -> float:

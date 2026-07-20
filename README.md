@@ -10,8 +10,8 @@
 </p>
 <!-- README HERO END -->
 
-- Repository head (`main`) / 仓库主线（`main`）: `v0.6.7`
-- Latest released version / 最新已发布版本: `v0.6.7`
+- Repository head (`main`) / 仓库主线（`main`）: `v0.6.8`
+- Latest released version / 最新已发布版本: `v0.6.8`
 - Project name / 项目名称: `Khaos Brain`
 - English lead content comes first; the full Chinese section follows below. / 英文主内容在前，完整中文部分在后方。
 
@@ -135,9 +135,9 @@ For many teams, a private repository is already the simplest reliable backend fo
 
 ## Install And Check
 
-The Python dependency set pins one exact public [ResearchGuard v0.1.1](https://github.com/liuyingxuvka/ResearchGuard/releases/tag/v0.1.1) source commit. Khaos Brain imports only its `researchguard.logic` member, which owns the required ModelStore and ModelMesh APIs and the current `researchguard.logic.model-store.v1` / `researchguard.logic.model-mesh.v1` schemas. The retired standalone LogicGuard package is neither installed nor consulted.
+The Python dependency set pins one exact public [ResearchGuard v0.1.2](https://github.com/liuyingxuvka/ResearchGuard/releases/tag/v0.1.2) source commit. Khaos Brain imports only its `researchguard.logic` member, which owns the required ModelStore and ModelMesh APIs and the current `researchguard.logic.model-store.v1` / `researchguard.logic.model-mesh.v1` schemas. The retired standalone LogicGuard package is neither installed nor consulted.
 
-Repository contributors and GitHub Actions use `requirements-dev.txt`, which additionally pins the public [FlowGuard v0.58.4](https://github.com/liuyingxuvka/FlowGuard/releases/tag/v0.58.4) source commit used by model-assurance tests. ResearchGuard and FlowGuard both use one exact public HTTPS source identity; there is no SSH key, private dependency, mirror, alias, compatibility import, fallback, or alternate dependency path. Khaos Brain keeps its FlowGuard project record and executable models but does not vendor a FlowGuard shadow Skill suite, ownership manifest, suite map, or compatibility verifier; Codex uses the current global FlowGuard Skill surface. CI also uses the public SkillGuard source for author-side contract compilation and depth calibration and uses official OpenSpec 1.6.0 for specification verification. Neither tool is copied into Khaos Brain's installed consumer Skills or required by their normal execution. Each native runner uses the current Python identity recorded by its own command contract; a real interpreter change invalidates that runner's evidence.
+Repository contributors and GitHub Actions use `requirements-dev.txt`, which additionally pins the public [FlowGuard v0.58.5](https://github.com/liuyingxuvka/FlowGuard/releases/tag/v0.58.5) source commit used by model-assurance tests. ResearchGuard and FlowGuard both use one exact public HTTPS source identity; there is no SSH key, private dependency, mirror, alias, compatibility import, fallback, or alternate dependency path. Khaos Brain keeps its FlowGuard project record and executable models but does not vendor a FlowGuard shadow Skill suite, ownership manifest, suite map, or compatibility verifier; Codex uses the current global FlowGuard Skill surface. CI also uses the public SkillGuard source for author-side contract compilation and depth calibration and uses official OpenSpec 1.6.0 for specification verification. Neither tool is copied into Khaos Brain's installed consumer Skills or required by their normal execution. Each native runner uses the current Python identity recorded by its own command contract; a real interpreter change invalidates that runner's evidence.
 
 - **Visible:** cards can be opened directly; source, author, confidence, status, and skill dependencies are visible.
 - **Maintainable:** incremental Sleep, convergent Dream, system update, and organization maintenance treat memory as a living system.
@@ -147,7 +147,7 @@ Repository contributors and GitHub Actions use `requirements-dev.txt`, which add
 - **Open and customizable:** structure, cards, scripts, skills, and UI are files and source code.
 - **Honest automation:** shared knowledge still moves through candidates, review, maintenance, and rollback.
 
-- download `KhaosBrain.exe` from [GitHub Releases](https://github.com/liuyingxuvka/Khaos-Brain/releases/latest);
+- use the source archive from [GitHub Releases](https://github.com/liuyingxuvka/Khaos-Brain/releases/latest); this release does not attach a prebuilt Windows executable;
 - run the installer or repository setup for the local skill/runtime path used by your agent;
 - run the health check before relying on retrieval.
 
@@ -212,7 +212,7 @@ The exact migration phases, rollback behavior, pause-state preservation, and suc
 
 | 仓库主线 | 最新发布 | 项目 | 许可证 |
 | --- | --- | --- | --- |
-| `v0.6.7` | `v0.6.7` | `Khaos Brain` | MIT |
+| `v0.6.8` | `v0.6.8` | `Khaos Brain` | MIT |
 
 ## 它是什么
 
@@ -356,9 +356,9 @@ Candidate Skills 不会自动安装。只有带 pinned version 和 content-hash 
 
 ## 安装和检查
 
-Python 依赖只固定到一个公开的 [ResearchGuard v0.1.1](https://github.com/liuyingxuvka/ResearchGuard/releases/tag/v0.1.1) 精确源码提交。Khaos Brain 只导入其中的 `researchguard.logic` 成员；当前 ModelStore、ModelMesh API 以及 `researchguard.logic.model-store.v1` / `researchguard.logic.model-mesh.v1` schema 都由它提供。已经退役的独立 LogicGuard 包既不安装，也不参与运行。
+Python 依赖只固定到一个公开的 [ResearchGuard v0.1.2](https://github.com/liuyingxuvka/ResearchGuard/releases/tag/v0.1.2) 精确源码提交。Khaos Brain 只导入其中的 `researchguard.logic` 成员；当前 ModelStore、ModelMesh API 以及 `researchguard.logic.model-store.v1` / `researchguard.logic.model-mesh.v1` schema 都由它提供。已经退役的独立 LogicGuard 包既不安装，也不参与运行。
 
-仓库开发与 GitHub Actions 使用 `requirements-dev.txt`，其中额外固定了公开的 [FlowGuard v0.58.4](https://github.com/liuyingxuvka/FlowGuard/releases/tag/v0.58.4) 精确源码提交，用于模型保障测试。ResearchGuard 和 FlowGuard 都只走一个公开 HTTPS 身份；没有 SSH 密钥、私有依赖、镜像、别名、兼容导入、fallback 或第二依赖路径。Khaos Brain 只保留 FlowGuard 项目记录和本项目的可执行模型，不再内置 FlowGuard 影子 Skill 套件、ownership manifest、suite map 或兼容验证器；Codex 使用当前全局 FlowGuard Skill 入口。CI 也会使用公开的 SkillGuard 源码做作者侧合同编译与深度校准，并使用官方 OpenSpec 1.6.0 做规格验证。它们都不会被复制进 Khaos Brain 的消费者安装技能，也不是这些技能日常运行的依赖。每个原生运行器只服从自己的命令合同；解释器身份真正变化时，该运行器的证据会失效。
+仓库开发与 GitHub Actions 使用 `requirements-dev.txt`，其中额外固定了公开的 [FlowGuard v0.58.5](https://github.com/liuyingxuvka/FlowGuard/releases/tag/v0.58.5) 精确源码提交，用于模型保障测试。ResearchGuard 和 FlowGuard 都只走一个公开 HTTPS 身份；没有 SSH 密钥、私有依赖、镜像、别名、兼容导入、fallback 或第二依赖路径。Khaos Brain 只保留 FlowGuard 项目记录和本项目的可执行模型，不再内置 FlowGuard 影子 Skill 套件、ownership manifest、suite map 或兼容验证器；Codex 使用当前全局 FlowGuard Skill 入口。CI 也会使用公开的 SkillGuard 源码做作者侧合同编译与深度校准，并使用官方 OpenSpec 1.6.0 做规格验证。它们都不会被复制进 Khaos Brain 的消费者安装技能，也不是这些技能日常运行的依赖。每个原生运行器只服从自己的命令合同；解释器身份真正变化时，该运行器的证据会失效。
 
 发布就绪检查是一张封闭的 17-owner 图，不是一串失败后改走别路的命令。源码、数据、工具链、环境和安装状态组件都有明确 owner；未变化的 owner 直接复用自己的精确不可变成功回执，变化只让实际消费该组件的 owner 失效。失败、超时、被篡改、缺失、重复归属、未映射或歧义证据都会明确阻断，绝不会退化成 run-all。只有冻结后的发布快照运行一次完整前台验收，全量回归继续占用独立且经过 JUnit 清单校验的通道。
 
@@ -408,9 +408,9 @@ python scripts/install_codex_kb.py --check --json
 
 ### 桌面卡片查看器
 
-Windows Release 包含预览版 `KhaosBrain.exe`：
+本版本只发布源码，不附带预编译的 `KhaosBrain.exe`：
 
-- 从 [GitHub Releases](https://github.com/liuyingxuvka/Khaos-Brain/releases/latest) 下载 `KhaosBrain.exe`；
+- 从 [GitHub Releases](https://github.com/liuyingxuvka/Khaos-Brain/releases/latest) 获取源码归档；如需 Windows 可执行文件，请按仓库文档在本机明确构建；
 - 按你的 agent 使用的本地 skill/runtime 路径运行安装或仓库 setup；
 - 依赖 retrieval 前先运行 health check。
 

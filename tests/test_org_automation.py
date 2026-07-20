@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from local_kb.active_index import active_index_invalidation_path, invalidate_active_index
 from local_kb.adoption import card_exchange_hash, recorded_exchange_hashes
 from local_kb.maintenance_lanes import read_lane_status
 from local_kb.org_automation import (
@@ -27,6 +28,54 @@ from tests.org_helpers import (
 
 
 class OrganizationAutomationTests(unittest.TestCase):
+    def test_contribution_fails_closed_before_outbox_when_index_is_invalidated(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            org = root / "org"
+            repo = root / "repo"
+            self._write_org_repo(org)
+            self._write_local_card(repo)
+            self._save_organization_settings(repo, org)
+            invalidate_active_index(repo, reason="test-org-contribution-fail-closed")
+
+            with patch(
+                "local_kb.org_automation.build_organization_outbox",
+                side_effect=AssertionError("organization outbox must not run"),
+            ) as downstream:
+                with self.assertRaisesRegex(RuntimeError, "durably invalidated pending rebuild"):
+                    run_organization_contribution(
+                        repo,
+                        dry_run=True,
+                        record_postflight=False,
+                        run_id="org-contribution-invalidated-index",
+                    )
+
+            downstream.assert_not_called()
+            self.assertTrue(active_index_invalidation_path(repo).is_file())
+
+    def test_maintenance_fails_closed_before_review_when_index_is_invalidated(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            org = root / "org"
+            repo = root / "repo"
+            self._write_org_repo(org)
+            self._save_organization_settings(repo, org, maintenance_requested=True)
+            invalidate_active_index(repo, reason="test-org-maintenance-fail-closed")
+
+            with patch(
+                "local_kb.org_automation.build_organization_maintenance_report",
+                side_effect=AssertionError("organization review must not run"),
+            ) as downstream:
+                with self.assertRaisesRegex(RuntimeError, "durably invalidated pending rebuild"):
+                    run_organization_maintenance(
+                        repo,
+                        record_postflight=False,
+                        run_id="org-maintenance-invalidated-index",
+                    )
+
+            downstream.assert_not_called()
+            self.assertTrue(active_index_invalidation_path(repo).is_file())
+
     def test_materialization_manifest_rejects_parent_traversal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "org"

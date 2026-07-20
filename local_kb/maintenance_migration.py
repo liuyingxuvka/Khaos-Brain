@@ -1504,7 +1504,14 @@ def settle_knowledge_debt(repo_root: Path, *, run_id: str) -> dict[str, Any]:
         )
         entry_counts[target_status] = entry_counts.get(target_status, 0) + 1
 
-    batch_result = commit_lifecycle_events(root, batch_events)
+    batch_result = commit_lifecycle_events(
+        root,
+        batch_events,
+        expected_event_digest=str(lifecycle_before.get("event_digest") or ""),
+        expected_last_sequence=int(
+            lifecycle_before.get("last_sequence") or 0
+        ),
+    )
 
     validation = validate_lifecycle(repo_root)
     state = load_lifecycle_state(repo_root)
@@ -3043,6 +3050,7 @@ def commit_logicguard_native_generation(
         root,
         reason=f"migration:{MIGRATION_ID}:{generation_id}",
         authority_generation=generation,
+        publisher_id="local_kb.maintenance_migration",
     )
     if fail_after_phase == "index":
         raise RuntimeError("Injected failure after index")
@@ -3429,6 +3437,7 @@ def converge_precommit_migration(
             index = rebuild_active_index(
                 root,
                 reason=f"precommit-convergence:{MIGRATION_ID}:{attempt}",
+                publisher_id="local_kb.maintenance_migration",
             )
 
         physical = reconcile_managed_surface(
@@ -3749,6 +3758,7 @@ def run_maintenance_migration(
                 rebuild_active_index(
                     root,
                     reason=f"post-commit-convergence:{MIGRATION_ID}:{convergence_attempt}",
+                    publisher_id="local_kb.maintenance_migration",
                 )
                 check = check_migration(root)
 
@@ -3980,7 +3990,11 @@ def run_maintenance_migration(
                     raise RuntimeError("Injected failure after prune-derived-data")
 
             if "rebuild-index" not in journal.get("completed_phases", []):
-                index = rebuild_active_index(root, reason=f"migration:{MIGRATION_ID}")
+                index = rebuild_active_index(
+                    root,
+                    reason=f"migration:{MIGRATION_ID}",
+                    publisher_id="local_kb.maintenance_migration",
+                )
                 journal = _checkpoint(root, journal, "rebuild-index", index)
                 if fail_after_phase == "rebuild-index":
                     raise RuntimeError("Injected failure after rebuild-index")
