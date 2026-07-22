@@ -2166,6 +2166,47 @@ un_khaos_brain_conformance.py` - conformance replay passed lane lock, organizati
 - python -m flowguard project-audit --root . --json
 - Rerun affected FlowGuard model checks and focused tests before broad confidence.
 
+## refresh-skillguard-author-control - Current author control and bounded evidence lifecycle
+
+- Project: Knowledge_20260419
+- Status: completed for author adoption, deterministic generated contracts,
+  source-only target checks, process modeling, and isolated read-only evidence
+  lifecycle; native business execution, installation, and publication were not
+  run.
+- FlowGuard route: existing-model preflight plus DevelopmentProcessFlow.
+
+### Current evidence
+
+- Five explicit single-member maintenance units retain exactly twenty-five
+  unique target-declared checks. No contract source, target obligation, route,
+  owner, subject, rubric, or depth criterion changed.
+- Current SkillGuard author audit resolves all five runtime authorities as
+  `current`; all ten compiler-owned files reproduce with exact parity.
+- Source-only author assurance passed for all five units with positive depth,
+  shallow rejection, clean consumer projection, and zero cross-unit test-node
+  overlap.
+- The ten safe target-owned fixture commands passed: five `deep-pass` positive
+  cases and five `shallow-blocked` cases. The focused test file passed 16/16.
+- `.flowguard/skillguard_author_evidence_lifecycle_flow.py` passed all eight
+  questions and its progress graph reached bounded closure across 12 states and
+  11 edges.
+- The isolated evidence root stayed at zero files before and after read-only
+  audit and planning. Audit hash:
+  `sha256:800afe5bc93c86d70e813d6c775c992771ede8a4b12c84110f47e1088f0d76d0`;
+  plan hash:
+  `sha256:4d08ef54dde9fbf25875ab860452c57960668e269aeb6865bf0a9f44734fec8a`.
+- The protected peer-owned KB model retained SHA-256
+  `AB2FF736647C1108B226ABDD770A67EA40146E07ADC7BD0E866F6111FB030F34`.
+
+### Claim boundary
+
+This is author-control and source-only evidence. Fifteen checks that require a
+concrete native business-run receipt were intentionally not executed because
+this task was forbidden to start Sleep, Dream, organization, Architect, or
+manual-update work. No KB business evidence was read for proof or written; no
+evidence was quarantined or purged; no consumer installation, commit, push,
+tag, or release occurred.
+
 
 ## flowguard-project-upgrade - FlowGuard project upgrade record update
 
@@ -2269,3 +2310,122 @@ un_khaos_brain_conformance.py` - conformance replay passed lane lock, organizati
 ### Claim boundary
 
 This entry proves the current model/test/install/runtime recovery and automation identities listed above. Git commit, tag, remote branch, and GitHub Release remain separate evidence until the release owner completes them.
+
+
+## flowguard-project-upgrade - FlowGuard project upgrade record update
+
+- Project: Knowledge_20260419
+- Trigger reason: target project requires current semantic adoption and version records
+- Status: completed
+- Skill decision: used_flowguard
+- Started: 2026-07-22T20:25:39+00:00
+- Ended: 2026-07-22T20:25:39+00:00
+- Duration seconds: 0.000
+- Commands OK: True
+
+### Model Files
+- none recorded
+
+### Commands
+- OK (0.000s): `managed adoption rule-set preflight` - generated block contains every required stable rule
+- OK (0.000s): `package-authority/global-consumer validation` - pass
+- OK (0.000s): `post-write project adoption audit` - semantic and version parity after write
+
+### Findings
+- adoption_record_written: FlowGuard project AGENTS block and manifest were written or refreshed.
+
+### Counterexamples
+- none recorded
+
+### Friction Points
+- none recorded
+
+### Skipped Steps
+- Project adoption does not replace executable model checks, tests, replay, or closure evidence.
+
+### Risk Evidence Summary
+- none recorded
+
+### Next Actions
+- python -m flowguard project-audit --root . --json
+- Rerun affected FlowGuard model checks and focused tests before broad confidence.
+
+
+## flowguard-project-upgrade - FlowGuard project upgrade record update
+
+- Project: Knowledge_20260419
+- Trigger reason: target project requires current semantic adoption and version records
+- Status: completed
+- Skill decision: used_flowguard
+- Started: 2026-07-22T21:18:30+00:00
+- Ended: 2026-07-22T21:18:30+00:00
+- Duration seconds: 0.000
+- Commands OK: True
+
+### Model Files
+- none recorded
+
+### Commands
+- OK (0.000s): `managed adoption rule-set preflight` - generated block contains every required stable rule
+- OK (0.000s): `package-authority/global-consumer validation` - pass
+- OK (0.000s): `post-write project adoption audit` - semantic and version parity after write
+
+### Findings
+- adoption_record_written: FlowGuard project AGENTS block and manifest were written or refreshed.
+
+### Counterexamples
+- none recorded
+
+### Friction Points
+- none recorded
+
+### Skipped Steps
+- Project adoption does not replace executable model checks, tests, replay, or closure evidence.
+
+### Risk Evidence Summary
+- none recorded
+
+### Next Actions
+- python -m flowguard project-audit --root . --json
+- Rerun affected FlowGuard model checks and focused tests before broad confidence.
+
+
+## flowguard-project-upgrade - FlowGuard project upgrade record update
+
+- Project: Knowledge_20260419
+- Trigger reason: target project requires current semantic adoption and version records
+- Status: completed
+- Skill decision: used_flowguard
+- Started: 2026-07-22T21:41:12+00:00
+- Ended: 2026-07-22T21:41:12+00:00
+- Duration seconds: 0.000
+- Commands OK: True
+
+### Model Files
+- none recorded
+
+### Commands
+- OK (0.000s): `managed adoption rule-set preflight` - generated block contains every required stable rule
+- OK (0.000s): `package-authority/global-consumer validation` - pass
+- OK (0.000s): `post-write project adoption audit` - semantic and version parity after write
+
+### Findings
+- artifact_upgrade_scan_scoped_out: Artifact/model/test upgrade scanning was scoped out by records-only mode.
+- adoption_record_written: FlowGuard project AGENTS block and manifest were written or refreshed.
+
+### Counterexamples
+- none recorded
+
+### Friction Points
+- none recorded
+
+### Skipped Steps
+- Project adoption does not replace executable model checks, tests, replay, or closure evidence.
+- Artifact/model/test upgrade scanning was scoped out by records-only mode.
+
+### Risk Evidence Summary
+- none recorded
+
+### Next Actions
+- python -m flowguard project-audit --root . --json
+- Rerun affected FlowGuard model checks and focused tests before broad confidence.

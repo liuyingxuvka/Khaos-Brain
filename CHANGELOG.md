@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.6.9 - 2026-07-22
+
+- Refresh five author-side SkillGuard maintenance units to the bounded evidence lifecycle without changing their 25 target-declared checks.
+- Rebuild deterministic maintenance contracts and add FlowGuard/OpenSpec lifecycle evidence.
+- Preserve KB business-maintenance execution boundaries; no Sleep, Dream, Architect, organization, or update wrapper was run for this release.
+
 ## v0.6.8 - 2026-07-20
 
 - Replaced per-candidate lifecycle publication during Sleep with deterministic bounded atomic batches. Candidate creation, parking, reopening, promotion, downgrade, and calibration now preserve exact order and stable idempotency while using at most one lifecycle replay before and after each batch.

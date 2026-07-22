@@ -1,56 +1,59 @@
 {
-  "schema_version": "skillguard.author_project.v1",
-  "project_id": "Khaos-Brain",
-  "repository_role": "skill_maintainer_source",
-  "consumer_runtime_dependency": false,
-  "ordinary_project_writes": false,
-  "official_openspec_covered": false,
-  "maintenance_units": [
+  "claim_boundary": "Author adoption marks only this explicit skill-maintainer repository. It creates no consumer or ordinary-project dependency and proves no target-domain work.",
+  "maintenance_default": "skillguard-author-maintenance-only",
+  "managed_block_hash": "BF52F2358F9539EA3371F5F44ED85F077F63821D617DCFC6379EF9B4CA6D307F",
+  "managed_skills": [
     {
+      "integration_mode": "native-integrated",
       "maintenance_unit_id": "unit:kb-dream-pass",
-      "member_skill_ids": [
-        "kb-dream-pass"
-      ],
+      "native_owner_id": "kb-dream-pass",
+      "native_route_evidence_path": ".agents/skills/kb-dream-pass/SKILL.md",
+      "native_route_status": "present",
+      "skill_id": "kb-dream-pass",
       "skill_path": ".agents/skills/kb-dream-pass"
     },
     {
+      "integration_mode": "native-integrated",
       "maintenance_unit_id": "unit:kb-organization-contribute",
-      "member_skill_ids": [
-        "kb-organization-contribute"
-      ],
+      "native_owner_id": "kb-organization-contribute",
+      "native_route_evidence_path": ".agents/skills/kb-organization-contribute/SKILL.md",
+      "native_route_status": "present",
+      "skill_id": "kb-organization-contribute",
       "skill_path": ".agents/skills/kb-organization-contribute"
     },
     {
+      "integration_mode": "native-integrated",
       "maintenance_unit_id": "unit:kb-organization-maintenance",
-      "member_skill_ids": [
-        "kb-organization-maintenance"
-      ],
+      "native_owner_id": "kb-organization-maintenance",
+      "native_route_evidence_path": ".agents/skills/kb-organization-maintenance/SKILL.md",
+      "native_route_status": "present",
+      "skill_id": "kb-organization-maintenance",
       "skill_path": ".agents/skills/kb-organization-maintenance"
     },
     {
+      "integration_mode": "native-integrated",
       "maintenance_unit_id": "unit:kb-sleep-maintenance",
-      "member_skill_ids": [
-        "kb-sleep-maintenance"
-      ],
+      "native_owner_id": "kb-sleep-maintenance",
+      "native_route_evidence_path": ".agents/skills/kb-sleep-maintenance/SKILL.md",
+      "native_route_status": "present",
+      "skill_id": "kb-sleep-maintenance",
       "skill_path": ".agents/skills/kb-sleep-maintenance"
     },
     {
+      "integration_mode": "native-integrated",
       "maintenance_unit_id": "unit:khaos-brain-update",
-      "member_skill_ids": [
-        "khaos-brain-update"
-      ],
+      "native_owner_id": "khaos-brain-update",
+      "native_route_evidence_path": ".agents/skills/khaos-brain-update/SKILL.md",
+      "native_route_status": "present",
+      "skill_id": "khaos-brain-update",
       "skill_path": ".agents/skills/khaos-brain-update"
     }
   ],
-  "consumer_projection": {
-    "prohibited_path_prefixes": [
-      ".skillguard/"
-    ],
-    "prohibited_tokens": [
-      "SkillGuard",
-      ".skillguard",
-      "skillguard.py"
-    ]
-  },
-  "claim_boundary": "Author-side maintenance registry only. It is never installed with a consumer skill and never writes into an ordinary project."
+  "manifest_hash": "7C34B10DB40F1D9C901158F2B3D76476C11835C7AF8913C2DE79BC05429C6947",
+  "project_id": "Knowledge_20260419",
+  "project_prompt_path": "AGENTS.md",
+  "repository_role": "skill_maintainer_source",
+  "schema_version": "skillguard.project_adoption.v1",
+  "skillguard_repository": "https://github.com/liuyingxuvka/SkillGuard",
+  "skillguard_version": "unknown"
 }
