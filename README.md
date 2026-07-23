@@ -10,8 +10,8 @@
 </p>
 <!-- README HERO END -->
 
-- Repository head (`main`) / 仓库主线（`main`）: `v0.7.0`
-- Latest released version / 最新已发布版本: `v0.7.0`
+- Repository head (`main`) / 仓库主线（`main`）: `v0.7.1`
+- Latest released version / 最新已发布版本: `v0.7.1`
 - Project name / 项目名称: `Khaos Brain`
 - English lead content comes first; the full Chinese section follows below. / 英文主内容在前，完整中文部分在后方。
 
@@ -212,7 +212,7 @@ The exact migration phases, rollback behavior, pause-state preservation, and suc
 
 | 仓库主线 | 最新发布 | 项目 | 许可证 |
 | --- | --- | --- | --- |
-| `v0.7.0` | `v0.7.0` | `Khaos Brain` | MIT |
+| `v0.7.1` | `v0.7.1` | `Khaos Brain` | MIT |
 
 ## 它是什么
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.7.1 - 2026-07-23
+
+- Republish the v0.7.0 resumable-Sleep source unchanged under a new immutable tag after the v0.7.0 tag was pushed before its exact `main` validation receipt existed. The v0.7.1 release waits for the exact `main` commit to pass before tag publication; no old tag is moved.
+
 ## v0.7.0 - 2026-07-22
 
 - Replace restart-on-timeout Sleep work with one versioned frozen batch, immutable per-item results, durable checkpoints, and exact resume of pending items only.
