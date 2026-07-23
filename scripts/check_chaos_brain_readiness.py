@@ -641,7 +641,7 @@ def _installed_codex_component(repo_root: Path, codex_home: Path) -> dict[str, A
             / "kb"
             / "history"
             / "migrations"
-            / "kb-maintenance-standard-v5-researchguard-logic-native",
+            / "kb-maintenance-standard-v6-resumable-sleep-current-index",
         ),
     ]
     rows.extend(

@@ -32,26 +32,78 @@ def children() -> tuple[ChildModelEvidence, ...]:
     return (
         ChildModelEvidence(
             model_id=LIFECYCLE,
-            evidence_id="focused:lifecycle-batch-timeout-recovery:20260720",
-            risk_boundary="observation/candidate lifecycle batching, eligibility, timeout recovery, Sleep watermark, and authorized active-index publication",
-            inputs_accepted=("observation", "staged candidate transition batch", "Sleep commit result", "native timeout", "next Sleep recovery", "Dream handoff acknowledgement"),
+            evidence_id="focused:resumable-sleep-batch-and-pointer-publication:20260722",
+            risk_boundary=(
+                "bounded resumable Sleep batches, exact per-item settlement, scoped retrieval impact, "
+                "prior-generation availability, remainder movement, and sole-owner pointer publication"
+            ),
+            inputs_accepted=(
+                "observation",
+                "frozen eligible item boundary",
+                "immutable item result",
+                "cooperative soft stop",
+                "next Sleep resume",
+                "exact retrieval impact",
+                "Dream handoff acknowledgement",
+            ),
             outputs_emitted=(
                 "lifecycle_delta_selected",
                 "retrieval_eligibility_snapshot",
+                "sleep_batch_progress_saved",
+                "exact_entry_deny_published",
+                "exact_current_corruption_blocked",
                 "sleep_watermark_committed",
                 "active_index_generation_published",
             ),
-            state_owned=("entry_lifecycle_state", "retrieval_eligibility", "sleep_watermark", "active_index_pointer", "active_index_invalidation_token"),
-            side_effects_owned=("lifecycle_event_commit", "active_index_publication", "sleep_watermark_advance"),
+            state_owned=(
+                "entry_lifecycle_state",
+                "retrieval_eligibility",
+                "sleep_batch_plan",
+                "sleep_batch_checkpoint",
+                "sleep_batch_item_results",
+                "sleep_remainder_movement",
+                "sleep_watermark",
+                "active_index_pointer",
+                "active_index_exact_deny_projection",
+                "active_index_exact_corruption_marker",
+            ),
+            side_effects_owned=(
+                "sleep_batch_checkpoint_commit",
+                "lifecycle_event_commit",
+                "exact_entry_deny_publication",
+                "exact_current_corruption_marking",
+                "active_index_pointer_publication",
+                "retired_active_invalidated_residual_removal",
+                "sleep_watermark_advance",
+            ),
             functional_areas=("lifecycle_and_index",),
             contracts_in=("contract:authority.complete_generation",),
             contracts_out=("contract:lifecycle.selected_delta", "contract:lifecycle.current_index"),
             depends_on=(GOVERNANCE, AUTHORITY),
             evidence_tier="hazard_green",
             functions_owned=("LifecycleConvergenceBlock",),
-            invariants_owned=("eligible_status_only", "watermark_after_complete_commit", "bounded_replay_per_batch", "authorized_index_publisher", "timeout_never_becomes_success"),
-            risk_classes=("lifecycle_debt", "stale_index", "watermark_partial_commit", "native_timeout_after_invalidation"),
-            validation_evidence=("model_check:lifecycle-convergence-v2:pass", "model_miss:sleep-timeout-recovery:closed", "known_bad:unauthorized-publisher-rejected"),
+            invariants_owned=(
+                "eligible_status_only",
+                "frozen_batch_accounting_exact",
+                "unfinished_batch_preserves_previous_generation",
+                "watermark_after_complete_pointer_commit",
+                "authorized_index_publisher",
+                "global_failure_requires_exact_current_corruption",
+                "retired_unscoped_invalidation_has_zero_runtime_authority",
+            ),
+            risk_classes=(
+                "lifecycle_debt",
+                "restart_entire_batch",
+                "over_broad_retrieval_invalidation",
+                "watermark_partial_commit",
+                "native_timeout_after_partial_progress",
+                "retired_global_marker_residual",
+            ),
+            validation_evidence=(
+                "model_check:lifecycle-convergence-v3:focused",
+                "model_miss:sleep-timeout-recovery:state-too-coarse-and-evidence-overclaimed",
+                "known_bad:unauthorized-publisher-rejected",
+            ),
         ),
         ChildModelEvidence(
             model_id=GOVERNANCE,
@@ -181,8 +233,14 @@ def coverage_items() -> tuple[HierarchyCoverageItem, ...]:
     values = (
         ("item:observation-candidate-lifecycle", "function", LIFECYCLE),
         ("item:retrieval-eligibility", "state", LIFECYCLE),
+        ("item:frozen-resumable-sleep-batch", "state", LIFECYCLE),
+        ("item:per-item-settlement-checkpoint", "state", LIFECYCLE),
+        ("item:remainder-movement", "state", LIFECYCLE),
         ("item:sleep-watermark", "state", LIFECYCLE),
-        ("item:active-index-publication", "side_effect", LIFECYCLE),
+        ("item:active-index-pointer-publication", "side_effect", LIFECYCLE),
+        ("item:exact-entry-deny", "side_effect", LIFECYCLE),
+        ("item:exact-current-corruption", "side_effect", LIFECYCLE),
+        ("item:retired-active-invalidated-residual", "invariant", LIFECYCLE),
         ("item:sleep-decision", "function", GOVERNANCE),
         ("item:dream-handoff-decision", "function", GOVERNANCE),
         ("item:route-governance", "state", GOVERNANCE),
@@ -234,10 +292,19 @@ def closure_model(models: tuple[ChildModelEvidence, ...]) -> MeshClosureModel:
             MeshClosureTransition(
                 "lifecycle_selects_delta",
                 consumes=("observation_or_versioned_legacy_input",),
-                emits=("lifecycle_delta_selected", "retrieval_eligibility_snapshot"),
+                emits=(
+                    "lifecycle_delta_selected",
+                    "retrieval_eligibility_snapshot",
+                    "sleep_batch_progress_saved",
+                    "exact_entry_deny_published",
+                    "exact_current_corruption_blocked",
+                ),
                 consumer_model_id=LIFECYCLE,
                 code_contract_id="contract:lifecycle.selected_delta",
-                rationale="Existing lifecycle authority admits/selects the bounded delta and eligibility snapshot.",
+                rationale=(
+                    "The unique lifecycle owner freezes/resumes a bounded batch, checkpoints exact item results, "
+                    "and projects only impact-scoped retrieval safety while the prior generation remains current."
+                ),
             ),
             MeshClosureTransition(
                 "governance_selects_sleep_action",
@@ -265,11 +332,20 @@ def closure_model(models: tuple[ChildModelEvidence, ...]) -> MeshClosureModel:
             ),
             MeshClosureTransition(
                 "lifecycle_publishes_index_and_watermark",
-                consumes=("model_generation_committed", "model_binding_validated"),
+                consumes=(
+                    "model_generation_committed",
+                    "model_binding_validated",
+                    "sleep_batch_progress_saved",
+                    "exact_entry_deny_published",
+                    "exact_current_corruption_blocked",
+                ),
                 emits=("active_index_generation_published", "sleep_watermark_committed"),
                 consumer_model_id=LIFECYCLE,
                 code_contract_id="contract:lifecycle.current_index",
-                rationale="The existing lifecycle owner alone publishes the active index and advances Sleep watermark.",
+                rationale=(
+                    "The existing lifecycle owner alone publishes the immutable active-index pointer last, clears "
+                    "generation-bound safety projections, removes retired unscoped marker residuals, and then advances Sleep watermark."
+                ),
             ),
             MeshClosureTransition(
                 "authority_returns_model_native_retrieval",

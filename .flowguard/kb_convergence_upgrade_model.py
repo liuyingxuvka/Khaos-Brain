@@ -82,6 +82,8 @@ class ConsumerInput:
     manual_only_skill_ids: tuple[str, ...] = ()
     activation_checks_ok: bool = True
     activation_transaction_completed: bool = True
+    activation_status_authority_current: bool = True
+    installation_check_uses_current_status_authority: bool = True
     attempt_head_current: bool = True
     attempt_projection_bounded: bool = True
     attempt_manifest_binding_current: bool = True
@@ -135,6 +137,7 @@ class ConsumerState:
     active_scheduled_skills: tuple[str, ...] = ()
     manual_only_skills: tuple[str, ...] = ()
     activation_survivors_paused: bool = False
+    activation_status_authority_current: bool = False
     upgrade_attempt_authority_status: str = "unknown"
     upgrade_attempt_manifest_binding_current: bool = False
     upgrade_attempt_history_scan_count: int = 0
@@ -148,6 +151,7 @@ class ConsumerState:
     restored_automation_status: str = ""
     restored_automation_user_paused: bool = False
     automation_recovery_snapshot_status: str = "not_applicable"
+    history_migration_status: str = "not_started"
     assurance_plan_status: str = "unknown"
     assurance_changed_component_ids: tuple[str, ...] = ()
     assurance_declared_owner_ids: tuple[str, ...] = ()
@@ -346,6 +350,8 @@ class ConsumerIndependenceBlock:
             if not (
                 input_obj.activation_checks_ok
                 and input_obj.activation_transaction_completed
+                and input_obj.activation_status_authority_current
+                and input_obj.installation_check_uses_current_status_authority
             ):
                 return (
                     FunctionResult(
@@ -360,6 +366,7 @@ class ConsumerIndependenceBlock:
                                 sorted(MANUAL_ONLY_SKILL_IDS)
                             ),
                             activation_survivors_paused=True,
+                            activation_status_authority_current=False,
                         ),
                         label="activation_failed_survivors_paused",
                     ),
@@ -375,6 +382,7 @@ class ConsumerIndependenceBlock:
                         active_scheduled_skills=tuple(sorted(SCHEDULED_SKILL_IDS)),
                         manual_only_skills=tuple(sorted(MANUAL_ONLY_SKILL_IDS)),
                         activation_survivors_paused=False,
+                        activation_status_authority_current=True,
                     ),
                     label="scheduled_automations_activated_manual_update_unscheduled",
                 ),
@@ -471,6 +479,62 @@ class ConsumerIndependenceBlock:
                         assurance_receipt_bounded=(
                             input_obj.assurance_receipt_bounded
                         ),
+                    ),
+                    label=label,
+                ),
+            )
+
+        if input_obj.kind == "persist_automation_recovery_snapshot":
+            current = bool(input_obj.recovery_snapshot_current)
+            if (
+                not current
+                and (
+                    state.automation_recovery_snapshot_status == "current"
+                    or bool(state.restored_automation_status)
+                )
+            ):
+                return (
+                    FunctionResult(
+                        ConsumerOutput("automation_recovery_snapshot_regression_blocked"),
+                        state,
+                        label="automation_recovery_snapshot_regression_blocked",
+                    ),
+                )
+            label = (
+                "automation_recovery_snapshot_persisted"
+                if current
+                else "automation_recovery_snapshot_blocked"
+            )
+            return (
+                FunctionResult(
+                    ConsumerOutput(label),
+                    replace(
+                        state,
+                        automation_recovery_snapshot_status=(
+                            "current" if current else "blocked"
+                        ),
+                    ),
+                    label=label,
+                ),
+            )
+
+        if input_obj.kind == "run_history_migration":
+            if state.automation_recovery_snapshot_status != "current":
+                return (
+                    FunctionResult(
+                        ConsumerOutput("migration_without_recovery_snapshot_blocked"),
+                        replace(state, history_migration_status="blocked"),
+                        label="migration_without_recovery_snapshot_blocked",
+                    ),
+                )
+            succeeded = bool(input_obj.native_gates_ok)
+            label = "history_migration_committed" if succeeded else "history_migration_failed_paused"
+            return (
+                FunctionResult(
+                    ConsumerOutput(label),
+                    replace(
+                        state,
+                        history_migration_status="committed" if succeeded else "failed",
                     ),
                     label=label,
                 ),
@@ -663,6 +727,14 @@ class LifecycleInput:
     marker_token_current: bool = True
     validation_complete: bool = True
     cleanup_confirmed: bool = True
+    retrieval_impact: str = "none"
+    frozen_item_count: int = 0
+    completed_item_count: int = 0
+    blocked_item_count: int = 0
+    previous_remaining: int = 0
+    newly_eligible: int = 0
+    opening_remaining: int = 0
+    target_batch_size: int = 0
 
 
 @dataclass(frozen=True)
@@ -674,8 +746,21 @@ class LifecycleOutput:
 class LifecycleState:
     """Authoritative lifecycle/index state owned by LifecycleConvergenceBlock."""
 
-    active_index_state: str = "valid_current"
-    invalidation_token: str = ""
+    active_index_state: str = "current_readable"
+    current_generation_id: str = "generation-1"
+    corruption_generation_id: str = ""
+    deny_entry_count: int = 0
+    batch_state: str = "closed"
+    frozen_item_count: int = 0
+    completed_item_count: int = 0
+    blocked_item_count: int = 0
+    pending_item_count: int = 0
+    previous_remaining: int = 0
+    newly_eligible: int = 0
+    opening_remaining: int = 0
+    target_batch_size: int = 0
+    closing_remaining: int = 0
+    no_reduction_streak: int = 0
     staged_event_count: int = 0
     committed_event_count: int = 0
     reused_event_count: int = 0
@@ -706,24 +791,52 @@ class LifecycleConvergenceBlock:
     accepted_input_type = LifecycleInput
     input_description = "one staged batch, timeout, or authorized index publication"
     output_description = "one bounded commit, visible failure, or current index"
-    idempotency = "stable lifecycle event ids plus the exact invalidation token"
+    idempotency = "stable frozen item ids, item-result digests, and exact generation pointer"
 
     def apply(
         self, input_obj: LifecycleInput, state: LifecycleState
     ) -> Iterable[FunctionResult]:
         if input_obj.kind == "stage_lifecycle_batch":
+            if state.batch_state != "closed":
+                return (
+                    FunctionResult(
+                        LifecycleOutput("batch_already_open_blocked"),
+                        replace(state, failure_visible=True),
+                        label="batch_already_open_blocked",
+                    ),
+                )
             return (
                 FunctionResult(
                     LifecycleOutput("lifecycle_batch_staged"),
                     replace(
                         state,
                         staged_event_count=input_obj.planned_event_count,
+                        batch_state="open",
+                        frozen_item_count=input_obj.frozen_item_count,
+                        completed_item_count=0,
+                        blocked_item_count=0,
+                        pending_item_count=input_obj.frozen_item_count,
+                        previous_remaining=input_obj.previous_remaining,
+                        newly_eligible=input_obj.newly_eligible,
+                        opening_remaining=input_obj.opening_remaining,
+                        target_batch_size=input_obj.target_batch_size,
+                        closing_remaining=input_obj.opening_remaining,
+                        watermark_committed=False,
+                        target_terminal_receipt_present=False,
                     ),
                     label="lifecycle_batch_staged",
                 ),
             )
 
         if input_obj.kind == "commit_lifecycle_batch":
+            if state.batch_state != "open":
+                return (
+                    FunctionResult(
+                        LifecycleOutput("batch_commit_without_open_plan_blocked"),
+                        replace(state, failure_visible=True),
+                        label="batch_commit_without_open_plan_blocked",
+                    ),
+                )
             if not input_obj.snapshot_current:
                 return (
                     FunctionResult(
@@ -732,13 +845,65 @@ class LifecycleConvergenceBlock:
                         label="stale_lifecycle_snapshot_blocked",
                     ),
                 )
+            settled = input_obj.completed_item_count + input_obj.blocked_item_count
+            if settled != state.frozen_item_count:
+                return (
+                    FunctionResult(
+                        LifecycleOutput("incomplete_batch_publication_blocked"),
+                        replace(
+                            state,
+                            batch_state="progress_saved",
+                            completed_item_count=input_obj.completed_item_count,
+                            blocked_item_count=input_obj.blocked_item_count,
+                            pending_item_count=max(state.frozen_item_count - settled, 0),
+                            failure_visible=True,
+                        ),
+                        label="incomplete_batch_publication_blocked",
+                    ),
+                )
+            if input_obj.retrieval_impact not in {
+                "none", "additive_pending", "entry_revoke", "entry_replace",
+                "global_current_corruption",
+            }:
+                return (
+                    FunctionResult(
+                        LifecycleOutput("unknown_retrieval_impact_blocked"),
+                        replace(state, failure_visible=True),
+                        label="unknown_retrieval_impact_blocked",
+                    ),
+                )
+            next_index_state = (
+                "current_corrupt_blocked"
+                if input_obj.retrieval_impact == "global_current_corruption"
+                else "current_readable"
+            )
+            next_deny_count = state.deny_entry_count + (
+                1 if input_obj.retrieval_impact in {"entry_revoke", "entry_replace"} else 0
+            )
+            closing = max(state.opening_remaining - settled, 0)
+            no_reduction_streak = (
+                state.no_reduction_streak + 1
+                if closing >= state.previous_remaining
+                else 0
+            )
             return (
                 FunctionResult(
                     LifecycleOutput("lifecycle_batch_committed_once"),
                     replace(
                         state,
-                        active_index_state="invalidated_pending_rebuild",
-                        invalidation_token="sleep-cycle-token",
+                        active_index_state=next_index_state,
+                        corruption_generation_id=(
+                            state.current_generation_id
+                            if next_index_state == "current_corrupt_blocked"
+                            else ""
+                        ),
+                        deny_entry_count=next_deny_count,
+                        batch_state="settled",
+                        completed_item_count=input_obj.completed_item_count,
+                        blocked_item_count=input_obj.blocked_item_count,
+                        pending_item_count=0,
+                        closing_remaining=closing,
+                        no_reduction_streak=no_reduction_streak,
                         committed_event_count=(
                             state.committed_event_count
                             + input_obj.created_event_count
@@ -760,17 +925,32 @@ class LifecycleConvergenceBlock:
             )
 
         if input_obj.kind == "native_timeout_after_lifecycle_commit":
+            if state.batch_state not in {"open", "settled", "progress_saved"}:
+                return (
+                    FunctionResult(
+                        LifecycleOutput("timeout_without_batch_visible"),
+                        replace(
+                            state,
+                            failure_visible=True,
+                            wrapper_failure_receipt_present=True,
+                            target_terminal_receipt_present=False,
+                            timeout_cleanup_confirmed=input_obj.cleanup_confirmed,
+                        ),
+                        label="timeout_without_batch_visible",
+                    ),
+                )
             return (
                 FunctionResult(
-                    LifecycleOutput("timeout_visible_index_remains_invalid"),
+                    LifecycleOutput("progress_saved_previous_generation_readable"),
                     replace(
                         state,
+                        batch_state="progress_saved",
                         failure_visible=True,
                         wrapper_failure_receipt_present=True,
                         target_terminal_receipt_present=False,
                         timeout_cleanup_confirmed=input_obj.cleanup_confirmed,
                     ),
-                    label="timeout_visible_index_remains_invalid",
+                    label="progress_saved_previous_generation_readable",
                 ),
             )
 
@@ -778,9 +958,8 @@ class LifecycleConvergenceBlock:
             authorized = input_obj.publisher_id in ACTIVE_INDEX_PUBLISHERS
             can_publish = bool(
                 authorized
-                and state.active_index_state == "invalidated_pending_rebuild"
-                and state.invalidation_token
-                and input_obj.marker_token_current
+                and state.batch_state in {"settled", "progress_saved"}
+                and state.pending_item_count == 0
                 and input_obj.validation_complete
             )
             if not can_publish:
@@ -803,8 +982,11 @@ class LifecycleConvergenceBlock:
                     LifecycleOutput("active_index_rebuilt_and_watermark_committed"),
                     replace(
                         state,
-                        active_index_state="valid_current",
-                        invalidation_token="",
+                        active_index_state="current_readable",
+                        current_generation_id="generation-2",
+                        corruption_generation_id="",
+                        deny_entry_count=0,
+                        batch_state="closed",
                         authority_stamp_published=True,
                         watermark_committed=True,
                         watermark_version=state.watermark_version + 1,
@@ -830,15 +1012,13 @@ def _active_index_is_fail_closed(
     state: LifecycleState, trace: object
 ) -> InvariantResult:
     del trace
-    if state.active_index_state == "valid_current" and state.invalidation_token:
+    if state.active_index_state == "current_readable" and state.corruption_generation_id:
         return InvariantResult.fail(
-            "active index is current while a durable invalidation token remains"
+            "current generation is readable while a matching corruption marker remains"
         )
-    if state.active_index_state == "invalidated_pending_rebuild" and (
-        state.authority_stamp_published or state.watermark_committed
-    ):
+    if state.active_index_state == "current_corrupt_blocked" and not state.corruption_generation_id:
         return InvariantResult.fail(
-            "invalidated index published authority or advanced the Sleep watermark"
+            "globally blocked state lacks an exact current-generation corruption identity"
         )
     return InvariantResult.pass_()
 
@@ -891,6 +1071,28 @@ def _timeout_never_becomes_success(
     return InvariantResult.pass_()
 
 
+def _batch_progress_never_discards_the_previous_generation(
+    state: LifecycleState, trace: object
+) -> InvariantResult:
+    del trace
+    if state.batch_state in {"open", "progress_saved"} and not state.current_generation_id:
+        return InvariantResult.fail("an unfinished batch discarded the previous generation")
+    if state.pending_item_count and state.watermark_committed:
+        return InvariantResult.fail("an unfinished batch advanced the committed watermark")
+    return InvariantResult.pass_()
+
+
+def _remainder_accounting_is_bounded(
+    state: LifecycleState, trace: object
+) -> InvariantResult:
+    del trace
+    if state.target_batch_size > state.opening_remaining:
+        return InvariantResult.fail("target batch exceeds opening remainder")
+    if state.completed_item_count + state.blocked_item_count + state.pending_item_count != state.frozen_item_count:
+        return InvariantResult.fail("frozen item accounting is not exact")
+    return InvariantResult.pass_()
+
+
 LIFECYCLE_INVARIANTS = (
     Invariant(
         "active_index_is_fail_closed",
@@ -917,21 +1119,35 @@ LIFECYCLE_INVARIANTS = (
         "A native timeout stays a visible non-success until a later Sleep closes.",
         _timeout_never_becomes_success,
     ),
+    Invariant(
+        "batch_progress_preserves_previous_generation",
+        "Open and progress-saved batches keep the prior generation readable and watermark fixed.",
+        _batch_progress_never_discards_the_previous_generation,
+    ),
+    Invariant(
+        "remainder_accounting_is_bounded",
+        "Every frozen batch has exact settled/pending and target/remainder accounting.",
+        _remainder_accounting_is_bounded,
+    ),
 )
 
 
 LIFECYCLE_INPUTS = (
-    LifecycleInput("stage_lifecycle_batch", planned_event_count=500),
+    LifecycleInput("stage_lifecycle_batch", planned_event_count=500, frozen_item_count=20, previous_remaining=40, newly_eligible=10, opening_remaining=50, target_batch_size=20),
     LifecycleInput(
         "commit_lifecycle_batch",
         planned_event_count=500,
         created_event_count=500,
+        completed_item_count=20,
+        retrieval_impact="additive_pending",
     ),
     LifecycleInput(
         "commit_lifecycle_batch",
         planned_event_count=500,
         created_event_count=0,
         reused_event_count=500,
+        completed_item_count=20,
+        retrieval_impact="none",
     ),
     LifecycleInput(
         "commit_lifecycle_batch",
@@ -940,7 +1156,7 @@ LIFECYCLE_INPUTS = (
     ),
     LifecycleInput("native_timeout_after_lifecycle_commit"),
     LifecycleInput("next_sleep_recovery"),
-    LifecycleInput("publish_active_index", marker_token_current=False),
+    LifecycleInput("publish_active_index"),
 )
 
 
@@ -1011,6 +1227,10 @@ def _activation_excludes_manual_only_skill(
                 "failed operator activation left scheduled automations active"
             )
         return InvariantResult.pass_()
+    if not state.activation_status_authority_current:
+        return InvariantResult.fail(
+            "active automations are not bound to the current operator status authority"
+        )
     if (
         set(state.active_scheduled_skills) != set(SCHEDULED_SKILL_IDS)
         or set(state.manual_only_skills) != set(MANUAL_ONLY_SKILL_IDS)
@@ -1090,6 +1310,20 @@ def _automation_restoration_follows_user_pause_intent(
     if state.restored_automation_status != expected:
         return InvariantResult.fail(
             "transient runtime pause overrode the current user-pause intent"
+        )
+    return InvariantResult.pass_()
+
+
+def _migration_requires_persisted_automation_snapshot(
+    state: ConsumerState, trace: object
+) -> InvariantResult:
+    del trace
+    if (
+        state.history_migration_status == "committed"
+        and state.automation_recovery_snapshot_status != "current"
+    ):
+        return InvariantResult.fail(
+            "history migration committed before the automation recovery snapshot was durable"
         )
     return InvariantResult.pass_()
 
@@ -1198,6 +1432,11 @@ CONSUMER_INVARIANTS = (
         _automation_restoration_follows_user_pause_intent,
     ),
     Invariant(
+        "migration_requires_persisted_automation_snapshot",
+        "The original automation intent is durable before migration can start.",
+        _migration_requires_persisted_automation_snapshot,
+    ),
+    Invariant(
         "assurance_executes_only_affected_owners",
         "A stable assurance plan executes exactly its affected owners.",
         _assurance_executes_only_affected_owners,
@@ -1277,6 +1516,14 @@ CONSUMER_INPUTS = (
         activation_checks_ok=False,
         activation_transaction_completed=False,
     ),
+    ConsumerInput(
+        "operator_activate",
+        maintained_skill_ids=AUTOMATION_TARGET_IDS,
+        scheduled_skill_ids=SCHEDULED_SKILL_IDS,
+        manual_only_skill_ids=MANUAL_ONLY_SKILL_IDS,
+        activation_status_authority_current=False,
+        installation_check_uses_current_status_authority=False,
+    ),
     ConsumerInput("check_upgrade_attempt_current"),
     ConsumerInput(
         "check_upgrade_attempt_current",
@@ -1329,6 +1576,16 @@ CONSUMER_INPUTS = (
         recoverable_upgrade_attempt=True,
         recovery_snapshot_current=False,
     ),
+    ConsumerInput(
+        "persist_automation_recovery_snapshot",
+        recovery_snapshot_current=True,
+    ),
+    ConsumerInput(
+        "persist_automation_recovery_snapshot",
+        recovery_snapshot_current=False,
+    ),
+    ConsumerInput("run_history_migration", native_gates_ok=True),
+    ConsumerInput("run_history_migration", native_gates_ok=False),
     ConsumerInput(
         "plan_affected_assurance",
         changed_component_ids=("retrieval-data",),

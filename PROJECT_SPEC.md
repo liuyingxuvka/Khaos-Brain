@@ -1162,6 +1162,18 @@ debt. The desktop card viewer is optional: no human-readable file review or UI
 interaction is required for admission, disposition, promotion, migration, or
 completion.
 
+Sleep processes one frozen, bounded item batch at a time. If an open batch exists,
+the next Sleep resumes its exact pending item ids before admitting later arrivals.
+Otherwise it records the previous remainder, newly eligible count, opening
+remainder, immutable input boundaries and digest, and selects a target of twice
+the newly eligible count within the tested minimum/maximum and the opening
+remainder. With carried actionable debt and no new intake it still selects at
+least the tested minimum when possible. Each completed item and each explicitly
+blocked item is checkpointed durably; a blocker must name its owner and executable
+reopen condition. A cooperative soft stop returns `progress_saved`, preserves
+settled item evidence, leaves the committed watermark unchanged, and makes Dream
+and organization descendants explicitly `not_run`.
+
 Each of the four scheduled roles and the separate manual-update Skill is one
 independent consumer unit. Every unit owns one native route, one non-overlapping
 obligation set, its own exact checks, and an immutable native run artifact bound
@@ -1249,10 +1261,12 @@ performance-sensitive LogicGuard runtime benchmarks run next on their own
 exclusive lane, and the child that executes real scheduled production runs
 last on another exclusive lane. This prevents a healthy benchmark, Sleep, or
 Dream route from exhausting its declared budget only because broad sibling
-checks are competing for the same machine. Inside one Sleep cycle, the final
-active-index generation has one publication/validation owner: unchanged
-intermediate work defers to that owner, and an already current receipt is reused
-unless a later lifecycle decision actually changes index eligibility.
+ checks are competing for the same machine. Inside one Sleep cycle, the final
+ active-index generation has one publication/validation owner. Item work is staged
+ away from the current generation, matching completed item results are reused, and
+ a complete new immutable generation is activated by replacing one current pointer
+ last. An unfinished or stopped batch keeps the previous validated generation
+ readable unless evidence proves corruption of that exact generation.
 
 Within one exact authority generation and scope, model-bound reads open one
 immutable ModelMesh view and reuse it across distinct cards. The generation
@@ -1374,16 +1388,20 @@ also reopen the gate and receive bounded atomic settlement, index rebuild, and
 their own logical-reconciliation receipts before completion.
 
 Foreground retrieval must not pay the cost of that full maintenance audit.
-The active index publishes a compact activation receipt; each query validates
-that receipt and only the few exact model/projection bindings it could return.
-For selected entries it then reads the immutable model, root block, explicit
-gaps, and bounded grounded mesh neighborhood. Observation-only
-intake does not invalidate entry authority. Any entry-lifecycle transition must
-write a durable fail-closed invalidation marker before its event, and only a
-full validated rebuild may reactivate the index. A changed or missing indexed
-binding also fails the compact check; there is no projection or legacy fallback.
-Full model/mesh/projection manifests and lifecycle replay
-remain mandatory for Sleep, migration, rebuild, and aggregate assurance.
+One compact current-generation pointer binds an immutable active-index artifact,
+activation receipt, LogicGuard generation, lifecycle checkpoint, source watermark,
+and exact-entry subtractive-deny digest. Each query validates that authority and
+only the immutable records it could return; mutable card or candidate YAML is not
+the serving authority. Observation-only, no-effect, and additive-pending work do
+not make the current generation unavailable. If one current indexed record is
+revoked or replaced, the lifecycle writer first publishes an exact deny bound to
+that generation, entry id, and expected record digest, so unrelated records remain
+readable. Only evidence-bound corruption of the exact current generation, pointer,
+index, or deny authority blocks foreground retrieval globally. The retired generic
+invalidation marker has no normal-runtime reader or writer after direct migration;
+there is no projection, legacy-source, or alternate-reader fallback. Full
+model/mesh/projection manifests and lifecycle replay remain mandatory for Sleep,
+migration, rebuild, and aggregate assurance.
 
 Historical lifecycle settlement must remain scale-bounded. It compiles missing
 admission, disposition, and entry-snapshot events into bounded atomic batches,
@@ -1396,6 +1414,12 @@ but uses a separate in-memory membership index, so duplicate validation grows
 linearly with lifecycle event count rather than rescanning every prior key.
 An older partially completed per-item attempt must resume through stable
 idempotency keys and candidate identities without duplicate cards or events.
+Every attempt reports `previous_remaining`, `newly_eligible`, `opening_remaining`,
+`target_batch_size`, completed, blocked, closing remainder, and net reduction under
+one counting rule. A lower closing remainder is `backlog_reduced`; two consecutive
+current receipts without reduction are `backlog_growing` and gate dependent
+maintenance while leaving the exact batch resumable. No hourly arrival estimator
+or growing all-history replay is part of the decision.
 
 Software update status uses `.local/khaos_brain_update_state.json` schema v2. The
 desktop UI reads this status but never writes authorization or launches an updater;
@@ -1463,9 +1487,11 @@ sequence. A later change must preserve this ownership order.
 
 1. Route all card/candidate semantic writes through one Sleep generation publisher.
 2. Consume observations and Dream handoffs once, update models and meshes, audit
-   gaps, then write every projection and index before publishing the pointer last.
-3. Roll back the complete generation on any model, mesh, projection, index, or
-   pointer failure.
+   gaps, checkpoint each frozen item, then write every projection and immutable
+   index artifact before publishing the current pointer last.
+3. On soft stop or failure, preserve valid item checkpoints and the prior current
+   generation; roll back only incomplete staged publication artifacts. Globally
+   block reads only for proven exact-current corruption.
 
 ### Phase 4 — Make Dream an immutable verifier
 
@@ -1514,6 +1540,10 @@ The version is done only when all of the following are true:
 - readable cards validate as deterministic projections and cannot act as fallback authority
 - retrieval enters the exact root ArgumentBlock and expands only grounded mesh edges
 - Sleep is the sole normal-runtime canonical generation publisher
+- every Sleep batch is frozen, bounded, per-item resumable, and reports exact
+  prior/new/opening/target/completed/blocked/closing remainder movement
+- unfinished Sleep work preserves the previous validated generation; exact-entry
+  revocation is subtractive and only exact-current corruption is globally fail-closed
 - Dream simulations do not advance or rewrite canonical authority
 - the versioned migration is idempotent, rollbackable, direct-to-current, and proves zero legacy semantic residuals
 - all author-side SkillGuard contracts are current, unit-specific, and excluded

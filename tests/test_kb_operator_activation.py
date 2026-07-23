@@ -14,6 +14,7 @@ from local_kb.operator_activation import (
     SCHEDULED_SKILL_IDS,
     SKILL_INVENTORY_SCHEMA_VERSION,
     activate_all_for_current_machine,
+    current_operator_activation_status_authority,
     installation_currentness_projection,
     validate_activation_readiness,
     validate_operator_activation_receipt,
@@ -193,6 +194,41 @@ def test_current_machine_override_activates_all_and_writes_current_receipt() -> 
             )
         assert repeated["ok"], repeated
         assert repeated["status"] == "current-machine-all-active-reused"
+
+
+def test_current_activation_receipt_becomes_status_authority_without_install_recursion() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        repo_root = root / "repo"
+        codex_home = root / ".codex"
+        repo_root.mkdir()
+        _write_paused_automations(codex_home)
+        final_check = {"ok": True, "issues": [], "strong_session_defaults": True}
+        with patch(
+            "local_kb.operator_activation.validate_activation_readiness",
+            return_value=_gate(repo_root),
+        ), patch(
+            "local_kb.operator_activation.build_installation_check",
+            return_value=final_check,
+        ):
+            result = activate_all_for_current_machine(
+                repo_root,
+                codex_home,
+                repo_root / "readiness.json",
+            )
+            authority = current_operator_activation_status_authority(
+                repo_root,
+                codex_home,
+            )
+
+        assert result["ok"], result
+        assert authority["ok"], authority
+        assert authority["states"] == {
+            str(spec["id"]): "ACTIVE" for spec in REPO_AUTOMATION_SPECS
+        }
+        assert authority["user_paused"] == {
+            str(spec["id"]): False for spec in REPO_AUTOMATION_SPECS
+        }
 
 
 def test_installation_identity_ignores_runtime_migration_diagnostics_only() -> None:

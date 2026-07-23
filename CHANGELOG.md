@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.7.0 - 2026-07-22
+
+- Replace restart-on-timeout Sleep work with one versioned frozen batch, immutable per-item results, durable checkpoints, and exact resume of pending items only.
+- Size each new batch at twice the newly eligible work within tested minimum and maximum bounds, and report previous, new, opening, target, completed, blocked, closing, net-reduction, and two-cycle convergence state.
+- Preserve the previous validated knowledge generation during planning, progress saves, timeouts, and failed publication; stage model material first and switch the immutable active-index pointer only once after lifecycle review succeeds.
+- Replace the retired global stale marker with impact-scoped safety: additive work keeps retrieval available, exact revokes use generation-bound subtractive denies, and only proved corruption of the exact current generation closes the whole index.
+- Allow malformed items to settle only with a named owner and executable reopen condition while publishing completed siblings as `completed_with_blocks`; keep Dream and organization descendants explicitly `not_run` for unfinished or blocked Sleep outcomes.
+- Direct-migrate retired index authority through maintenance-standard v6, refresh the Sleep prompt, receipts, localization, installer contracts, OpenSpec, and FlowGuard evidence, and supervise the affected Sleep skill with SkillGuard 0.4.1.
+
 ## v0.6.9 - 2026-07-22
 
 - Refresh five author-side SkillGuard maintenance units to the bounded evidence lifecycle without changing their 25 target-declared checks.

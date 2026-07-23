@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import yaml
 
-from local_kb.active_index import active_index_invalidation_path, invalidate_active_index
+from local_kb.active_index import active_index_corruption_path, active_index_path, mark_active_index_corruption
 from local_kb.dream import (
     _logicguard_dream_probe,
     run_dream_maintenance as _run_dream_maintenance,
@@ -68,20 +68,26 @@ class DreamMaintenanceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)
             activate_current_kb_runtime(repo_root)
-            invalidate_active_index(repo_root, reason="test-dream-fail-closed")
+            pointer = json.loads(active_index_path(repo_root).read_text(encoding="utf-8"))
+            mark_active_index_corruption(
+                repo_root,
+                expected_pointer_digest=pointer["pointer_digest"],
+                reason="test-dream-fail-closed",
+                evidence={"test": self.id()},
+            )
 
             with patch(
                 "local_kb.dream.load_history_events",
                 side_effect=AssertionError("Dream downstream history load must not run"),
             ) as downstream:
-                with self.assertRaisesRegex(RuntimeError, "durably invalidated pending rebuild"):
+                with self.assertRaisesRegex(RuntimeError, "marked corrupt"):
                     _run_dream_maintenance(
                         repo_root=repo_root,
                         run_id="kb-dream-invalidated-index",
                     )
 
             downstream.assert_not_called()
-            self.assertTrue(active_index_invalidation_path(repo_root).is_file())
+            self.assertTrue(active_index_corruption_path(repo_root).is_file())
 
     def test_dream_probe_covers_model_roles_cross_edge_and_neighbor_pin(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

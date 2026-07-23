@@ -23,14 +23,24 @@ from khaos_brain_logicguard_model_test_alignment import BINDINGS
 
 
 PARENT_SUITE_ID = "suite:khaos-logicguard-native:parent"
-INVENTORY_REVISION = "khaos-logicguard-native-inventory-v3-sleep-timeout-recovery"
+INVENTORY_REVISION = "khaos-logicguard-native-inventory-v4-resumable-sleep-pointer-safety"
 RECEIPT_ROOT = ".local/verification/khaos-logicguard-native"
 FINAL_COMMAND = "python scripts/check_khaos_logicguard_native_readiness.py --json"
+RESUMABLE_SLEEP_OBLIGATION_IDS = (
+    "req.maintenance.resumable-batch",
+    "req.maintenance.item-checkpoint",
+    "req.maintenance.remainder-movement",
+    "req.maintenance.writer-recovery",
+    "req.retrieval.immutable-pointer",
+    "req.retrieval.exact-entry-deny",
+    "req.retrieval.exact-current-corruption",
+    "req.retrieval.retire-global-invalidation",
+)
 
 SUITE_SPECS = (
     (
         "suite:flowguard-assurance",
-        "python .flowguard/khaos_brain_logicguard_authority_cutover.py && python .flowguard/khaos_brain_logicguard_field_lifecycle.py && python .flowguard/khaos_brain_logicguard_model_mesh.py && python .flowguard/khaos_brain_logicguard_code_structure.py && python .flowguard/khaos_brain_logicguard_model_test_alignment.py",
+        "python .flowguard/khaos_brain_logicguard_authority_cutover.py && python .flowguard/khaos_brain_logicguard_field_lifecycle.py && python .flowguard/kb_sleep_resumable_field_lifecycle.py && python .flowguard/khaos_brain_logicguard_model_mesh.py && python .flowguard/khaos_brain_logicguard_code_structure.py && python .flowguard/khaos_brain_logicguard_model_test_alignment.py && python .flowguard/kb_sleep_resumable_model_test_alignment.py",
         ("req.assurance.flowguard", "req.assurance.alignment"),
         300,
         ("flowguard_alignment_state",),
@@ -52,10 +62,14 @@ SUITE_SPECS = (
     ),
     (
         "suite:sleep-dream",
-        "python -m pytest -q tests/test_khaos_sleep_model_maintenance.py tests/test_kb_sleep_convergence.py tests/test_kb_lifecycle.py tests/test_kb_dream.py",
+        "python -m pytest -q tests/test_sleep_batch.py tests/test_khaos_sleep_model_maintenance.py tests/test_kb_sleep_convergence.py tests/test_kb_lifecycle.py tests/test_kb_dream.py",
         (
             "req.maintenance.sleep-owner",
             "req.maintenance.lifecycle-batch",
+            "req.maintenance.resumable-batch",
+            "req.maintenance.item-checkpoint",
+            "req.maintenance.remainder-movement",
+            "req.maintenance.writer-recovery",
             "req.maintenance.mesh-consolidation",
             "req.maintenance.gap-review",
             "req.maintenance.dream-read-only",
@@ -67,10 +81,14 @@ SUITE_SPECS = (
     ),
     (
         "suite:retrieval-ui-performance",
-        "python -m pytest -q tests/test_khaos_model_native_retrieval.py tests/test_kb_retrieval_calibration.py tests/test_kb_desktop_ui.py tests/test_khaos_model_runtime_readiness.py",
+        "python -m pytest -q tests/test_kb_active_index_generation.py tests/test_khaos_model_native_retrieval.py tests/test_kb_retrieval_calibration.py tests/test_kb_desktop_ui.py tests/test_khaos_model_runtime_readiness.py",
         (
             "req.retrieval.current-index",
             "req.retrieval.publisher-authority",
+            "req.retrieval.immutable-pointer",
+            "req.retrieval.exact-entry-deny",
+            "req.retrieval.exact-current-corruption",
+            "req.retrieval.retire-global-invalidation",
             "req.retrieval.neighborhood",
             "req.retrieval.ranking",
             "req.retrieval.desktop",
@@ -82,7 +100,7 @@ SUITE_SPECS = (
     ),
     (
         "suite:migration-installer",
-        "python -m pytest -q tests/test_khaos_logicguard_migration.py tests/test_codex_install.py",
+        "python -m pytest -q tests/test_khaos_logicguard_migration.py tests/test_kb_history_migration.py tests/test_codex_install.py",
         (
             "req.migration.only-legacy-reader",
             "req.migration.complete-conservative",
@@ -103,7 +121,7 @@ SUITE_SPECS = (
     ),
     (
         "suite:existing-khaos-regressions",
-        "python scripts/run_kb_convergence_checks.py --json",
+        "python -m pytest -q tests --junitxml=work/verification/khaos-full-regression.xml",
         ("inventory.existing-khaos-regressions",),
         3600,
         ("existing_regression_test_state",),
@@ -190,7 +208,7 @@ STRUCTURAL_BLOCKER_CODES = {
 
 
 def required_inventory_ids() -> tuple[str, ...]:
-    return tuple(obligation_id for obligation_id, *_rest in BINDINGS) + (
+    return tuple(obligation_id for obligation_id, *_rest in BINDINGS) + RESUMABLE_SLEEP_OBLIGATION_IDS + (
         "inventory.existing-khaos-regressions",
         "inventory.final-aggregate-receipt",
     )
@@ -269,7 +287,8 @@ def build_plan() -> TestMeshPlan:
             side_effect_owner_fields=tuple(value for suite in suites for value in suite.owns_side_effects),
             rationale=(
                 "The child suites follow the FlowGuard ownership split: authority/projection, Sleep/Dream, "
-                "retrieval/UI/performance, migration/install, surfaces/SkillGuard, regressions, contract, and one final owner."
+            "resumable Sleep/checkpoint/remainder behavior, pointer/deny/corruption retrieval safety, migration/install, "
+            "surfaces/SkillGuard, regressions, contract, and one final owner."
             ),
             derived_from_flowguard_model=True,
         ),

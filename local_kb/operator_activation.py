@@ -417,6 +417,14 @@ def validate_operator_activation_receipt(
     final_check = build_installation_check(
         repo_root=Path(repo_root).resolve(),
         codex_home=Path(codex_home).resolve(),
+        automation_status_authority={
+            "ok": True,
+            "status": "receipt-validation",
+            "issues": [],
+            "states": {
+                str(spec["id"]): "ACTIVE" for spec in REPO_AUTOMATION_SPECS
+            },
+        },
     )
     if final_check.get("ok") is not True:
         issues.append("operator-activation-install-check-failed")
@@ -458,6 +466,85 @@ def _current_operator_activation_record(codex_home: Path) -> Path | None:
     ):
         return None
     return path
+
+
+def current_operator_activation_status_authority(
+    repo_root: Path,
+    codex_home: Path,
+) -> dict[str, Any]:
+    """Resolve the current pointer-bound ACTIVE status authority without recursion.
+
+    This deliberately validates the receipt, its exact all-active target, and the
+    bound readiness evidence, but does not call ``build_installation_check``.  The
+    installation checker uses this projection to decide which status is current;
+    the full receipt validator then checks the resulting installation report.
+    """
+
+    repo_root = Path(repo_root).resolve()
+    codex_home = Path(codex_home).resolve()
+    record_path = _current_operator_activation_record(codex_home)
+    if record_path is None:
+        return {
+            "ok": False,
+            "status": "operator-activation-authority-absent",
+            "issues": ["operator-activation-head-missing-or-invalid"],
+        }
+    receipt = _load_json(record_path)
+    body = dict(receipt)
+    stored_hash = str(body.pop("receipt_hash", ""))
+    issues: list[str] = []
+    if receipt.get("schema_version") != SCHEMA_VERSION:
+        issues.append("operator-activation-schema-mismatch")
+    if not stored_hash or stored_hash != content_hash(body):
+        issues.append("operator-activation-receipt-hash-mismatch")
+    if receipt.get("status") != "current-machine-all-active":
+        issues.append("operator-activation-status-mismatch")
+    if Path(str(receipt.get("repo_root") or "")).resolve() != repo_root:
+        issues.append("operator-activation-repo-root-mismatch")
+    if Path(str(receipt.get("codex_home") or "")).resolve() != codex_home:
+        issues.append("operator-activation-codex-home-mismatch")
+
+    expected_ids = {str(spec["id"]) for spec in REPO_AUTOMATION_SPECS}
+    expected_states = {key: "ACTIVE" for key in expected_ids}
+    expected_user_paused = {key: False for key in expected_ids}
+    if receipt.get("restored_states") != expected_states:
+        issues.append("operator-activation-restored-state-mismatch")
+    if receipt.get("restored_user_paused") != expected_user_paused:
+        issues.append("operator-activation-user-pause-mismatch")
+    if receipt.get("target_hashes") != receipt.get("applied_hashes"):
+        issues.append("operator-activation-applied-hash-mismatch")
+
+    readiness_binding = (
+        receipt.get("readiness", {})
+        if isinstance(receipt.get("readiness"), Mapping)
+        else {}
+    )
+    aggregate_path = _safe_proof_path(
+        Path(str(readiness_binding.get("aggregate_receipt_path") or "")),
+        repo_root / ".local" / "assurance",
+    )
+    if aggregate_path is None:
+        issues.append("operator-activation-aggregate-receipt-missing")
+    else:
+        gate = validate_activation_readiness(repo_root, codex_home, aggregate_path)
+        if gate.get("ok") is not True or gate.get("binding") != dict(
+            readiness_binding
+        ):
+            issues.append("operator-activation-readiness-binding-stale")
+
+    return {
+        "ok": not issues,
+        "status": (
+            "current-machine-all-active"
+            if not issues
+            else "operator-activation-authority-invalid"
+        ),
+        "issues": issues,
+        "states": expected_states if not issues else {},
+        "user_paused": expected_user_paused if not issues else {},
+        "receipt_path": str(record_path),
+        "receipt_hash": stored_hash,
+    }
 
 
 def activate_all_for_current_machine(
@@ -572,6 +659,12 @@ def activate_all_for_current_machine(
         final_check = build_installation_check(
             repo_root=repo_root,
             codex_home=codex_home,
+            automation_status_authority={
+                "ok": True,
+                "status": "pending-current-machine-activation",
+                "issues": [],
+                "states": target_states,
+            },
         )
     except BaseException as exc:
         pause = pause_repo_automations(codex_home)

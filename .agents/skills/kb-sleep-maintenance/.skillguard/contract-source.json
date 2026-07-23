@@ -72,6 +72,7 @@
     ".flowguard/kb_sleep_skill_contract_model.py",
     ".agents/skills/local-kb-retrieve/scripts/kb_sleep.py",
     "local_kb/lifecycle.py",
+    "local_kb/sleep_batch.py",
     "local_kb/candidate_lifecycle.py",
     "local_kb/calibration.py",
     "local_kb/logicguard_models.py",
@@ -80,6 +81,10 @@
     "local_kb/active_index.py",
     "local_kb/maintenance.py",
     "local_kb/maintenance_lanes.py",
+    "tests/test_kb_automation_native_receipts.py",
+    "tests/test_sleep_batch.py",
+    "tests/test_kb_lifecycle_sleep_batch_integration.py",
+    "tests/test_kb_active_index_generation.py",
     "tests/test_kb_lifecycle.py",
     "tests/test_kb_sleep_convergence.py",
     "tests/test_kb_retrieval_calibration.py",
@@ -164,7 +169,8 @@
       "kind": "command",
       "evidence_class": "hard",
       "covers_obligation_ids": [
-        "obligation:kb-sleep-maintenance:lane-delta-intake"
+        "obligation:kb-sleep-maintenance:lane-delta-intake",
+        "obligation:kb-sleep-maintenance:frozen-batch-plan"
       ],
       "timeout_seconds": 120,
       "execution_owner_id": "owner:kb-sleep-maintenance:intake-runtime",
@@ -192,6 +198,7 @@
       "evidence_class": "hard",
       "covers_obligation_ids": [
         "obligation:kb-sleep-maintenance:observation-disposition",
+        "obligation:kb-sleep-maintenance:progress-checkpoint",
         "obligation:kb-sleep-maintenance:candidate-outcomes",
         "obligation:kb-sleep-maintenance:evidence-calibration",
         "obligation:kb-sleep-maintenance:logicguard-model-revision",
@@ -225,6 +232,8 @@
       "covers_obligation_ids": [
         "obligation:kb-sleep-maintenance:atomic-model-generation",
         "obligation:kb-sleep-maintenance:index-watermark-commit",
+        "obligation:kb-sleep-maintenance:remaining-reconciliation",
+        "obligation:kb-sleep-maintenance:downstream-not-run",
         "obligation:kb-sleep-maintenance:failure-fail-closed"
       ],
       "timeout_seconds": 120,
@@ -328,7 +337,9 @@
       ],
       "covers_obligation_ids": [
         "obligation:kb-sleep-maintenance:lane-delta-intake",
+        "obligation:kb-sleep-maintenance:frozen-batch-plan",
         "obligation:kb-sleep-maintenance:observation-disposition",
+        "obligation:kb-sleep-maintenance:progress-checkpoint",
         "obligation:kb-sleep-maintenance:candidate-outcomes",
         "obligation:kb-sleep-maintenance:evidence-calibration",
         "obligation:kb-sleep-maintenance:logicguard-model-revision",
@@ -336,6 +347,8 @@
         "obligation:kb-sleep-maintenance:dream-handoff-once",
         "obligation:kb-sleep-maintenance:atomic-model-generation",
         "obligation:kb-sleep-maintenance:index-watermark-commit",
+        "obligation:kb-sleep-maintenance:remaining-reconciliation",
+        "obligation:kb-sleep-maintenance:downstream-not-run",
         "obligation:kb-sleep-maintenance:failure-fail-closed"
       ],
       "claim_boundary": "This witness binds the immutable target-owned native receipt to its exact run, checks, and non-calibration native obligations."
@@ -346,7 +359,9 @@
       "profile_id": "enforced",
       "required_obligation_ids": [
         "obligation:kb-sleep-maintenance:lane-delta-intake",
+        "obligation:kb-sleep-maintenance:frozen-batch-plan",
         "obligation:kb-sleep-maintenance:observation-disposition",
+        "obligation:kb-sleep-maintenance:progress-checkpoint",
         "obligation:kb-sleep-maintenance:candidate-outcomes",
         "obligation:kb-sleep-maintenance:evidence-calibration",
         "obligation:kb-sleep-maintenance:logicguard-model-revision",
@@ -354,6 +369,8 @@
         "obligation:kb-sleep-maintenance:dream-handoff-once",
         "obligation:kb-sleep-maintenance:atomic-model-generation",
         "obligation:kb-sleep-maintenance:index-watermark-commit",
+        "obligation:kb-sleep-maintenance:remaining-reconciliation",
+        "obligation:kb-sleep-maintenance:downstream-not-run",
         "obligation:kb-sleep-maintenance:failure-fail-closed",
         "obligation:kb-sleep-maintenance:depth-calibration"
       ]

@@ -18,6 +18,7 @@ from local_kb.automation_contracts import (
     AGGREGATE_ASSURANCE_TIMEOUT_SECONDS,
     AUTOMATION_COMPLETION_CONTRACTS,
     PRE_RESTORE_ASSURANCE_TIMEOUT_SECONDS,
+    SLEEP_NATIVE_SOFT_DEADLINE_SECONDS,
     STANDARD_NATIVE_TIMEOUT_SECONDS,
     STANDARD_OWNER_TIMEOUT_SECONDS,
     UPDATE_NATIVE_TIMEOUT_SECONDS,
@@ -29,6 +30,78 @@ from local_kb.software_update import LEGAL_MANUAL_UPDATE_NOOP_REASONS
 
 RUNTIME_RECEIPT_SCHEMA = "khaos-brain.automation-native-receipt.v1"
 RUNTIME_WRAPPER_SCHEMA = "khaos-brain.automation-execution-result.v1"
+SLEEP_BATCH_PLAN_SCHEMA = "khaos-brain.sleep-batch-plan.v1"
+SLEEP_BATCH_CHECKPOINT_SCHEMA = "khaos-brain.sleep-batch-checkpoint.v1"
+SLEEP_BATCH_HEAD_SCHEMA = "khaos-brain.sleep-batch-head.v1"
+SLEEP_BATCH_HEAD_FIELDS = frozenset(
+    {
+        "schema_version",
+        "generation",
+        "batch_id",
+        "plan_ref",
+        "plan_digest",
+        "checkpoint_ref",
+        "checkpoint_digest",
+        "checkpoint_revision",
+        "settled",
+        "updated_at",
+    }
+)
+SLEEP_BATCH_PLAN_FIELDS = frozenset(
+    {
+        "schema_version",
+        "batch_id",
+        "created_at",
+        "input_watermark",
+        "input_digest",
+        "current_generation_id",
+        "prior_remaining_count",
+        "prior_no_reduction_streak",
+        "opening_remaining_count",
+        "newly_eligible_count",
+        "newly_eligible_item_ids",
+        "min_items",
+        "max_items",
+        "target_formula",
+        "target_item_count",
+        "eligible_item_ids",
+        "selected_item_ids",
+        "deferred_item_ids",
+        "deferred_item_count",
+    }
+)
+SLEEP_BATCH_CHECKPOINT_FIELDS = frozenset(
+    {
+        "schema_version",
+        "batch_id",
+        "revision",
+        "created_at",
+        "updated_at",
+        "state",
+        "settled",
+        "completed_item_ids",
+        "blocked_item_ids",
+        "pending_item_ids",
+        "deferred_item_ids",
+        "completed_count",
+        "blocked_count",
+        "pending_count",
+        "processed_count",
+        "opening_remaining_count",
+        "closing_remaining_count",
+        "net_reduction",
+        "prior_remaining_count",
+        "remainder_delta_from_prior",
+        "remainder_trend",
+        "no_reduction_streak",
+        "backlog_growing",
+    }
+)
+SLEEP_DOWNSTREAM_STAGE_IDS = (
+    "kb-dream",
+    "kb-organization-contribute",
+    "kb-organization-maintenance",
+)
 
 
 def _utc_now() -> str:
@@ -46,6 +119,10 @@ def _canonical_bytes(value: object) -> bytes:
 
 def content_hash(value: object) -> str:
     return hashlib.sha256(_canonical_bytes(value)).hexdigest().upper()
+
+
+def _sleep_batch_digest(value: object) -> str:
+    return hashlib.sha256(_canonical_bytes(value)).hexdigest()
 
 
 def _command_identity_issues(
@@ -91,6 +168,17 @@ def _command_identity_issues(
             issues.append("native-command-json-mode-missing")
     elif "--json" not in parts:
         issues.append("native-command-json-mode-missing")
+    if skill_id == "kb-sleep-maintenance":
+        if parts.count("--soft-deadline-seconds") != 1:
+            issues.append("sleep-native-command-soft-deadline-flag-count-mismatch")
+        else:
+            index = parts.index("--soft-deadline-seconds")
+            actual = parts[index + 1] if index + 1 < len(parts) else ""
+            if actual != str(SLEEP_NATIVE_SOFT_DEADLINE_SECONDS):
+                issues.append(
+                    "sleep-native-command-soft-deadline-mismatch:"
+                    f"expected={SLEEP_NATIVE_SOFT_DEADLINE_SECONDS};actual={actual or '<missing>'}"
+                )
     return issues
 
 
@@ -626,6 +714,382 @@ def _sleep_lifecycle_review_complete(review: Mapping[str, Any]) -> bool:
     )
 
 
+def _sleep_batch_facts(payload: Mapping[str, Any]) -> dict[str, Any]:
+    head = _mapping(payload.get("batch_head"))
+    plan = _mapping(payload.get("batch_plan"))
+    checkpoint = _mapping(payload.get("batch_checkpoint"))
+    plan_batch_id = str(plan.get("batch_id") or "")
+    checkpoint_batch_id = str(checkpoint.get("batch_id") or "")
+
+    def unique_strings(value: object) -> tuple[list[str], bool]:
+        raw = _list(value)
+        normalized = [str(item) for item in raw]
+        return normalized, bool(
+            len(raw) == len(normalized)
+            and all(isinstance(item, str) for item in raw)
+            and all(normalized)
+            and len(normalized) == len(set(normalized))
+        )
+
+    eligible_ids, eligible_unique = unique_strings(plan.get("eligible_item_ids"))
+    selected_ids, selected_unique = unique_strings(plan.get("selected_item_ids"))
+    newly_eligible_ids, newly_unique = unique_strings(plan.get("newly_eligible_item_ids"))
+    deferred_plan_ids, deferred_plan_unique = unique_strings(plan.get("deferred_item_ids"))
+    completed_ids, completed_unique = unique_strings(checkpoint.get("completed_item_ids"))
+    blocked_ids, blocked_unique = unique_strings(checkpoint.get("blocked_item_ids"))
+    pending_ids, pending_unique = unique_strings(checkpoint.get("pending_item_ids"))
+    deferred_checkpoint_ids, deferred_checkpoint_unique = unique_strings(
+        checkpoint.get("deferred_item_ids")
+    )
+
+    plan_counts = {
+        key: _nonnegative_int(plan.get(key))
+        for key in (
+            "prior_remaining_count",
+            "prior_no_reduction_streak",
+            "opening_remaining_count",
+            "newly_eligible_count",
+            "min_items",
+            "max_items",
+            "target_item_count",
+            "deferred_item_count",
+        )
+    }
+    checkpoint_counts = {
+        key: _nonnegative_int(checkpoint.get(key))
+        for key in (
+            "revision",
+            "completed_count",
+            "blocked_count",
+            "pending_count",
+            "processed_count",
+            "opening_remaining_count",
+            "closing_remaining_count",
+            "prior_remaining_count",
+            "no_reduction_streak",
+        )
+    }
+    checkpoint_net_reduction = checkpoint.get("net_reduction")
+    checkpoint_remainder_delta = checkpoint.get("remainder_delta_from_prior")
+    item_sets = (set(completed_ids), set(blocked_ids), set(pending_ids))
+    checkpoint_partition_ok = bool(
+        not (item_sets[0] & item_sets[1])
+        and not (item_sets[0] & item_sets[2])
+        and not (item_sets[1] & item_sets[2])
+        and set(selected_ids) == set().union(*item_sets)
+    )
+    plan_ok = bool(
+        set(plan) == SLEEP_BATCH_PLAN_FIELDS
+        and plan.get("schema_version") == SLEEP_BATCH_PLAN_SCHEMA
+        and plan_batch_id
+        and str(plan.get("created_at") or "")
+        and plan.get("input_watermark") is not None
+        and str(plan.get("input_digest") or "")
+        and isinstance(plan.get("current_generation_id"), str)
+        and plan.get("target_formula")
+        == "min(opening_remaining_count, clamp(2 * newly_eligible_count, min_items, max_items))"
+        and all(value is not None for value in plan_counts.values())
+        and eligible_unique
+        and selected_unique
+        and newly_unique
+        and deferred_plan_unique
+        and selected_ids + deferred_plan_ids == eligible_ids
+        and set(newly_eligible_ids).issubset(set(eligible_ids))
+        and not (set(selected_ids) & set(deferred_plan_ids))
+        and plan_counts["newly_eligible_count"] == len(newly_eligible_ids)
+        and plan_counts["target_item_count"] == len(selected_ids)
+        and plan_counts["deferred_item_count"] == len(deferred_plan_ids)
+        and plan_counts["opening_remaining_count"] == len(eligible_ids)
+        and 0 < plan_counts["min_items"] <= plan_counts["max_items"]
+        and plan_counts["target_item_count"]
+        == min(
+            plan_counts["opening_remaining_count"],
+            max(
+                plan_counts["min_items"],
+                min(
+                    plan_counts["max_items"],
+                    2 * plan_counts["newly_eligible_count"],
+                ),
+            ),
+        )
+    )
+    checkpoint_ok = bool(
+        set(checkpoint) == SLEEP_BATCH_CHECKPOINT_FIELDS
+        and checkpoint.get("schema_version") == SLEEP_BATCH_CHECKPOINT_SCHEMA
+        and checkpoint_batch_id == plan_batch_id
+        and str(checkpoint.get("created_at") or "")
+        and str(checkpoint.get("updated_at") or "")
+        and str(checkpoint.get("state") or "")
+        in {"in_progress", "completed", "settled_with_blocks"}
+        and all(value is not None for value in checkpoint_counts.values())
+        and isinstance(checkpoint_net_reduction, int)
+        and not isinstance(checkpoint_net_reduction, bool)
+        and isinstance(checkpoint_remainder_delta, int)
+        and not isinstance(checkpoint_remainder_delta, bool)
+        and completed_unique
+        and blocked_unique
+        and pending_unique
+        and deferred_checkpoint_unique
+        and checkpoint_partition_ok
+        and deferred_checkpoint_ids == deferred_plan_ids
+        and checkpoint_counts["completed_count"] == len(completed_ids)
+        and checkpoint_counts["blocked_count"] == len(blocked_ids)
+        and checkpoint_counts["pending_count"] == len(pending_ids)
+        and checkpoint_counts["processed_count"] == len(completed_ids) + len(blocked_ids)
+        and checkpoint_counts["opening_remaining_count"]
+        == plan_counts["opening_remaining_count"]
+        and checkpoint_counts["prior_remaining_count"]
+        == plan_counts["prior_remaining_count"]
+        and checkpoint_counts["closing_remaining_count"]
+        == len(pending_ids) + len(deferred_checkpoint_ids)
+        and checkpoint_remainder_delta
+        == checkpoint_counts["closing_remaining_count"]
+        - checkpoint_counts["prior_remaining_count"]
+        and checkpoint_net_reduction
+        == checkpoint_counts["opening_remaining_count"]
+        - checkpoint_counts["closing_remaining_count"]
+        and checkpoint.get("settled") == (len(pending_ids) == 0)
+        and (
+            checkpoint.get("state") == "in_progress"
+            if pending_ids
+            else checkpoint.get("state")
+            == ("settled_with_blocks" if blocked_ids else "completed")
+        )
+        and isinstance(checkpoint.get("backlog_growing"), bool)
+        and str(checkpoint.get("remainder_trend") or "")
+        in {"shrinking", "flat", "growing"}
+        and checkpoint.get("remainder_trend")
+        == (
+            "shrinking"
+            if checkpoint_counts["closing_remaining_count"]
+            < checkpoint_counts["prior_remaining_count"]
+            else "growing"
+            if checkpoint_counts["closing_remaining_count"]
+            > checkpoint_counts["prior_remaining_count"]
+            else "flat"
+        )
+        and checkpoint_counts["no_reduction_streak"]
+        == (
+            0
+            if checkpoint.get("remainder_trend") == "shrinking"
+            else plan_counts["prior_no_reduction_streak"] + 1
+        )
+        and checkpoint.get("backlog_growing")
+        is (checkpoint_counts["no_reduction_streak"] >= 2)
+    )
+    head_ok = bool(
+        set(head) == SLEEP_BATCH_HEAD_FIELDS
+        and head.get("schema_version") == SLEEP_BATCH_HEAD_SCHEMA
+        and (_nonnegative_int(head.get("generation")) or 0) > 0
+        and head.get("batch_id") == plan_batch_id
+        and head.get("plan_ref") == f"{plan_batch_id}/plan.json"
+        and head.get("plan_digest") == _sleep_batch_digest(plan)
+        and head.get("checkpoint_ref") == f"{plan_batch_id}/checkpoint.json"
+        and head.get("checkpoint_digest") == _sleep_batch_digest(checkpoint)
+        and head.get("checkpoint_revision") == checkpoint.get("revision")
+        and head.get("settled") == checkpoint.get("settled")
+        and str(head.get("updated_at") or "")
+    )
+    top_counts = {
+        key: _nonnegative_int(payload.get(key))
+        for key in (
+            "previous_remaining",
+            "newly_eligible",
+            "opening_remaining",
+            "target_batch_size",
+            "completed_this_attempt",
+            "blocked_this_attempt",
+            "closing_remaining",
+        )
+    }
+    net_reduction = payload.get("net_reduction")
+    convergence_status = str(payload.get("convergence_status") or "")
+    canonical_counts_ok = bool(
+        all(value is not None for value in top_counts.values())
+        and isinstance(net_reduction, int)
+        and not isinstance(net_reduction, bool)
+        and top_counts["previous_remaining"] == plan_counts["prior_remaining_count"]
+        and top_counts["newly_eligible"] == plan_counts["newly_eligible_count"]
+        and top_counts["opening_remaining"] == plan_counts["opening_remaining_count"]
+        and top_counts["target_batch_size"] == plan_counts["target_item_count"]
+        and top_counts["completed_this_attempt"]
+        <= checkpoint_counts["completed_count"]
+        and top_counts["blocked_this_attempt"] <= checkpoint_counts["blocked_count"]
+        and top_counts["completed_this_attempt"]
+        + top_counts["blocked_this_attempt"]
+        <= checkpoint_counts["processed_count"]
+        and top_counts["closing_remaining"]
+        == checkpoint_counts["closing_remaining_count"]
+        and net_reduction
+        == top_counts["previous_remaining"] - top_counts["closing_remaining"]
+        and convergence_status
+        in {"backlog_reduced", "no_convergence", "backlog_growing"}
+        and convergence_status
+        == (
+            "backlog_reduced"
+            if top_counts["closing_remaining"] < top_counts["previous_remaining"]
+            else "backlog_growing"
+            if checkpoint_counts["no_reduction_streak"] >= 2
+            else "no_convergence"
+        )
+    )
+    return {
+        "plan": plan,
+        "checkpoint": checkpoint,
+        "head": head,
+        "head_ok": head_ok,
+        "plan_ok": plan_ok,
+        "checkpoint_ok": checkpoint_ok,
+        "canonical_counts_ok": canonical_counts_ok,
+        "top_counts": top_counts,
+        "net_reduction": net_reduction,
+        "convergence_status": convergence_status,
+    }
+
+
+def _sleep_downstream_not_run(payload: Mapping[str, Any], *, reason: str) -> bool:
+    stages = _mapping(payload.get("downstream_stages"))
+    return bool(
+        set(stages) == set(SLEEP_DOWNSTREAM_STAGE_IDS)
+        and all(
+            _mapping(stages.get(stage_id)).get("status") == "not_run"
+            and _mapping(stages.get(stage_id)).get("reason") == reason
+            for stage_id in SLEEP_DOWNSTREAM_STAGE_IDS
+        )
+    )
+
+
+def _sleep_progress_saved_evidence(
+    payload: Mapping[str, Any], exit_code: int
+) -> dict[str, dict[str, Any]]:
+    skill_id = "kb-sleep-maintenance"
+    batch = _sleep_batch_facts(payload)
+    lock_acquired, lock_released = _sleep_lock_facts(payload)
+    input_watermark = _nonnegative_int(payload.get("input_watermark"))
+    output_watermark = _nonnegative_int(payload.get("output_watermark"))
+    reason = str(payload.get("reason") or "sleep-progress-saved")
+    downstream_ok = _sleep_downstream_not_run(payload, reason=reason)
+    checkpoint = _mapping(payload.get("batch_checkpoint"))
+    settled_this_attempt = int(batch["top_counts"].get("completed_this_attempt") or 0) + int(
+        batch["top_counts"].get("blocked_this_attempt") or 0
+    )
+    base_ok = bool(
+        exit_code == 0
+        and payload.get("final_run_state") == "progress_saved"
+        and lock_acquired
+        and lock_released
+        and batch["head_ok"]
+        and batch["plan_ok"]
+        and batch["checkpoint_ok"]
+        and batch["canonical_counts_ok"]
+        and checkpoint.get("state") == "in_progress"
+        and checkpoint.get("settled") is False
+        and int(checkpoint.get("pending_count") or 0) > 0
+        and input_watermark is not None
+        and output_watermark == input_watermark
+    )
+    completion_only = {
+        "candidate-outcomes",
+        "evidence-calibration",
+        "logicguard-model-revision",
+        "grounded-model-mesh",
+        "dream-handoff-once",
+        "atomic-model-generation",
+        "index-watermark-commit",
+    }
+    evidence: dict[str, dict[str, Any]] = {}
+    for suffix in _all_domain_suffixes(skill_id):
+        item_id = obligation_id(skill_id, suffix)
+        if suffix in completion_only:
+            evidence[item_id] = _evidence(
+                True,
+                "This progress_saved attempt did not claim the complete-generation obligation; the frozen batch remains open.",
+                "final_run_state",
+                "batch_checkpoint",
+                outcome="not_run",
+                branch_id="progress-saved",
+            )
+        elif suffix == "lane-delta-intake":
+            evidence[item_id] = _evidence(
+                base_ok,
+                "Sleep acquired and released the exact lane while preserving the frozen batch boundary.",
+                "run_id",
+                "lane_lock",
+                "lock_release",
+                "batch_plan",
+                "batch_head",
+                branch_id="progress-saved",
+            )
+        elif suffix == "frozen-batch-plan":
+            evidence[item_id] = _evidence(
+                batch["head_ok"] and batch["plan_ok"],
+                "The immutable versioned batch plan and HEAD digest bind one finite selected item set and defer later work.",
+                "batch_head",
+                "batch_plan",
+                branch_id="progress-saved",
+            )
+        elif suffix == "observation-disposition":
+            evidence[item_id] = _evidence(
+                base_ok and batch["head_ok"],
+                "Any item settled during this bounded attempt is captured by the exact completed or blocked checkpoint partition.",
+                "completed_this_attempt",
+                "blocked_this_attempt",
+                "batch_checkpoint",
+                outcome="performed" if settled_this_attempt else "not_run",
+                branch_id="progress-saved",
+            )
+        elif suffix == "progress-checkpoint":
+            evidence[item_id] = _evidence(
+                base_ok,
+                "Sleep durably exposed an open versioned checkpoint with exact completed, blocked, pending, and deferred identities.",
+                "batch_plan",
+                "batch_checkpoint",
+                "batch_head",
+                branch_id="progress-saved",
+            )
+        elif suffix == "remaining-reconciliation":
+            evidence[item_id] = _evidence(
+                batch["canonical_counts_ok"],
+                "The canonical per-attempt remainder fields reconcile exactly.",
+                "previous_remaining",
+                "newly_eligible",
+                "opening_remaining",
+                "target_batch_size",
+                "completed_this_attempt",
+                "blocked_this_attempt",
+                "closing_remaining",
+                "net_reduction",
+                "convergence_status",
+                branch_id="progress-saved",
+            )
+        elif suffix == "downstream-not-run":
+            evidence[item_id] = _evidence(
+                downstream_ok,
+                "Dream and both organization descendants are explicitly not_run for this open Sleep batch.",
+                "downstream_stages",
+                branch_id="progress-saved",
+            )
+        elif suffix == "failure-fail-closed":
+            evidence[item_id] = _evidence(
+                base_ok and downstream_ok,
+                "progress_saved preserves the committed watermark, releases the lane, and does not infer generation completion.",
+                "input_watermark",
+                "output_watermark",
+                "final_run_state",
+                "lock_release",
+                "downstream_stages",
+                branch_id="progress-saved",
+            )
+        else:
+            evidence[item_id] = _evidence(
+                False,
+                f"Unhandled Sleep progress_saved obligation: {suffix}",
+                "final_run_state",
+                branch_id="progress-saved",
+            )
+    return evidence
+
+
 def _sleep_evidence(payload: Mapping[str, Any], exit_code: int) -> dict[str, dict[str, Any]]:
     skill_id = "kb-sleep-maintenance"
     run_id = str(payload.get("run_id") or "")
@@ -633,6 +1097,8 @@ def _sleep_evidence(payload: Mapping[str, Any], exit_code: int) -> dict[str, dic
     lock_release = _mapping(payload.get("lock_release"))
     terminal_gate = _mapping(payload.get("terminal_gate"))
     reason = str(payload.get("reason") or "")
+    if payload.get("final_run_state") == "progress_saved":
+        return _sleep_progress_saved_evidence(payload, exit_code)
     if (
         payload.get("final_run_state") == "retryable"
         and payload.get("retryable") is True
@@ -659,19 +1125,43 @@ def _sleep_evidence(payload: Mapping[str, Any], exit_code: int) -> dict[str, dic
         )
     consumed_range = _mapping(payload.get("consumed_range"))
     lifecycle_review = _mapping(payload.get("lifecycle_review"))
+    batch = _sleep_batch_facts(payload)
     lifecycle_review_complete = _sleep_lifecycle_review_complete(lifecycle_review)
     lock_acquired, lock_released = _sleep_lock_facts(payload)
     acknowledgements = [str(item) for item in _list(payload.get("handoff_acknowledgements"))]
     blockers = _list(payload.get("blockers"))
     input_watermark = payload.get("input_watermark")
     output_watermark = payload.get("output_watermark")
-    completed = exit_code == 0 and payload.get("final_run_state") == "completed"
+    completed_with_blocks = payload.get("final_run_state") == "completed_with_blocks"
+    completed = exit_code == 0 and payload.get("final_run_state") in {
+        "completed",
+        "completed_with_blocks",
+    }
     opening_backlog = payload.get("opening_actionable_backlog")
     newly_admitted = payload.get("newly_admitted")
     terminally_disposed = payload.get("terminally_disposed")
     explicitly_parked = payload.get("explicitly_parked")
     closing_backlog = payload.get("closing_actionable_backlog")
     disposition_ids = [str(item) for item in _list(payload.get("disposition_ids"))]
+    blocked_items = [_mapping(item) for item in _list(payload.get("blocked_items"))]
+    checkpoint_blocked_ids = [
+        str(item)
+        for item in _list(_mapping(payload.get("batch_checkpoint")).get("blocked_item_ids"))
+    ]
+    blocked_items_ok = bool(
+        (not completed_with_blocks and not checkpoint_blocked_ids)
+        or (
+            completed_with_blocks
+            and checkpoint_blocked_ids
+            and [str(item.get("item_id") or "") for item in blocked_items]
+            == checkpoint_blocked_ids
+            and all(
+                str(item.get("owner") or "").strip()
+                and str(item.get("reopen_condition") or "").strip()
+                for item in blocked_items
+            )
+        )
+    )
     backlog_delta = payload.get("backlog_delta")
     model_generation = _mapping(payload.get("model_generation"))
     model_receipt = _mapping(model_generation.get("receipt"))
@@ -734,6 +1224,8 @@ def _sleep_evidence(payload: Mapping[str, Any], exit_code: int) -> dict[str, dic
                 and payload.get("input_digest") == payload.get("consumed_digest")
                 and str(payload.get("input_generation") or "")
                 and str(payload.get("policy_version") or "")
+                and batch["head_ok"]
+                and batch["plan_ok"]
             ),
             "Native Sleep receipt binds the run id, committed watermark range, and consumed digest.",
             "run_id",
@@ -742,18 +1234,45 @@ def _sleep_evidence(payload: Mapping[str, Any], exit_code: int) -> dict[str, dic
             "output_watermark",
             "consumed_range",
             "consumed_digest",
+            "batch_head",
+            "batch_plan",
+        ),
+        obligation_id(skill_id, "frozen-batch-plan"): _evidence(
+            batch["head_ok"] and batch["plan_ok"],
+            "The terminal Sleep receipt binds one immutable versioned batch plan, its HEAD digest, and its exact selected and deferred identities.",
+            "batch_head",
+            "batch_plan",
         ),
         obligation_id(skill_id, "observation-disposition"): _evidence(
             valid_counts
             and convergence_ok
+            and batch["checkpoint_ok"]
+            and blocked_items_ok
             and len(disposition_ids) == len(set(disposition_ids))
-            and (int(newly_admitted) == 0 or bool(disposition_ids)),
+            and (
+                int(newly_admitted) == 0
+                or bool(disposition_ids)
+                or bool(checkpoint_blocked_ids)
+            ),
             "Native Sleep receipt reports admission, disposition, parking, and closing backlog counts.",
             "newly_admitted",
             "terminally_disposed",
             "explicitly_parked",
             "closing_actionable_backlog",
             "disposition_ids",
+            "blocked_items",
+            "batch_checkpoint",
+        ),
+        obligation_id(skill_id, "progress-checkpoint"): _evidence(
+            batch["checkpoint_ok"]
+            and batch["head_ok"]
+            and _mapping(payload.get("batch_checkpoint")).get("settled") is True
+            and _mapping(payload.get("batch_checkpoint")).get("state")
+            == ("settled_with_blocks" if completed_with_blocks else "completed"),
+            "The completed run binds the settled versioned checkpoint and exact item partition used for publication.",
+            "batch_plan",
+            "batch_checkpoint",
+            "batch_head",
         ),
         obligation_id(skill_id, "candidate-outcomes"): _evidence(
             lifecycle_review_complete
@@ -824,6 +1343,44 @@ def _sleep_evidence(payload: Mapping[str, Any], exit_code: int) -> dict[str, dic
             "output_watermark",
             "final_run_state",
             "lock_release",
+        ),
+        obligation_id(skill_id, "remaining-reconciliation"): _evidence(
+            batch["canonical_counts_ok"],
+            "The canonical per-attempt remainder fields reconcile with the frozen plan and terminal checkpoint.",
+            "previous_remaining",
+            "newly_eligible",
+            "opening_remaining",
+            "target_batch_size",
+            "completed_this_attempt",
+            "blocked_this_attempt",
+            "closing_remaining",
+            "net_reduction",
+            "convergence_status",
+            "batch_plan",
+            "batch_checkpoint",
+        ),
+        obligation_id(skill_id, "downstream-not-run"): _evidence(
+            (
+                _sleep_downstream_not_run(
+                    payload,
+                    reason="sleep-completed-with-blocks",
+                )
+                if completed_with_blocks
+                else not _mapping(payload.get("downstream_stages"))
+            ),
+            (
+                "Dream and both organization descendants are explicitly not_run because this published batch completed with blocked siblings."
+                if completed_with_blocks
+                else "The Sleep batch completed without blocked siblings, so progress/failure downstream gating is not applicable to this terminal."
+            ),
+            "downstream_stages",
+            "final_run_state",
+            outcome="performed" if completed_with_blocks else "not_applicable",
+            branch_id=(
+                "generation-completed-with-blocks"
+                if completed_with_blocks
+                else "generation-completed"
+            ),
         ),
         obligation_id(skill_id, "failure-fail-closed"): _evidence(
             completed and not blockers and lock_acquired and lock_released,
@@ -1749,7 +2306,7 @@ def _update_evidence(payload: Mapping[str, Any], exit_code: int) -> dict[str, di
         obligation_id(skill_id, "logicguard-authority-cutover"): _evidence(
             migration.get("ok") is True
             and str(migration.get("migration_id") or "")
-            == "kb-maintenance-standard-v5-researchguard-logic-native"
+            == "kb-maintenance-standard-v6-resumable-sleep-current-index"
             and logicguard_authority.get("ok") is True
             and bool(str(logicguard_authority.get("generation_id") or "")),
             "The versioned update owner published and validated one exact current LogicGuard authority generation.",
@@ -1864,6 +2421,14 @@ def evaluate_native_payload(
             f"native-run-id-mismatch:expected={expected_run_id};actual={payload_run_id or '<missing>'}"
         )
     ok = not issues and int(exit_code) == 0
+    progress_saved = (
+        skill_id == "kb-sleep-maintenance"
+        and payload.get("final_run_state") == "progress_saved"
+    )
+    completed_with_blocks = (
+        skill_id == "kb-sleep-maintenance"
+        and payload.get("final_run_state") == "completed_with_blocks"
+    )
     noop = (
         payload.get("skipped") is True
         or payload.get("status") == "no-op"
@@ -1871,7 +2436,17 @@ def evaluate_native_payload(
     )
     return {
         "ok": ok,
-        "terminal_status": "no-op" if ok and noop else "completed" if ok else "failed",
+        "terminal_status": (
+            "progress_saved"
+            if ok and progress_saved
+            else "completed_with_blocks"
+            if ok and completed_with_blocks
+            else "no-op"
+            if ok and noop
+            else "completed"
+            if ok
+            else "failed"
+        ),
         "evidence": evidence,
         "issues": issues,
     }
@@ -2027,7 +2602,10 @@ def validate_native_receipt(
     failed = sorted(item for item, row in selected.items() if row.get("ok") is not True)
     if failed:
         issues.append(f"phase-obligations-failed:{failed}")
-    if receipt.get("terminal_status") not in {"completed", "no-op"}:
+    allowed_terminals = {"completed", "no-op"}
+    if skill_id == "kb-sleep-maintenance":
+        allowed_terminals.update({"progress_saved", "completed_with_blocks"})
+    if receipt.get("terminal_status") not in allowed_terminals:
         issues.append("native-terminal-not-successful")
     if not fixture:
         issues.extend(
@@ -2118,6 +2696,61 @@ def build_fixture_payload(
             "input_digest": "fixture-digest",
             "policy_version": "fixture-policy",
             "receipt_id": "fixture-sleep-receipt",
+            "batch_plan": {
+                "schema_version": SLEEP_BATCH_PLAN_SCHEMA,
+                "batch_id": "fixture-batch",
+                "created_at": "2026-07-22T00:00:00+00:00",
+                "input_watermark": 4,
+                "input_digest": "fixture-digest",
+                "current_generation_id": "fixture-generation",
+                "prior_remaining_count": 1,
+                "prior_no_reduction_streak": 0,
+                "opening_remaining_count": 2,
+                "newly_eligible_count": 1,
+                "newly_eligible_item_ids": ["fixture-item-new"],
+                "min_items": 1,
+                "max_items": 250,
+                "target_formula": "min(opening_remaining_count, clamp(2 * newly_eligible_count, min_items, max_items))",
+                "target_item_count": 2,
+                "eligible_item_ids": ["fixture-item-prior", "fixture-item-new"],
+                "selected_item_ids": ["fixture-item-prior", "fixture-item-new"],
+                "deferred_item_ids": [],
+                "deferred_item_count": 0,
+            },
+            "batch_checkpoint": {
+                "schema_version": SLEEP_BATCH_CHECKPOINT_SCHEMA,
+                "batch_id": "fixture-batch",
+                "revision": 2,
+                "created_at": "2026-07-22T00:00:00+00:00",
+                "updated_at": "2026-07-22T00:01:00+00:00",
+                "state": "completed",
+                "settled": True,
+                "completed_item_ids": ["fixture-item-prior", "fixture-item-new"],
+                "blocked_item_ids": [],
+                "pending_item_ids": [],
+                "deferred_item_ids": [],
+                "completed_count": 2,
+                "blocked_count": 0,
+                "pending_count": 0,
+                "processed_count": 2,
+                "opening_remaining_count": 2,
+                "closing_remaining_count": 0,
+                "net_reduction": 2,
+                "prior_remaining_count": 1,
+                "remainder_delta_from_prior": -1,
+                "remainder_trend": "shrinking",
+                "no_reduction_streak": 0,
+                "backlog_growing": False,
+            },
+            "previous_remaining": 1,
+            "newly_eligible": 1,
+            "opening_remaining": 2,
+            "target_batch_size": 2,
+            "completed_this_attempt": 2,
+            "blocked_this_attempt": 0,
+            "closing_remaining": 0,
+            "net_reduction": 1,
+            "convergence_status": "backlog_reduced",
             "opening_actionable_backlog": 1,
             "newly_admitted": 1,
             "terminally_disposed": 1,
@@ -2422,7 +3055,7 @@ def build_fixture_payload(
                     "ok": True,
                     "status": "current",
                     "migration_id": (
-                        "kb-maintenance-standard-v5-researchguard-logic-native"
+                        "kb-maintenance-standard-v6-resumable-sleep-current-index"
                     ),
                     "validation": {
                         "ok": True,
@@ -2507,6 +3140,20 @@ def build_fixture_payload(
         "remaining_process_count": 0,
     }
     if skill_id == "kb-sleep-maintenance":
+        plan = _mapping(payload["batch_plan"])
+        checkpoint = _mapping(payload["batch_checkpoint"])
+        payload["batch_head"] = {
+            "schema_version": SLEEP_BATCH_HEAD_SCHEMA,
+            "generation": 1,
+            "batch_id": plan["batch_id"],
+            "plan_ref": f"{plan['batch_id']}/plan.json",
+            "plan_digest": _sleep_batch_digest(plan),
+            "checkpoint_ref": f"{plan['batch_id']}/checkpoint.json",
+            "checkpoint_digest": _sleep_batch_digest(checkpoint),
+            "checkpoint_revision": checkpoint["revision"],
+            "settled": checkpoint["settled"],
+            "updated_at": checkpoint["updated_at"],
+        }
         payload["lane_lock"]["run_id"] = payload["run_id"]
         payload["lock_release"]["run_id"] = payload["run_id"]
         payload["lock_release"]["lock"]["run_id"] = payload["run_id"]

@@ -10,8 +10,8 @@
 </p>
 <!-- README HERO END -->
 
-- Repository head (`main`) / 仓库主线（`main`）: `v0.6.9`
-- Latest released version / 最新已发布版本: `v0.6.9`
+- Repository head (`main`) / 仓库主线（`main`）: `v0.7.0`
+- Latest released version / 最新已发布版本: `v0.7.0`
 - Project name / 项目名称: `Khaos Brain`
 - English lead content comes first; the full Chinese section follows below. / 英文主内容在前，完整中文部分在后方。
 
@@ -84,7 +84,7 @@ Personal mode is the default. Each machine keeps its own local KB, including pri
 The system follows a brain-like rhythm:
 
 - **Awake work:** the agent retrieves relevant experience before a task and writes one caller-identified observation afterward. Postflight performs one durable append plus an event-bound terminal receipt; it never replays the full lifecycle or publishes models/indexes synchronously.
-- **Sleep consolidation:** `KB Sleep` is the sole canonical writer. It turns every admitted entry into an exact LogicGuard revision, audits missing support and opposition, assembles grounded scoped ModelMeshes, and atomically publishes models, meshes, projections, and the active index as one generation.
+- **Sleep consolidation:** `KB Sleep` is the sole canonical writer. It freezes a bounded batch, checkpoints each settled item, resumes only pending work after interruption, and keeps the previous validated generation readable until models, meshes, lifecycle review, projections, and the immutable active-index pointer are ready for one final switch.
 - **Dream verification:** `KB Dream` pins an exact immutable generation and pressures evidence, assumptions, rebuttals/counterexamples, and boundaries. It can only send typed model-gap handoffs to Sleep and must prove canonical authority unchanged.
 - **Manual software update:** the desktop reports exact upstream status, and the transactional updater runs only after an explicit user request to AI in the current conversation; there is no scheduled update task.
 - **Organization maintenance:** shared organization sources have their own candidate, review, and maintenance path.
@@ -212,7 +212,7 @@ The exact migration phases, rollback behavior, pause-state preservation, and suc
 
 | 仓库主线 | 最新发布 | 项目 | 许可证 |
 | --- | --- | --- | --- |
-| `v0.6.9` | `v0.6.9` | `Khaos Brain` | MIT |
+| `v0.7.0` | `v0.7.0` | `Khaos Brain` | MIT |
 
 ## 它是什么
 
@@ -304,7 +304,7 @@ Organization mode 是可选的。Settings 验证 organization KB GitHub reposito
 系统刻意采用脑式节律：
 
 - **醒着做任务：** agent 在任务前检索相关经验，在任务后用一个稳定事件 ID 写回一条观察。Postflight 只做一次持久写入和事件绑定终态回执，不同步重放完整生命周期，也不发布模型或索引。
-- **睡眠整理：** `KB Sleep` 是唯一正常运行时模型写入者。它把每条经验整理成精确 LogicGuard revision，检查证据、warrant、假设、反驳和边界缺口，再把模型、ModelMesh、卡片投影和索引作为一个 generation 原子发布。
+- **睡眠整理：** `KB Sleep` 是唯一正常运行时模型写入者。它先冻结一个有上限的批次，每完成一条就保存断点；中断后只续做未完成项，并让旧的已验证知识库继续可读，直到模型、ModelMesh、生命周期复核、卡片投影和不可变索引都准备好，最后只切换一次当前指针。
 - **快速而守门的检索：** 日常查询先用路线和词法找到入口，再读取精确模型、根 ArgumentBlock、缺口和已验证的 mesh 邻域；`related_cards`、共同出现或 YAML 投影都不能授权扩展。
 - **做梦验证：** `KB Dream` 固定一个不可变 generation，测试移除证据、移除假设、加强反驳/反例和压力边界；它只能把模型缺口交给 Sleep，并且结束前必须证明权威没有被改写。
 - **手动软件更新：** 桌面只显示精确上游状态；只有用户在当前对话里明确要求 AI 更新时，事务式更新流程才会运行。系统没有软件自动更新计划任务。

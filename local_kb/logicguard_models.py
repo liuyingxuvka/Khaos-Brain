@@ -1760,3 +1760,46 @@ def scope_authority_status(repo_root: Path, scope: str) -> dict[str, Any]:
         "mesh_recovery_receipts": [item.to_dict() for item in mesh_recoveries],
         "issues": issues,
     }
+
+
+def recover_authority_scopes(
+    repo_root: Path,
+    scopes: Iterable[str] = AUTHORITY_SCOPES,
+) -> dict[str, Any]:
+    """Run the model stores' explicit crash-recovery protocol before one writer.
+
+    This is not a read fallback and does not select an older authority.  Each
+    store either completes a fully prepared immutable publication or preserves
+    the prior manifest and removes only journal-declared unpublished artifacts.
+    """
+
+    root = Path(repo_root).resolve()
+    results: list[dict[str, Any]] = []
+    issues: list[str] = []
+    for raw_scope in sorted(set(scopes)):
+        scope = normalize_authority_scope(raw_scope)
+        try:
+            model_recoveries = open_model_store(root, scope).recover()
+            mesh_recoveries = open_mesh_store(root, scope).recover()
+            results.append(
+                {
+                    "scope": scope,
+                    "status": "recovered" if model_recoveries or mesh_recoveries else "clean",
+                    "model_recovery_receipts": [item.to_dict() for item in model_recoveries],
+                    "mesh_recovery_receipts": [item.to_dict() for item in mesh_recoveries],
+                }
+            )
+        except Exception as exc:
+            issue = f"{scope}: {type(exc).__name__}: {exc}"
+            issues.append(issue)
+            results.append({"scope": scope, "status": "blocked", "issues": [issue]})
+    return {
+        "ok": not issues,
+        "status": "recovered" if any(row.get("status") == "recovered" for row in results) else "clean",
+        "scopes": results,
+        "issues": issues,
+        "claim_boundary": (
+            "Explicit current-store crash recovery only; no prior generation, "
+            "alternate reader, or compatibility authority is selected."
+        ),
+    }

@@ -18,6 +18,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from local_kb.automation_contracts import (  # noqa: E402
     AUTOMATION_COMPLETION_CONTRACTS,
+    SLEEP_NATIVE_SOFT_DEADLINE_SECONDS,
     STANDARD_OWNER_TIMEOUT_SECONDS,
     STANDARD_NATIVE_TIMEOUT_SECONDS,
 )
@@ -59,6 +60,8 @@ def native_command(skill_id: str, *, repo_root: Path, run_id: str) -> list[str]:
             str(repo_root),
             "--run-id",
             run_id,
+            "--soft-deadline-seconds",
+            str(SLEEP_NATIVE_SOFT_DEADLINE_SECONDS),
             "--json",
         ],
         "kb-dream-pass": [
@@ -133,7 +136,31 @@ def run_automation(
         stderr = str(exc.stderr or "")
         cleanup = dict(getattr(exc, "cleanup_receipt", {}) or {})
     payload = _parse_payload(stdout)
+    if skill_id == "kb-sleep-maintenance" and exit_code == 124:
+        payload.update(
+            {
+                "run_id": run_id,
+                "final_run_state": "failed",
+                "reason": "sleep-native-hard-timeout",
+                "downstream_stages": {
+                    stage_id: {
+                        "status": "not_run",
+                        "reason": "sleep-native-hard-timeout",
+                    }
+                    for stage_id in (
+                        "kb-dream",
+                        "kb-organization-contribute",
+                        "kb-organization-maintenance",
+                    )
+                },
+            }
+        )
     payload["_owner_timeout_policy"] = {
+        "soft_deadline_seconds": (
+            SLEEP_NATIVE_SOFT_DEADLINE_SECONDS
+            if skill_id == "kb-sleep-maintenance"
+            else 0
+        ),
         "native_timeout_seconds": STANDARD_NATIVE_TIMEOUT_SECONDS,
         "owner_timeout_seconds": STANDARD_OWNER_TIMEOUT_SECONDS,
         "aggregate_timeout_seconds": STANDARD_OWNER_TIMEOUT_SECONDS,

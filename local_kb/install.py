@@ -183,16 +183,27 @@ SLEEP_AUTOMATION_PROMPT = (
     "Run only `python scripts/run_kb_automation.py --skill kb-sleep-maintenance --json`; the target-owned "
     "runner owns lane-to-terminal orchestration, invokes the native Sleep entrypoint "
     "`.agents/skills/local-kb-retrieve/scripts/kb_sleep.py` exactly once, and validates this "
-    "run's immutable native terminal receipt. Do not run the child entrypoint directly. Consume only the committed "
-    "increment after the last watermark, give every admitted observation one explicit disposition, settle or park "
+    "run's immutable native terminal receipt. Do not run the child entrypoint directly. Resume the exact open frozen "
+    "batch before later arrivals; otherwise freeze one finite batch with immutable item identities, input watermark and "
+    "digest, current-generation identity, and prior convergence streak. Require batch_head to bind the exact plan and "
+    "checkpoint digests. "
+    "Give every settled item one explicit disposition or one named blocked owner plus executable reopen condition, persist "
+    "each digest-bound item result, and reuse verified completed work instead of restarting the batch. Settle or park "
     "candidates with executable reopen conditions, apply evidence-driven promotion or downgrade review, and act as the "
     "sole canonical model-generation publisher. Build a LogicGuard model revision for every admitted entry, preserve "
     "explicit model gaps instead of inventing support, assemble exact revisions into a grounded ModelMesh only from "
-    "qualifying provenance, consume typed Dream handoffs exactly once, and atomically publish models, meshes, "
-    "deterministic projections, manifests, and the generation pointer last. Rebuild and validate the active index against that exact generation; commit the watermark only after "
-    "all durable decisions succeed. On any blocker roll back the complete generation, leave the watermark unchanged, and report the machine receipt. "
-    "Do not request human file review, do not start a second maintenance implementation, and do not resume another "
-    "automation. Finish by marking the same Sleep run id completed or failed through kb_lane_status.py."
+    "qualifying provenance, consume typed Dream handoffs exactly once, and stage models, meshes, deterministic projections, "
+    "the exact active index, and manifests away from the current generation. Validate the complete staged generation, "
+    "then atomically switch the generation pointer last and commit the watermark only after every frozen item is settled. "
+    "Stop starting new items at the native soft deadline, seal batch_checkpoint, release the lane, and return progress_saved "
+    "before the outer hard timeout. Report previous_remaining, newly_eligible, opening_remaining, target_batch_size, "
+    "completed_this_attempt, blocked_this_attempt, closing_remaining, net_reduction, and convergence_status under one "
+    "counting rule. progress_saved or failure leaves the committed watermark and prior validated generation unchanged and "
+    "records kb-dream, kb-organization-contribute, and kb-organization-maintenance in downstream_stages as not_run. "
+    "A named blocked item with an executable reopen condition may produce completed_with_blocks after settled siblings "
+    "publish; keep all three descendants not_run with reason sleep-completed-with-blocks. "
+    "The wrapper owns same-run terminalization: do not invoke kb_lane_status.py, retry the child, request human file review, "
+    "start a second maintenance implementation, or resume another automation."
 )
 
 DREAM_AUTOMATION_PROMPT = (
@@ -1507,7 +1518,7 @@ def _start_upgrade_attempt(
     return _record_upgrade_attempt(
         codex_home,
         attempt_id,
-        phase="migration_committed_automations_paused",
+        phase="automations_paused_migration_pending",
         status="in_progress",
         details={
             "repo_root": str(repo_root),
@@ -2950,6 +2961,8 @@ def install_codex_integration(
         "expected_ids": [],
         "paused_ids": [],
     }
+    upgrade_attempt: dict[str, Any] = {}
+    attempt_id = ""
     if run_history_migration:
         pause_before_migration = pause_repo_automations(home)
         paused_before_migration = list(pause_before_migration.get("paused_ids") or [])
@@ -2962,24 +2975,52 @@ def install_codex_integration(
                 "failed to pause every installed Chaos Brain automation before migration: "
                 + ", ".join(missing)
             )
-        from local_kb.maintenance_migration import run_maintenance_migration
-
-        history_migration = run_maintenance_migration(root)
-        if not history_migration.get("ok"):
-            raise RuntimeError(
-                "Chaos Brain history migration paused failed: "
-                + str(history_migration.get("error") or history_migration.get("status"))
-            )
-    upgrade_attempt: dict[str, Any] = {}
-    if run_history_migration:
         upgrade_attempt = _start_upgrade_attempt(
             home,
             repo_root=root,
             pause_before_migration=pause_before_migration,
-            history_migration=history_migration,
+            history_migration={"ok": False, "status": "in_progress"},
             automation_state_snapshot=effective_snapshot,
         )
-    attempt_id = str(upgrade_attempt.get("attempt_id") or "")
+        attempt_id = str(upgrade_attempt.get("attempt_id") or "")
+        from local_kb.maintenance_migration import run_maintenance_migration
+
+        try:
+            history_migration = run_maintenance_migration(root)
+            if not history_migration.get("ok"):
+                raise RuntimeError(
+                    "Chaos Brain history migration paused failed: "
+                    + str(
+                        history_migration.get("error")
+                        or history_migration.get("status")
+                    )
+                )
+        except Exception as exc:
+            _record_upgrade_attempt(
+                home,
+                attempt_id,
+                phase="failed_paused_recoverable",
+                status="failed",
+                details={
+                    "error_type": type(exc).__name__,
+                    "error": str(exc)[-4000:],
+                    "survivors_must_remain_paused": True,
+                    "recovery_action": (
+                        "Rerun the idempotent installer after the reported hard gate is repaired."
+                    ),
+                },
+            )
+            raise
+        upgrade_attempt = _record_upgrade_attempt(
+            home,
+            attempt_id,
+            phase="migration_committed_automations_paused",
+            status="in_progress",
+            details={
+                "history_migration": history_migration,
+                "survivors_must_remain_paused": True,
+            },
+        )
     from local_kb.software_update import update_state_path
 
     obsolete_update_state_file = update_state_path(root)
@@ -3239,6 +3280,7 @@ def build_installation_check(
     *,
     allow_deferred_automation_restore: bool = False,
     manifest_override: Mapping[str, Any] | None = None,
+    automation_status_authority: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     home = codex_home or default_codex_home()
     skill_dir = global_skill_dir(home)
@@ -3786,6 +3828,37 @@ def build_installation_check(
         if isinstance(manifest.get("installed_automation_statuses"), Mapping)
         else {}
     )
+    resolved_automation_status_authority: dict[str, Any] = {
+        "ok": True,
+        "status": "install-manifest",
+        "issues": [],
+        "states": dict(recorded_automation_statuses),
+    }
+    if isinstance(automation_status_authority, Mapping):
+        resolved_automation_status_authority = dict(automation_status_authority)
+    elif manifest_override is None:
+        # Import lazily to keep install/bootstrap ownership separate from the
+        # explicit operator-activation layer and avoid a module import cycle.
+        from local_kb.operator_activation import (
+            current_operator_activation_status_authority,
+        )
+
+        active_authority = current_operator_activation_status_authority(
+            expected_repo_root,
+            home,
+        )
+        if active_authority.get("ok") is True:
+            resolved_automation_status_authority = active_authority
+    authority_states = (
+        resolved_automation_status_authority.get("states", {})
+        if isinstance(resolved_automation_status_authority.get("states"), Mapping)
+        else {}
+    )
+    expected_automation_ids = {str(spec["id"]) for spec in REPO_AUTOMATION_SPECS}
+    if set(authority_states) != expected_automation_ids:
+        issues.append(
+            "Automation status authority does not cover the exact managed set."
+        )
     for spec in REPO_AUTOMATION_SPECS:
         expected = _automation_spec_payload(spec, expected_repo_root, codex_home=home)
         path = automation_toml_path(spec["id"], home)
@@ -3808,7 +3881,7 @@ def build_installation_check(
                 )
             payload_status = str(payload.get("status", "") or "")
             recorded_status = str(
-                recorded_automation_statuses.get(str(spec["id"]))
+                authority_states.get(str(spec["id"]))
                 or expected["status"]
             ).upper()
             deferred_pause_allowed = bool(
@@ -3893,9 +3966,17 @@ def build_installation_check(
                 )
             if expected["id"] == "kb-sleep":
                 for marker in (
-                    "kb_lane_status.py",
                     "kb_sleep.py",
-                    "committed increment",
+                    "exact open frozen batch",
+                    "immutable item identities",
+                    "batch_head",
+                    "batch_checkpoint",
+                    "progress_saved",
+                    "completed_with_blocks",
+                    "previous_remaining",
+                    "closing_remaining",
+                    "convergence_status",
+                    "downstream_stages as not_run",
                     "explicit disposition",
                     "executable reopen conditions",
                     "sole canonical model-generation publisher",
@@ -3904,7 +3985,8 @@ def build_installation_check(
                     "explicit model gaps",
                     "typed Dream handoffs exactly once",
                     "commit the watermark only after",
-                    "Do not request human file review",
+                    "do not invoke kb_lane_status.py",
+                    "request human file review",
                 ):
                     if marker not in prompt_text:
                         issues_for_automation.append(
@@ -4406,6 +4488,7 @@ def build_installation_check(
         "canonical_interface_checks": canonical_interface_checks,
         "maintenance_skill_checks": maintenance_skill_checks,
         "automation_checks": automation_checks,
+        "automation_status_authority": resolved_automation_status_authority,
         "automation_restore_deferred": restore_deferred,
         "deferred_automation_restore_allowed": bool(allow_deferred_automation_restore),
         "history_migration_required": history_migration_required,

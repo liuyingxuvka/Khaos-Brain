@@ -62,6 +62,77 @@ ACTIVE_INDEX_AFFECTING_EVENT_TYPES = {
 }
 
 
+def _apply_lifecycle_retrieval_impacts(
+    repo_root: Path,
+    events: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...],
+) -> list[dict[str, Any]]:
+    """Publish exact subtractive safety before lifecycle authority changes.
+
+    Lifecycle work never infers global current-generation corruption.  New or
+    still-ineligible entries leave the current immutable generation readable;
+    only a record already present in that generation can receive an exact deny.
+    """
+
+    from local_kb.active_index import (
+        active_index_path,
+        apply_active_index_impact,
+        classify_active_index_impact,
+        current_active_record_identity,
+    )
+
+    receipts: list[dict[str, Any]] = []
+    for event in events:
+        event_type = str(event.get("event_type") or "")
+        if event_type not in ACTIVE_INDEX_AFFECTING_EVENT_TYPES:
+            continue
+        item_id = str(event.get("item_id") or "").strip()
+        if not item_id:
+            raise ValueError("Index-affecting lifecycle events require item_id")
+        identity = (
+            current_active_record_identity(repo_root, item_id)
+            if active_index_path(repo_root).exists()
+            else None
+        )
+        was_eligible = identity is not None
+        is_eligible = bool(
+            event.get(
+                "retrieval_eligible",
+                str(event.get("to_state") or "") in ACTIVE_ENTRY_STATES,
+            )
+        )
+        content_changed = bool(
+            was_eligible
+            and is_eligible
+            and (
+                str(event.get("from_state") or "")
+                != str(event.get("to_state") or "")
+                or event_type == "entry-lifecycle-snapshot"
+            )
+        )
+        impact = classify_active_index_impact(
+            was_retrieval_eligible=was_eligible,
+            is_retrieval_eligible=is_eligible,
+            content_changed=content_changed,
+        )
+        receipts.append(
+            apply_active_index_impact(
+                repo_root,
+                impact=impact,
+                reason="entry-lifecycle-event",
+                entry_id=item_id if identity else "",
+                expected_content_digest=(
+                    str(identity.get("content_digest") or "") if identity else ""
+                ),
+                expected_pointer_digest=(
+                    str(identity.get("pointer_digest") or "") if identity else ""
+                ),
+                event_type=event_type,
+                item_id=item_id,
+            )
+        )
+    return receipts
+
+
 def lifecycle_root(repo_root: Path) -> Path:
     return Path(repo_root) / LIFECYCLE_ROOT
 
@@ -549,15 +620,7 @@ def commit_lifecycle_event(repo_root: Path, event: Mapping[str, Any]) -> dict[st
             "created_at": str(event.get("created_at") or utc_now_iso()),
             **dict(event),
         }
-        if str(payload.get("event_type") or "") in ACTIVE_INDEX_AFFECTING_EVENT_TYPES:
-            from local_kb.active_index import invalidate_active_index
-
-            invalidate_active_index(
-                repo_root,
-                reason="entry-lifecycle-event",
-                event_type=str(payload.get("event_type") or ""),
-                item_id=str(payload.get("item_id") or ""),
-            )
+        retrieval_impacts = _apply_lifecycle_retrieval_impacts(repo_root, [payload])
         _append_jsonl_durable(lifecycle_events_path(repo_root), payload)
         next_state = replay_lifecycle(repo_root)
         _atomic_write_json(lifecycle_current_path(repo_root), next_state)
@@ -566,6 +629,7 @@ def commit_lifecycle_event(repo_root: Path, event: Mapping[str, Any]) -> dict[st
             "idempotent_reuse": False,
             "event": payload,
             "state": next_state,
+            "retrieval_impacts": retrieval_impacts,
         }
 
 
@@ -575,12 +639,16 @@ def commit_lifecycle_events(
     *,
     expected_event_digest: str,
     expected_last_sequence: int,
+    defer_active_index_impacts_to_migration_rebuild: bool = False,
 ) -> dict[str, Any]:
     """Commit many lifecycle events with one replay before and after the batch.
 
     The event log remains the authority.  Existing or intra-batch duplicate
     idempotency keys are reused, and the complete log replacement is atomic so
-    interruption cannot expose a partially appended JSON line.
+    interruption cannot expose a partially appended JSON line.  The only
+    caller allowed to defer retrieval impacts is the versioned maintenance
+    migration, which replaces retired index authority with one current rebuild
+    before it can commit.
     """
 
     requested = [dict(event) for event in events]
@@ -625,20 +693,17 @@ def commit_lifecycle_events(
             created_events.append(payload)
             known_keys.add(key)
             event_ids_by_key[key] = str(payload["lifecycle_event_id"])
-        index_affecting = [
-            event
-            for event in created_events
-            if str(event.get("event_type") or "") in ACTIVE_INDEX_AFFECTING_EVENT_TYPES
-        ]
-        if index_affecting:
-            from local_kb.active_index import invalidate_active_index
-
-            invalidate_active_index(
-                repo_root,
-                reason="entry-lifecycle-batch",
-                event_type=str(index_affecting[-1].get("event_type") or ""),
-                item_id=str(index_affecting[-1].get("item_id") or ""),
-            )
+        retrieval_impacts = (
+            [
+                {
+                    "impact": "migration_rebuild_pending",
+                    "status": "deferred_to_versioned_migration",
+                    "event_count": len(created_events),
+                }
+            ]
+            if defer_active_index_impacts_to_migration_rebuild and created_events
+            else _apply_lifecycle_retrieval_impacts(repo_root, created_events)
+        )
         _atomic_extend_jsonl(lifecycle_events_path(repo_root), created_events)
         next_state = replay_lifecycle(repo_root)
         _atomic_write_json(lifecycle_current_path(repo_root), next_state)
@@ -655,6 +720,7 @@ def commit_lifecycle_events(
             "residual_count": (
                 len(requested) - len(created_events) - len(reused_keys)
             ),
+            "retrieval_impacts": retrieval_impacts,
         }
 
 
@@ -1031,127 +1097,405 @@ def _history_rows(repo_root: Path) -> tuple[list[dict[str, Any]], list[str]]:
     return rows, errors
 
 
+def _sleep_handoff_observation(handoff: Mapping[str, Any]) -> dict[str, Any]:
+    """Project one immutable Dream handoff into its Sleep observation."""
+
+    from local_kb.history import build_history_event
+
+    handoff_id = str(handoff.get("handoff_id") or "")
+    route_ref = str(handoff.get("route_ref") or "")
+    requested = str(handoff.get("requested_disposition") or "history_only")
+    suggested_action = (
+        "update-card"
+        if requested == "update-card"
+        else ("new-candidate" if requested == "candidate" else "none")
+    )
+    result_digest = str(handoff.get("result_digest") or "")
+    return build_history_event(
+        "observation",
+        event_id=f"dream-handoff-observation:{handoff_id}",
+        source={
+            "kind": "dream-result",
+            "agent": "kb-dreamer",
+            "run_id": str(handoff.get("run_id") or ""),
+        },
+        target={
+            "kind": "task-observation",
+            "task_summary": f"Dream evidence handoff for {route_ref or 'unscoped route'}",
+            "route_hint": [item for item in route_ref.split("/") if item],
+            "entry_ids": list(handoff.get("entry_ids") or []),
+        },
+        rationale="Sleep consumed a typed Dream evidence handoff.",
+        context={
+            "suggested_action": suggested_action,
+            "outcome": str(handoff.get("classification") or ""),
+            "predictive_observation": {
+                "scenario": str(
+                    handoff.get("hypothesis")
+                    or "Dream found a bounded knowledge gap."
+                ),
+                "action_taken": "Sleep reviewed the typed Dream experiment result.",
+                "observed_result": str(
+                    handoff.get("result_summary") or result_digest
+                ),
+                "operational_use": (
+                    "Use only through the evidence-gated Sleep lifecycle."
+                ),
+                "reuse_judgment": (
+                    "Reopen only after a decision-relevant evidence delta."
+                ),
+            },
+            "dream_handoff": dict(handoff),
+        },
+    )
+
+
+def _build_sleep_work_inventory(
+    repo_root: Path,
+    *,
+    rows: list[dict[str, Any]],
+    input_watermark: int,
+    lifecycle_state: Mapping[str, Any],
+) -> tuple[list[str], list[str], dict[str, dict[str, Any]]]:
+    """Return one deterministic, de-duplicated backlog boundary for Sleep."""
+
+    observations = lifecycle_state.get("observations", {})
+    if not isinstance(observations, Mapping):
+        observations = {}
+    eligible: list[str] = []
+    newly_eligible: list[str] = []
+    work: dict[str, dict[str, Any]] = {}
+    claimed_observations: set[str] = set()
+
+    for handoff in pending_dream_handoffs(repo_root):
+        handoff_id = str(handoff.get("handoff_id") or "").strip()
+        if not handoff_id:
+            continue
+        item_id = f"handoff:{handoff_id}"
+        observation = _sleep_handoff_observation(handoff)
+        work[item_id] = {
+            "kind": "handoff",
+            "observation": observation,
+            "handoff": dict(handoff),
+        }
+        eligible.append(item_id)
+        newly_eligible.append(item_id)
+        claimed_observations.add(str(observation.get("event_id") or ""))
+
+    for observation_id, item in sorted(observations.items()):
+        if not isinstance(item, Mapping):
+            continue
+        if str(item.get("state") or "") not in ACTIONABLE_OBSERVATION_STATES:
+            continue
+        clean_id = str(observation_id).strip()
+        source_event = item.get("source_event", {})
+        if not clean_id or not isinstance(source_event, Mapping) or not source_event:
+            continue
+        if clean_id in claimed_observations:
+            continue
+        item_id = f"observation:{clean_id}"
+        work[item_id] = {
+            "kind": "observation",
+            "observation": dict(source_event),
+            "history_index": None,
+        }
+        eligible.append(item_id)
+        claimed_observations.add(clean_id)
+
+    for row_index in range(max(0, input_watermark), len(rows)):
+        row = rows[row_index]
+        if row.get("_malformed"):
+            item_id = f"history-error:{row_index}"
+            work[item_id] = {
+                "kind": "history-error",
+                "history_index": row_index,
+                "line_number": row.get("_line_number"),
+            }
+            eligible.append(item_id)
+            newly_eligible.append(item_id)
+            continue
+        if str(row.get("event_type") or "").lower() != "observation":
+            continue
+        observation_id = str(row.get("event_id") or "").strip()
+        if not observation_id or observation_id in claimed_observations:
+            continue
+        current = observations.get(observation_id, {})
+        current_state = (
+            str(current.get("state") or "")
+            if isinstance(current, Mapping)
+            else ""
+        )
+        if isinstance(current, Mapping) and current_state not in ACTIONABLE_OBSERVATION_STATES:
+            continue
+        item_id = f"observation:{observation_id}"
+        work[item_id] = {
+            "kind": "observation",
+            "observation": dict(row),
+            "history_index": row_index,
+        }
+        eligible.append(item_id)
+        newly_eligible.append(item_id)
+        claimed_observations.add(observation_id)
+    return eligible, newly_eligible, work
+
+
+def _apply_staged_entry_event(
+    entry_states: dict[str, dict[str, Any]],
+    event: Mapping[str, Any],
+) -> None:
+    """Rehydrate CandidateLifecyclePlan state from a persisted staged event."""
+
+    if str(event.get("event_type") or "") not in ACTIVE_INDEX_AFFECTING_EVENT_TYPES:
+        return
+    entry_id = str(event.get("item_id") or "")
+    if not entry_id:
+        return
+    prior = dict(entry_states.get(entry_id, {}))
+    prior.update(
+        {
+            "entry_id": entry_id,
+            "status": str(event.get("to_state") or ""),
+            "retrieval_eligible": bool(event.get("retrieval_eligible", False)),
+            "reopen_condition": dict(
+                event.get("reopen_condition", {})
+                if isinstance(event.get("reopen_condition"), Mapping)
+                else {}
+            ),
+            "evidence_fingerprint": str(event.get("evidence_fingerprint") or ""),
+            "decision_deadline": str(event.get("decision_deadline") or ""),
+            "latest_event_id": str(event.get("idempotency_key") or ""),
+        }
+    )
+    entry_states[entry_id] = prior
+
+
+def _sleep_not_run(reason: str) -> dict[str, Any]:
+    return {"ok": False, "status": "not_run", "reason": reason}
+
+
+
+
 def _run_incremental_sleep_locked(
     repo_root: Path,
     *,
     run_id: str,
     max_observations: int = 250,
     lane_lock: Mapping[str, Any],
+    soft_deadline_monotonic: float | None = None,
 ) -> dict[str, Any]:
+    """Run or resume one frozen Sleep batch without exposing partial work."""
+
     from local_kb.active_index import (
         active_index_path,
         load_active_index,
         rebuild_active_index,
         validate_active_index,
     )
-    from local_kb.model_maintenance import publish_sleep_model_generation
+    from local_kb.candidate_lifecycle import (
+        CandidateLifecyclePlan,
+        create_or_reuse_candidate,
+        review_entry_lifecycles,
+    )
+    from local_kb.history import record_history_event
+    from local_kb.model_maintenance import (
+        load_current_model_entries,
+        publish_sleep_model_generation,
+    )
+    from local_kb.sleep_batch import (
+        load_current_sleep_batch,
+        record_sleep_batch_item_result,
+        start_or_resume_sleep_batch,
+    )
 
     clean_run_id = str(run_id)
     prior_sleep = _load_sleep_state(repo_root)
     input_watermark = int(prior_sleep.get("committed_watermark") or 0)
     rows, parse_errors = _history_rows(repo_root)
+    lifecycle_before = load_lifecycle_state(repo_root)
+    eligible_ids, newly_eligible_ids, work_inventory = _build_sleep_work_inventory(
+        repo_root,
+        rows=rows,
+        input_watermark=input_watermark,
+        lifecycle_state=lifecycle_before,
+    )
+    current_batch = load_current_sleep_batch(repo_root)
+    current_batch_id = (
+        str(current_batch["plan"].get("batch_id") or "")
+        if current_batch is not None
+        else ""
+    )
+    batch_already_published = bool(
+        current_batch_id
+        and str(prior_sleep.get("last_batch_id") or "") == current_batch_id
+    )
+    if current_batch is None or batch_already_published:
+        bounded_max = max(1, int(max_observations))
+        bounded_min = min(25, bounded_max)
+        prior_remaining = prior_sleep.get("closing_remaining_count")
+        if not isinstance(prior_remaining, int) or isinstance(prior_remaining, bool):
+            prior_remaining = max(0, len(eligible_ids) - len(newly_eligible_ids))
+        from local_kb.logicguard_models import authority_generation_pointer_path
+
+        generation_pointer = authority_generation_pointer_path(repo_root)
+        current_generation_id = ""
+        if generation_pointer.is_file():
+            try:
+                generation_payload = json.loads(
+                    generation_pointer.read_text(encoding="utf-8")
+                )
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                generation_payload = {}
+            if isinstance(generation_payload, Mapping):
+                current_generation_id = str(
+                    generation_payload.get("generation_id") or ""
+                )
+        current_batch = start_or_resume_sleep_batch(
+            repo_root,
+            eligible_item_ids=eligible_ids,
+            newly_eligible_item_ids=newly_eligible_ids,
+            prior_remaining_count=max(0, int(prior_remaining)),
+            input_watermark={
+                "history": input_watermark,
+                "history_generation": content_fingerprint(rows),
+                "lifecycle_event_digest": str(
+                    lifecycle_before.get("event_digest") or ""
+                ),
+            },
+            input_digest=content_fingerprint(
+                {
+                    "eligible_item_ids": eligible_ids,
+                    "newly_eligible_item_ids": newly_eligible_ids,
+                    "history_generation": content_fingerprint(rows),
+                    "lifecycle_event_digest": str(
+                        lifecycle_before.get("event_digest") or ""
+                    ),
+                }
+            ),
+            current_generation_id=current_generation_id,
+            min_items=bounded_min,
+            max_items=bounded_max,
+        )
+
+    plan = current_batch["plan"]
+    batch_id = str(plan["batch_id"])
+    selected_ids = list(plan.get("selected_item_ids") or [])
+    initial_result_ids = set(current_batch.get("results", {}))
     known_history_event_ids = {
         str(row.get("event_id") or "")
         for row in rows
         if str(row.get("event_id") or "")
     }
-    lifecycle_before = load_lifecycle_state(repo_root)
-    from local_kb.candidate_lifecycle import (
-        CandidateLifecyclePlan,
-        create_or_reuse_candidate,
-    )
-
-    candidate_lifecycle_plan = CandidateLifecyclePlan.from_lifecycle_state(
+    candidate_plan = CandidateLifecyclePlan.from_lifecycle_state(
         lifecycle_before,
         known_history_event_ids=known_history_event_ids,
     )
-    observations_before = lifecycle_before.get("observations", {})
-    opening_backlog = sum(
-        1
-        for item in observations_before.values()
-        if isinstance(item, Mapping) and str(item.get("state") or "") in {"new", "missing-admission"}
-    )
-    dispositions: list[str] = []
-    newly_admitted = 0
-    processed_observations = 0
-    output_watermark = input_watermark
-    blockers = list(parse_errors)
-    handoff_acknowledgements: list[str] = []
-    candidate_created = 0
-    candidate_reused = 0
-    already_terminal_skipped = 0
-    handled_observation_ids: set[str] = set()
-    lifecycle_batch_events: list[dict[str, Any]] = []
-    batch_disposition_keys: list[str] = []
     staged_model_upserts: dict[str, dict[str, Any]] = {}
-    deferred_candidate_history: list[dict[str, Any]] = []
-    deferred_handoff_acknowledgements: list[dict[str, str]] = []
+    deferred_history_events: list[dict[str, Any]] = []
     candidate_catalog_entries: list[Any] | None = None
 
     def get_candidate_catalog_entries() -> list[Any]:
         nonlocal candidate_catalog_entries
         if candidate_catalog_entries is None:
-            from local_kb.model_maintenance import load_current_model_entries
-
             candidate_catalog_entries, _generation = load_current_model_entries(
                 repo_root
             )
         return candidate_catalog_entries
 
-    from local_kb.history import build_history_event, record_history_event
+    def rehydrate(details: Mapping[str, Any]) -> None:
+        for path, payload in (details.get("model_upserts") or {}).items():
+            if isinstance(path, str) and isinstance(payload, Mapping):
+                staged_model_upserts[path] = dict(payload)
+        for history_event in details.get("deferred_history_events") or []:
+            if isinstance(history_event, Mapping):
+                payload = dict(history_event)
+                deferred_history_events.append(payload)
+                event_id = str(payload.get("event_id") or "")
+                if event_id:
+                    candidate_plan.known_history_event_ids.add(event_id)
+        for event in details.get("lifecycle_events") or []:
+            if isinstance(event, Mapping):
+                _apply_staged_entry_event(candidate_plan.entry_states, event)
 
-    for handoff in pending_dream_handoffs(repo_root):
-        if processed_observations >= max(0, max_observations):
+    for item_id in selected_ids:
+        result = current_batch.get("results", {}).get(item_id, {})
+        if isinstance(result, Mapping) and result.get("status") == "completed":
+            details = result.get("details", {})
+            if isinstance(details, Mapping):
+                rehydrate(details)
+
+    attempt_completed = 0
+    attempt_blocked = 0
+    attempt_processed = 0
+    soft_stopped = False
+    for item_id in list(current_batch["checkpoint"].get("pending_item_ids") or []):
+        if int(max_observations) <= 0 or (
+            soft_deadline_monotonic is not None
+            and time.monotonic() >= soft_deadline_monotonic
+        ):
+            soft_stopped = True
             break
-        handoff_id = str(handoff.get("handoff_id") or "")
-        observation_id = f"dream-handoff-observation:{handoff_id}"
-        route_ref = str(handoff.get("route_ref") or "")
-        requested = str(handoff.get("requested_disposition") or "history_only")
-        suggested_action = "update-card" if requested == "update-card" else (
-            "new-candidate" if requested == "candidate" else "none"
-        )
-        result_digest = str(handoff.get("result_digest") or "")
-        observation = build_history_event(
-            "observation",
-            event_id=observation_id,
-            source={
-                "kind": "dream-result",
-                "agent": "kb-dreamer",
-                "run_id": str(handoff.get("run_id") or ""),
-            },
-            target={
-                "kind": "task-observation",
-                "task_summary": f"Dream evidence handoff for {route_ref or 'unscoped route'}",
-                "route_hint": [item for item in route_ref.split("/") if item],
-                "entry_ids": list(handoff.get("entry_ids") or []),
-            },
-            rationale="Sleep consumed a typed Dream evidence handoff.",
-            context={
-                "suggested_action": suggested_action,
-                "outcome": str(handoff.get("classification") or ""),
-                "predictive_observation": {
-                    "scenario": str(handoff.get("hypothesis") or "Dream found a bounded knowledge gap."),
-                    "action_taken": "Sleep reviewed the typed Dream experiment result.",
-                    "observed_result": str(handoff.get("result_summary") or result_digest),
-                    "operational_use": "Use only through the evidence-gated Sleep lifecycle.",
-                    "reuse_judgment": "Reopen only after a decision-relevant evidence delta.",
+        work_item = work_inventory.get(item_id)
+        if work_item is None:
+            current_batch = record_sleep_batch_item_result(
+                repo_root,
+                batch_id=batch_id,
+                item_id=item_id,
+                status="blocked",
+                owner="kb-sleep-maintainer",
+                reopen_condition=(
+                    "Restore the frozen source item or explicitly supersede it in maintenance."
+                ),
+                details={
+                    "error": "frozen source item is no longer readable",
+                    "lifecycle_events": [],
+                    "model_upserts": {},
+                    "deferred_history_events": [],
+                    "handoff_acknowledgement": {},
+                    "counters": {},
                 },
-                "dream_handoff": dict(handoff),
-            },
-        )
-        if observation_id not in known_history_event_ids:
-            record_history_event(repo_root, observation)
-            known_history_event_ids.add(observation_id)
+            )
+            attempt_blocked += 1
+            continue
+        if work_item.get("kind") == "history-error":
+            current_batch = record_sleep_batch_item_result(
+                repo_root,
+                batch_id=batch_id,
+                item_id=item_id,
+                status="blocked",
+                owner="kb-history-maintainer",
+                reopen_condition=(
+                    f"Repair malformed history line {work_item.get('line_number')} and reopen it."
+                ),
+                details={
+                    "error": "malformed history input",
+                    "history_index": work_item.get("history_index"),
+                    "lifecycle_events": [],
+                    "model_upserts": {},
+                    "deferred_history_events": [],
+                    "handoff_acknowledgement": {},
+                    "counters": {},
+                },
+            )
+            attempt_blocked += 1
+            continue
+
+        observation = work_item.get("observation", {})
+        if not isinstance(observation, Mapping):
+            raise ValueError(f"Frozen Sleep item {item_id!r} has no observation")
+        event_start = len(candidate_plan.events)
+        history_start = len(deferred_history_events)
+        upsert_keys_before = set(staged_model_upserts)
         selected = classify_observation(observation)
+        created_count = reused_count = 0
         if selected.get("disposition") == "candidate":
             candidate = create_or_reuse_candidate(
                 repo_root,
                 observation,
                 run_id=clean_run_id,
                 evidence_grade=str(selected.get("evidence_grade") or "weak"),
-                lifecycle_plan=candidate_lifecycle_plan,
+                lifecycle_plan=candidate_plan,
                 staged_upserts=staged_model_upserts,
-                deferred_history_events=deferred_candidate_history,
+                deferred_history_events=deferred_history_events,
                 catalog_entries=get_candidate_catalog_entries(),
             )
             selected.update(
@@ -1161,451 +1505,484 @@ def _run_incremental_sleep_locked(
                     "follow_up_deadline": candidate["decision_deadline"],
                 }
             )
-            candidate_created += int(bool(candidate.get("created")))
-            candidate_reused += int(not bool(candidate.get("created")))
-        current = observations_before.get(observation_id, {})
+            created_count = int(bool(candidate.get("created")))
+            reused_count = int(not bool(candidate.get("created")))
+        observation_id = str(observation.get("event_id") or "")
+        current = lifecycle_before.get("observations", {}).get(observation_id, {})
         current_state = (
             str(current.get("state") or "")
             if isinstance(current, Mapping)
             else ""
         )
+        item_events = list(candidate_plan.events[event_start:])
+        candidate_event_keys = [
+            str(event.get("idempotency_key") or "") for event in item_events
+        ]
         if not isinstance(current, Mapping) or current_state in {"", "missing-admission"}:
-            lifecycle_batch_events.append(
-                build_observation_admission_event(observation)
-            )
+            item_events.append(build_observation_admission_event(observation))
         disposition_event = build_observation_disposition_event(
             observation,
             run_id=clean_run_id,
             decision=selected,
         )
-        disposition_key = str(disposition_event.get("idempotency_key") or "")
-        lifecycle_batch_events.append(disposition_event)
-        batch_disposition_keys.append(disposition_key)
-        handled_observation_ids.add(observation_id)
-        deferred_handoff_acknowledgements.append(
-            {
-                "handoff_id": handoff_id,
-                "disposition_key": disposition_key,
-            }
-        )
-        processed_observations += 1
-
-    for observation_id, item in sorted(observations_before.items()):
-        if processed_observations >= max(0, max_observations):
-            break
-        if not isinstance(item, Mapping) or str(item.get("state") or "") not in ACTIONABLE_OBSERVATION_STATES:
-            continue
-        source_event = item.get("source_event", {}) if isinstance(item.get("source_event"), Mapping) else {}
-        if not source_event:
-            blockers.append(f"admitted observation {observation_id} lacks source_event")
-            continue
-        selected = classify_observation(source_event)
-        if selected.get("disposition") == "candidate":
-            candidate = create_or_reuse_candidate(
-                repo_root,
-                source_event,
-                run_id=clean_run_id,
-                evidence_grade=str(selected.get("evidence_grade") or "weak"),
-                lifecycle_plan=candidate_lifecycle_plan,
-                staged_upserts=staged_model_upserts,
-                deferred_history_events=deferred_candidate_history,
-                catalog_entries=get_candidate_catalog_entries(),
-            )
-            selected.update(
+        item_events.append(disposition_event)
+        if work_item.get("kind") == "handoff" and observation_id not in known_history_event_ids:
+            deferred_history_events.append(dict(observation))
+            candidate_plan.known_history_event_ids.add(observation_id)
+        new_upserts = {
+            path: dict(staged_model_upserts[path])
+            for path in staged_model_upserts
+            if path not in upsert_keys_before
+        }
+        item_details = {
+            "source_kind": str(work_item.get("kind") or ""),
+            "history_index": work_item.get("history_index"),
+            "observation_id": observation_id,
+            "lifecycle_events": item_events,
+            "candidate_lifecycle_event_keys": candidate_event_keys,
+            "disposition_key": str(
+                disposition_event.get("idempotency_key") or ""
+            ),
+            "model_upserts": new_upserts,
+            "deferred_history_events": list(
+                deferred_history_events[history_start:]
+            ),
+            "handoff_acknowledgement": (
                 {
-                    "target_id": candidate["entry_id"],
-                    "follow_up_id": candidate["entry_id"],
-                    "follow_up_deadline": candidate["decision_deadline"],
+                    "handoff_id": str(
+                        work_item.get("handoff", {}).get("handoff_id") or ""
+                    ),
+                    "disposition_key": str(
+                        disposition_event.get("idempotency_key") or ""
+                    ),
+                }
+                if work_item.get("kind") == "handoff"
+                else {}
+            ),
+            "counters": {
+                "processed_observations": 1,
+                "candidate_created": created_count,
+                "candidate_reused": reused_count,
+            },
+        }
+        current_batch = record_sleep_batch_item_result(
+            repo_root,
+            batch_id=batch_id,
+            item_id=item_id,
+            status="completed",
+            details=item_details,
+        )
+        attempt_completed += 1
+        attempt_processed += 1
+
+    checkpoint = current_batch["checkpoint"]
+    receipt_path = sleep_receipt_dir(repo_root) / f"{clean_run_id}.json"
+
+    def batch_fields() -> dict[str, Any]:
+        previous_remaining = int(plan.get("prior_remaining_count") or 0)
+        closing_remaining = int(checkpoint.get("closing_remaining_count") or 0)
+        convergence_status = (
+            "backlog_reduced"
+            if closing_remaining < previous_remaining
+            else (
+                "backlog_growing"
+                if int(checkpoint.get("no_reduction_streak") or 0) >= 2
+                else "no_convergence"
+            )
+        )
+        return {
+            "batch_head": dict(current_batch["head"]),
+            "batch_plan": dict(plan),
+            "batch_checkpoint": dict(checkpoint),
+            "previous_remaining": previous_remaining,
+            "newly_eligible": int(plan.get("newly_eligible_count") or 0),
+            "opening_remaining": int(plan.get("opening_remaining_count") or 0),
+            "target_batch_size": int(plan.get("target_item_count") or 0),
+            "completed_this_attempt": attempt_completed,
+            "blocked_this_attempt": attempt_blocked,
+            "closing_remaining": closing_remaining,
+            "net_reduction": previous_remaining - closing_remaining,
+            "convergence_status": convergence_status,
+            "batch_id": batch_id,
+            "batch_resumed": bool(initial_result_ids),
+            "prior_remaining_count": int(plan.get("prior_remaining_count") or 0),
+            "opening_remaining_count": int(plan.get("opening_remaining_count") or 0),
+            "newly_eligible_count": int(plan.get("newly_eligible_count") or 0),
+            "selected_item_count": int(plan.get("target_item_count") or 0),
+            "completed_item_count": int(checkpoint.get("completed_count") or 0),
+            "blocked_item_count": int(checkpoint.get("blocked_count") or 0),
+            "pending_item_count": int(checkpoint.get("pending_count") or 0),
+            "closing_remaining_count": int(checkpoint.get("closing_remaining_count") or 0),
+            "remainder_delta_from_prior": int(checkpoint.get("remainder_delta_from_prior") or 0),
+            "remainder_trend": str(checkpoint.get("remainder_trend") or ""),
+            "backlog_growing": bool(checkpoint.get("backlog_growing")),
+            "attempt_completed_item_count": attempt_completed,
+            "attempt_blocked_item_count": attempt_blocked,
+            "attempt_processed_observations": attempt_processed,
+        }
+
+    if not checkpoint.get("settled") or soft_stopped:
+        receipt = {
+            "schema_version": SLEEP_POLICY_VERSION,
+            "receipt_id": "sleep-receipt:"
+            + content_fingerprint(
+                [clean_run_id, batch_id, checkpoint.get("revision"), "progress_saved"]
+            )[:24],
+            "run_id": clean_run_id,
+            "created_at": utc_now_iso(),
+            "input_watermark": input_watermark,
+            "output_watermark": input_watermark,
+            "consumed_range": {
+                "inclusive_start": input_watermark,
+                "exclusive_end": input_watermark,
+            },
+            "processed_observations": attempt_processed,
+            **batch_fields(),
+            "final_run_state": "progress_saved",
+            "retryable": True,
+            "reason": "sleep-progress-saved",
+            "model_generation": _sleep_not_run("batch has pending frozen items"),
+            "lifecycle_review": _sleep_not_run("publication has not started"),
+            "post_review_index_refresh": _sleep_not_run("publication has not started"),
+            "index_validation": _sleep_not_run("publication has not started"),
+            "downstream_stages": {
+                stage_id: {
+                    "status": "not_run",
+                    "reason": "sleep-progress-saved",
+                }
+                for stage_id in (
+                    "kb-dream",
+                    "kb-organization-contribute",
+                    "kb-organization-maintenance",
+                )
+            },
+            "blockers": [],
+            "lane_lock": dict(lane_lock),
+            "lock_release": {
+                "ok": False,
+                "group": str(lane_lock.get("group") or "local-maintenance"),
+                "lane": "kb-sleep",
+                "run_id": clean_run_id,
+                "released": False,
+                "reason": "pending-native-receipt-finalization",
+            },
+        }
+        _atomic_write_json(receipt_path, receipt)
+        return {**receipt, "receipt_path": str(receipt_path)}
+
+    all_events: list[dict[str, Any]] = []
+    all_history: list[dict[str, Any]] = []
+    all_upserts: dict[str, dict[str, Any]] = {}
+    disposition_keys: list[str] = []
+    candidate_event_keys: set[str] = set()
+    pending_acks: list[dict[str, str]] = []
+    candidate_created = candidate_reused = total_processed = 0
+    for item_id in selected_ids:
+        result = current_batch.get("results", {}).get(item_id, {})
+        if not isinstance(result, Mapping) or result.get("status") != "completed":
+            continue
+        details = result.get("details", {})
+        if not isinstance(details, Mapping):
+            continue
+        all_events.extend(
+            dict(event)
+            for event in details.get("lifecycle_events") or []
+            if isinstance(event, Mapping)
+        )
+        all_history.extend(
+            dict(event)
+            for event in details.get("deferred_history_events") or []
+            if isinstance(event, Mapping)
+        )
+        for path, payload in (details.get("model_upserts") or {}).items():
+            if isinstance(path, str) and isinstance(payload, Mapping):
+                all_upserts[path] = dict(payload)
+        disposition_key = str(details.get("disposition_key") or "")
+        if disposition_key:
+            disposition_keys.append(disposition_key)
+        candidate_event_keys.update(
+            str(key)
+            for key in details.get("candidate_lifecycle_event_keys") or []
+            if str(key)
+        )
+        pending_ack = details.get("handoff_acknowledgement", {})
+        if isinstance(pending_ack, Mapping) and pending_ack.get("handoff_id"):
+            pending_acks.append(
+                {
+                    "handoff_id": str(pending_ack.get("handoff_id") or ""),
+                    "disposition_key": str(
+                        pending_ack.get("disposition_key") or ""
+                    ),
                 }
             )
-            candidate_created += int(bool(candidate.get("created")))
-            candidate_reused += int(not bool(candidate.get("created")))
-        state = str(item.get("state") or "")
-        if state in {"", "missing-admission"}:
-            lifecycle_batch_events.append(
-                build_observation_admission_event(source_event)
-            )
-        disposition_event = build_observation_disposition_event(
-            source_event,
-            run_id=clean_run_id,
-            decision=selected,
-        )
-        lifecycle_batch_events.append(disposition_event)
-        batch_disposition_keys.append(
-            str(disposition_event.get("idempotency_key") or "")
-        )
-        handled_observation_ids.add(observation_id)
-        processed_observations += 1
-
-    for row_index in range(input_watermark, len(rows)):
-        row = rows[row_index]
-        if row.get("_malformed"):
-            blockers.append(f"history input is malformed at line {row.get('_line_number')}")
-            break
-        if str(row.get("event_type") or "").lower() == "observation":
-            observation_id = str(row.get("event_id") or "").strip()
-            current = observations_before.get(observation_id, {})
-            current_state = (
-                str(current.get("state") or "")
-                if isinstance(current, Mapping)
-                else ""
-            )
-            if observation_id in handled_observation_ids:
-                output_watermark = row_index + 1
-                continue
-            if isinstance(current, Mapping) and current_state not in ACTIONABLE_OBSERVATION_STATES:
-                already_terminal_skipped += 1
-                output_watermark = row_index + 1
-                continue
-            if processed_observations >= max(0, max_observations):
-                break
-            selected = classify_observation(row)
-            if selected.get("disposition") == "candidate":
-                candidate = create_or_reuse_candidate(
-                    repo_root,
-                    row,
-                    run_id=clean_run_id,
-                    evidence_grade=str(selected.get("evidence_grade") or "weak"),
-                    lifecycle_plan=candidate_lifecycle_plan,
-                    staged_upserts=staged_model_upserts,
-                    deferred_history_events=deferred_candidate_history,
-                    catalog_entries=get_candidate_catalog_entries(),
-                )
-                selected.update(
-                    {
-                        "target_id": candidate["entry_id"],
-                        "follow_up_id": candidate["entry_id"],
-                        "follow_up_deadline": candidate["decision_deadline"],
-                    }
-                )
-                candidate_created += int(bool(candidate.get("created")))
-                candidate_reused += int(not bool(candidate.get("created")))
-            if not isinstance(current, Mapping) or current_state in {"", "missing-admission"}:
-                lifecycle_batch_events.append(
-                    build_observation_admission_event(row)
-                )
-            disposition_event = build_observation_disposition_event(
-                row,
-                run_id=clean_run_id,
-                decision=selected,
-            )
-            lifecycle_batch_events.append(disposition_event)
-            batch_disposition_keys.append(
-                str(disposition_event.get("idempotency_key") or "")
-            )
-            handled_observation_ids.add(observation_id)
-            processed_observations += 1
-        output_watermark = row_index + 1
+        counters = details.get("counters", {})
+        if isinstance(counters, Mapping):
+            total_processed += int(counters.get("processed_observations") or 0)
+            candidate_created += int(counters.get("candidate_created") or 0)
+            candidate_reused += int(counters.get("candidate_reused") or 0)
 
     lifecycle_batch = {
-        "requested_count": 0,
+        "requested_count": len(all_events) - len(candidate_event_keys),
         "created_count": 0,
         "reused_count": 0,
-        "candidate_requested_count": 0,
+        "candidate_requested_count": len(candidate_event_keys),
         "candidate_created_count": 0,
         "candidate_reused_count": 0,
-        "total_requested_count": 0,
+        "total_requested_count": len(all_events),
         "total_created_count": 0,
         "total_reused_count": 0,
         "residual_count": 0,
         "replay_pass_count": 0,
         "atomic_batch_count": 0,
     }
-    candidate_lifecycle_event_keys = {
-        str(event.get("idempotency_key") or "")
-        for event in candidate_lifecycle_plan.events
-        if str(event.get("idempotency_key") or "")
-    }
-    combined_lifecycle_events = [
-        *candidate_lifecycle_plan.events,
-        *lifecycle_batch_events,
-    ]
-    if combined_lifecycle_events:
+    disposition_ids_by_key: dict[str, str] = {}
+    if all_events:
+        current_lifecycle = load_lifecycle_state(repo_root)
         committed_batch = commit_lifecycle_events(
             repo_root,
-            combined_lifecycle_events,
-            expected_event_digest=str(
-                lifecycle_before.get("event_digest") or ""
-            ),
-            expected_last_sequence=int(
-                lifecycle_before.get("last_sequence") or 0
-            ),
+            all_events,
+            expected_event_digest=str(current_lifecycle.get("event_digest") or ""),
+            expected_last_sequence=int(current_lifecycle.get("last_sequence") or 0),
         )
-        created_event_keys = {
+        created_keys = {
             str(event.get("idempotency_key") or "")
             for event in committed_batch.get("events", [])
             if isinstance(event, Mapping)
         }
-        reused_event_keys = {
-            str(key) for key in committed_batch.get("reused_keys", [])
-        }
-        candidate_lifecycle_created = len(
-            candidate_lifecycle_event_keys & created_event_keys
-        )
-        candidate_lifecycle_reused = len(
-            candidate_lifecycle_event_keys & reused_event_keys
-        )
-        lifecycle_batch = {
-            "requested_count": len(lifecycle_batch_events),
-            "created_count": int(committed_batch.get("created_count") or 0)
-            - candidate_lifecycle_created,
-            "reused_count": int(committed_batch.get("reused_count") or 0)
-            - candidate_lifecycle_reused,
-            "candidate_requested_count": len(
-                candidate_lifecycle_plan.events
-            ),
-            "candidate_created_count": candidate_lifecycle_created,
-            "candidate_reused_count": candidate_lifecycle_reused,
-            "total_requested_count": int(
-                committed_batch.get("requested_count") or 0
-            ),
-            "total_created_count": int(
-                committed_batch.get("created_count") or 0
-            ),
-            "total_reused_count": int(
-                committed_batch.get("reused_count") or 0
-            ),
-            "residual_count": int(
-                committed_batch.get("residual_count") or 0
-            ),
-            "replay_pass_count": int(
-                committed_batch.get("replay_pass_count") or 0
-            ),
-            "atomic_batch_count": int(
-                committed_batch.get("atomic_batch_count") or 0
-            ),
-        }
-        created_events = committed_batch.get("events", [])
-        newly_admitted += sum(
-            1
-            for event in created_events
-            if isinstance(event, Mapping)
-            and str(event.get("event_type") or "") == "observation-admitted"
+        reused_keys = {str(key) for key in committed_batch.get("reused_keys", [])}
+        candidate_created_events = len(candidate_event_keys & created_keys)
+        candidate_reused_events = len(candidate_event_keys & reused_keys)
+        lifecycle_batch.update(
+            {
+                "created_count": int(committed_batch.get("created_count") or 0)
+                - candidate_created_events,
+                "reused_count": int(committed_batch.get("reused_count") or 0)
+                - candidate_reused_events,
+                "candidate_created_count": candidate_created_events,
+                "candidate_reused_count": candidate_reused_events,
+                "total_created_count": int(committed_batch.get("created_count") or 0),
+                "total_reused_count": int(committed_batch.get("reused_count") or 0),
+                "residual_count": int(committed_batch.get("residual_count") or 0),
+                "replay_pass_count": int(committed_batch.get("replay_pass_count") or 0),
+                "atomic_batch_count": int(committed_batch.get("atomic_batch_count") or 0),
+            }
         )
         event_ids_by_key = committed_batch.get("event_ids_by_key", {})
         disposition_ids_by_key = {
-            key: str(event_ids_by_key.get(key) or key)
-            for key in batch_disposition_keys
-            if key
+            key: str(event_ids_by_key.get(key) or key) for key in disposition_keys
         }
-        dispositions.extend(
-            disposition_ids_by_key.get(key) or key
-            for key in batch_disposition_keys
-            if key
-        )
-        for pending_ack in deferred_handoff_acknowledgements:
-            disposition_key = str(pending_ack.get("disposition_key") or "")
-            pending_ack["disposition_id"] = (
-                disposition_ids_by_key.get(disposition_key)
-                or disposition_key
-            )
 
+    blockers: list[str] = []
     model_generation = publish_sleep_model_generation(
         repo_root,
-        reason=f"sleep:{clean_run_id}",
-        card_upserts=staged_model_upserts,
+        reason=f"sleep:{clean_run_id}:batch:{batch_id}",
+        card_upserts=all_upserts,
         refresh_index_on_no_delta=False,
         validate_index_on_no_delta=False,
+        refresh_index_on_commit=False,
+        validate_index_on_commit=False,
         include_runtime_catalog=True,
     )
-    runtime_catalog_entries = model_generation.pop(
-        "_runtime_catalog_entries",
-        None,
-    )
+    runtime_catalog_entries = model_generation.pop("_runtime_catalog_entries", None)
     if not model_generation.get("ok"):
         blockers.append(
             "model generation: "
             + str(model_generation.get("error") or model_generation.get("status"))
         )
-    else:
-        for history_event in deferred_candidate_history:
+
+    lifecycle_review: dict[str, Any] = _sleep_not_run("model publication failed")
+    index_refresh: dict[str, Any] = _sleep_not_run("model publication failed")
+    handoff_acknowledgements: list[str] = []
+    if not blockers:
+        current_history_ids = {
+            str(row.get("event_id") or "")
+            for row in _history_rows(repo_root)[0]
+            if str(row.get("event_id") or "")
+        }
+        for history_event in all_history:
+            event_id = str(history_event.get("event_id") or "")
+            if event_id and event_id in current_history_ids:
+                continue
             record_history_event(repo_root, history_event)
-        for pending_ack in deferred_handoff_acknowledgements:
+            if event_id:
+                current_history_ids.add(event_id)
+        for pending_ack in pending_acks:
+            disposition_key = pending_ack["disposition_key"]
             acknowledgement = acknowledge_dream_handoff(
                 repo_root,
-                handoff_id=str(pending_ack.get("handoff_id") or ""),
-                disposition_id=str(pending_ack.get("disposition_id") or ""),
+                handoff_id=pending_ack["handoff_id"],
+                disposition_id=(
+                    disposition_ids_by_key.get(disposition_key) or disposition_key
+                ),
                 run_id=clean_run_id,
             )
             handoff_acknowledgements.append(
                 str(acknowledgement.get("ack_id") or "")
             )
+        lifecycle_review = review_entry_lifecycles(
+            repo_root,
+            run_id=clean_run_id,
+            catalog_entries=runtime_catalog_entries,
+        )
+        blockers.extend(
+            f"lifecycle review: {item}"
+            for item in lifecycle_review.get("issues", [])
+            if str(item).strip()
+        )
 
-    from local_kb.candidate_lifecycle import review_entry_lifecycles
-
-    lifecycle_review = review_entry_lifecycles(
-        repo_root,
-        run_id=clean_run_id,
-        catalog_entries=runtime_catalog_entries,
-    )
-    lifecycle_review_issues = [
-        str(item)
-        for item in lifecycle_review.get("issues", [])
-        if str(item).strip()
-    ]
-    blockers.extend(
-        f"lifecycle review: {item}" for item in lifecycle_review_issues
-    )
-    index_refresh: dict[str, Any] = {}
-    if model_generation.get("ok"):
-        initial_receipt = (
-            model_generation.get("receipt", {})
-            if isinstance(model_generation.get("receipt"), Mapping)
-            else {}
-        )
-        initial_validation = (
-            initial_receipt.get("index_validation", {})
-            if isinstance(initial_receipt.get("index_validation"), Mapping)
-            else model_generation.get("index_validation", {})
-        )
-        initial_index_receipt = (
-            initial_receipt.get("index_receipt", {})
-            if isinstance(initial_receipt.get("index_receipt"), Mapping)
-            else model_generation.get("index_receipt", {})
-        )
+    if not blockers:
         index_affecting_review = int(lifecycle_review.get("decision_count") or 0) > 0
-        initial_committed_generation_is_final = bool(
-            model_generation.get("status") == "committed"
-            and initial_validation.get("ok")
-            and not initial_validation.get("deferred")
-            and not index_affecting_review
-        )
-        initial_no_delta_generation_is_final = bool(
-            model_generation.get("status") == "no_delta"
-            and not index_affecting_review
-        )
-        if initial_committed_generation_is_final:
+        if model_generation.get("status") == "committed":
+            rebuilt = rebuild_active_index(
+                repo_root,
+                reason=f"sleep:{clean_run_id}:final-index-owner",
+                publisher_id="local_kb.lifecycle.run_incremental_sleep",
+            )
+            rebuilt_validation = validate_active_index(repo_root)
             index_refresh = {
-                "ok": True,
-                "status": "reused_current",
-                "idempotent_no_delta": True,
-                "index_receipt": dict(initial_index_receipt),
-                "index_validation": dict(initial_validation),
-                "reuse_ticket": {
-                    "source": "initial-model-generation",
-                    "reason": "no index-affecting lifecycle decision followed publication",
-                },
+                "ok": bool(rebuilt.get("ok") and rebuilt_validation.get("ok")),
+                "status": "published_current_authority",
+                "index_receipt": rebuilt,
+                "index_validation": rebuilt_validation,
             }
-        elif initial_no_delta_generation_is_final:
-            current_validation = validate_active_index(repo_root)
-            if current_validation.get("ok"):
+        elif model_generation.get("status") == "no_delta" and not index_affecting_review:
+            validation = validate_active_index(repo_root)
+            if validation.get("ok"):
                 current_index = load_active_index(repo_root)
-                current_receipt = {
-                    "ok": True,
-                    "receipt_id": str(current_index.get("receipt_id") or ""),
-                    "path": str(active_index_path(repo_root)),
-                    "generation": int(current_index.get("generation") or 0),
-                    "content_digest": str(current_index.get("content_digest") or ""),
-                    "indexed_record_count": int(current_index.get("indexed_record_count") or 0),
-                    "excluded_status_counts": dict(current_index.get("excluded_status_counts") or {}),
-                }
                 index_refresh = {
                     "ok": True,
                     "status": "reused_current",
-                    "idempotent_no_delta": True,
-                    "index_receipt": current_receipt,
-                    "index_validation": current_validation,
-                    "reuse_ticket": {
-                        "source": "current-no-delta-generation",
-                        "reason": "the model and retrieval-affecting lifecycle projection are unchanged",
+                    "index_receipt": {
+                        "receipt_id": str(current_index.get("receipt_id") or ""),
+                        "path": str(active_index_path(repo_root)),
+                        "generation": int(current_index.get("generation") or 0),
+                        "content_digest": str(current_index.get("content_digest") or ""),
                     },
+                    "index_validation": validation,
                 }
             else:
-                rebuilt_receipt = rebuild_active_index(
+                rebuilt = rebuild_active_index(
                     repo_root,
                     reason=f"sleep:{clean_run_id}:final-no-delta-index-owner",
                     publisher_id="local_kb.lifecycle.run_incremental_sleep",
                 )
                 rebuilt_validation = validate_active_index(repo_root)
                 index_refresh = {
-                    "ok": bool(rebuilt_receipt.get("ok") and rebuilt_validation.get("ok")),
+                    "ok": bool(rebuilt.get("ok") and rebuilt_validation.get("ok")),
                     "status": "rebuilt_current_authority",
-                    "idempotent_no_delta": True,
-                    "index_receipt": rebuilt_receipt,
+                    "index_receipt": rebuilt,
                     "index_validation": rebuilt_validation,
-                    "prior_validation": current_validation,
                 }
-                if not index_refresh.get("ok"):
-                    blockers.append(
-                        "final no-delta index owner: "
-                        + "; ".join(
-                            str(item)
-                            for item in rebuilt_validation.get("issues", [])
-                        )
-                    )
         else:
-            index_refresh = publish_sleep_model_generation(
+            rebuilt = rebuild_active_index(
                 repo_root,
-                reason=f"sleep:{clean_run_id}:post-lifecycle-review",
+                reason=f"sleep:{clean_run_id}:post-lifecycle-review-index-owner",
+                publisher_id="local_kb.lifecycle.run_incremental_sleep",
             )
-            if not index_refresh.get("ok"):
-                blockers.append(
-                    "post-review index refresh: "
-                    + str(index_refresh.get("error") or index_refresh.get("status"))
+            rebuilt_validation = validate_active_index(repo_root)
+            index_refresh = {
+                "ok": bool(rebuilt.get("ok") and rebuilt_validation.get("ok")),
+                "status": "rebuilt_current_authority",
+                "index_receipt": rebuilt,
+                "index_validation": rebuilt_validation,
+            }
+        if not index_refresh.get("ok"):
+            blockers.append(
+                "final index publication: "
+                + str(index_refresh.get("error") or index_refresh.get("status"))
+            )
+
+    lifecycle_after = load_lifecycle_state(repo_root)
+    output_watermark = input_watermark
+    completed_selected = {
+        item_id
+        for item_id, result in current_batch.get("results", {}).items()
+        if isinstance(result, Mapping) and result.get("status") == "completed"
+    }
+    if not blockers:
+        observations_after = lifecycle_after.get("observations", {})
+        for row_index in range(input_watermark, len(rows)):
+            row = rows[row_index]
+            if row.get("_malformed"):
+                break
+            if str(row.get("event_type") or "").lower() == "observation":
+                observation_id = str(row.get("event_id") or "")
+                state = observations_after.get(observation_id, {})
+                state_name = (
+                    str(state.get("state") or "")
+                    if isinstance(state, Mapping)
+                    else ""
                 )
+                if (
+                    f"observation:{observation_id}" not in completed_selected
+                    and state_name in ACTIONABLE_OBSERVATION_STATES
+                ):
+                    break
+            output_watermark = row_index + 1
+
+    index_validation = (
+        index_refresh.get("index_validation", {})
+        if isinstance(index_refresh.get("index_validation"), Mapping)
+        else _sleep_not_run("final index publication failed")
+    )
     index_receipt = (
         index_refresh.get("index_receipt", {})
         if isinstance(index_refresh.get("index_receipt"), Mapping)
         else {}
     )
-    index_validation = (
-        index_refresh.get("index_validation", {})
-        if isinstance(index_refresh.get("index_validation"), Mapping)
-        else {}
+    already_terminal_skipped = sum(
+        1
+        for row in rows[input_watermark:output_watermark]
+        if str(row.get("event_type") or "").lower() == "observation"
+        and f"observation:{str(row.get('event_id') or '')}" not in completed_selected
     )
-    if not index_validation or index_validation.get("deferred"):
-        index_validation = validate_active_index(repo_root)
-    if not index_validation.get("ok"):
-        blockers.extend(str(item) for item in index_validation.get("issues", []))
-    lifecycle_after = load_lifecycle_state(repo_root)
-    observations_after = lifecycle_after.get("observations", {})
-    closing_backlog = sum(
-        1
-        for item in observations_after.values()
-        if isinstance(item, Mapping) and str(item.get("state") or "") in {"new", "missing-admission"}
+    has_blocked_items = int(checkpoint.get("blocked_count") or 0) > 0
+    final_state = (
+        "blocked"
+        if blockers
+        else "completed_with_blocks"
+        if has_blocked_items
+        else "completed"
     )
-    terminally_disposed = sum(
-        1
-        for item in observations_after.values()
-        if isinstance(item, Mapping) and str(item.get("state") or "") in {"represented", "candidate", "history_only", "rejected"}
-    ) - sum(
-        1
-        for item in observations_before.values()
-        if isinstance(item, Mapping) and str(item.get("state") or "") in {"represented", "candidate", "history_only", "rejected"}
-    )
-    explicitly_parked = sum(
-        1
-        for item in observations_after.values()
-        if isinstance(item, Mapping) and str(item.get("state") or "") == "parked"
-    ) - sum(
-        1
-        for item in observations_before.values()
-        if isinstance(item, Mapping) and str(item.get("state") or "") == "parked"
-    )
-    input_slice = rows[input_watermark:output_watermark]
-    receipt_id = f"sleep-receipt:{content_fingerprint([clean_run_id, input_watermark, output_watermark, lifecycle_after.get('event_digest')])[:24]}"
-    final_state = "completed" if not blockers else "blocked"
     receipt = {
         "schema_version": SLEEP_POLICY_VERSION,
-        "receipt_id": receipt_id,
+        "receipt_id": "sleep-receipt:"
+        + content_fingerprint(
+            [clean_run_id, batch_id, checkpoint.get("revision"), final_state]
+        )[:24],
         "run_id": clean_run_id,
         "created_at": utc_now_iso(),
         "input_generation": content_fingerprint(rows),
         "input_watermark": input_watermark,
         "output_watermark": output_watermark if not blockers else input_watermark,
-        "consumed_range": {"inclusive_start": input_watermark, "exclusive_end": output_watermark},
-        "consumed_digest": content_fingerprint(input_slice),
-        "opening_actionable_backlog": opening_backlog,
-        "newly_admitted": newly_admitted,
-        "processed_observations": processed_observations,
+        "consumed_range": {
+            "inclusive_start": input_watermark,
+            "exclusive_end": output_watermark if not blockers else input_watermark,
+        },
+        "consumed_digest": content_fingerprint(
+            rows[input_watermark:output_watermark]
+        ),
+        "opening_actionable_backlog": int(plan.get("prior_remaining_count") or 0),
+        "newly_admitted": int(plan.get("newly_eligible_count") or 0),
+        "processed_observations": attempt_processed,
+        "batch_processed_observations": total_processed,
         "already_terminal_skipped": already_terminal_skipped,
+        **batch_fields(),
         "lifecycle_batch": lifecycle_batch,
-        "terminally_disposed": max(0, terminally_disposed),
-        "explicitly_parked": max(0, explicitly_parked),
-        "closing_actionable_backlog": closing_backlog,
-        "backlog_delta": closing_backlog - (opening_backlog + newly_admitted),
-        "disposition_ids": [item for item in dispositions if item],
-        "handoff_acknowledgements": [item for item in handoff_acknowledgements if item],
+        "terminally_disposed": total_processed,
+        "explicitly_parked": 0,
+        "closing_actionable_backlog": int(
+            checkpoint.get("closing_remaining_count") or 0
+        ),
+        "backlog_delta": int(checkpoint.get("closing_remaining_count") or 0)
+        - int(plan.get("prior_remaining_count") or 0)
+        - int(plan.get("newly_eligible_count") or 0),
+        "disposition_ids": [
+            disposition_ids_by_key.get(key) or key for key in disposition_keys
+        ],
+        "handoff_acknowledgements": [
+            item for item in handoff_acknowledgements if item
+        ],
         "candidate_created": candidate_created,
         "candidate_reused": candidate_reused,
         "lifecycle_review": lifecycle_review,
@@ -1620,8 +1997,48 @@ def _run_incremental_sleep_locked(
         "index_validation": index_validation,
         "blockers": blockers,
         "policy_version": SLEEP_POLICY_VERSION,
-        "input_digest": content_fingerprint(input_slice),
+        "input_digest": content_fingerprint(rows[input_watermark:output_watermark]),
         "final_run_state": final_state,
+        "blocked_items": [
+            {
+                "item_id": item_id,
+                "owner": str(
+                    current_batch.get("results", {})
+                    .get(item_id, {})
+                    .get("owner")
+                    or ""
+                ),
+                "reopen_condition": str(
+                    current_batch.get("results", {})
+                    .get(item_id, {})
+                    .get("reopen_condition")
+                    or ""
+                ),
+            }
+            for item_id in checkpoint.get("blocked_item_ids") or []
+        ],
+        "downstream_stages": (
+            {
+                stage_id: {
+                    "status": "not_run",
+                    "reason": "sleep-completed-with-blocks",
+                }
+                for stage_id in (
+                    "kb-dream",
+                    "kb-organization-contribute",
+                    "kb-organization-maintenance",
+                )
+            }
+            if has_blocked_items
+            else {}
+        ),
+        "downstream": {
+            "lifecycle_commit": "completed",
+            "model_publication": "completed" if not blockers else "failed",
+            "history_append": "completed" if not blockers else "not_run",
+            "handoff_acknowledgement": "completed" if not blockers else "not_run",
+            "watermark_commit": "completed" if not blockers else "not_run",
+        },
         "lane_lock": dict(lane_lock),
         "lock_release": {
             "ok": False,
@@ -1632,7 +2049,6 @@ def _run_incremental_sleep_locked(
             "reason": "pending-native-receipt-finalization",
         },
     }
-    receipt_path = sleep_receipt_dir(repo_root) / f"{clean_run_id}.json"
     _atomic_write_json(receipt_path, receipt)
     if not blockers:
         _atomic_write_json(
@@ -1640,8 +2056,14 @@ def _run_incremental_sleep_locked(
             {
                 "schema_version": SLEEP_POLICY_VERSION,
                 "committed_watermark": output_watermark,
-                "last_receipt_id": receipt_id,
-                "last_receipt_path": str(receipt_path.relative_to(repo_root)).replace("\\", "/"),
+                "last_batch_id": batch_id,
+                "closing_remaining_count": int(
+                    checkpoint.get("closing_remaining_count") or 0
+                ),
+                "last_receipt_id": receipt["receipt_id"],
+                "last_receipt_path": str(receipt_path.relative_to(repo_root)).replace(
+                    "\\", "/"
+                ),
                 "last_input_digest": receipt["input_digest"],
                 "updated_at": receipt["created_at"],
             },
@@ -1730,12 +2152,18 @@ def run_incremental_sleep(
     *,
     run_id: str | None = None,
     max_observations: int = 250,
+    soft_deadline_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Run one Sleep mutation while owning the shared local-maintenance lane."""
 
     repo_root = Path(repo_root)
     clean_run_id = str(
         run_id or f"kb-sleep-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    )
+    soft_deadline_monotonic = (
+        time.monotonic() + max(0.0, float(soft_deadline_seconds))
+        if soft_deadline_seconds is not None
+        else None
     )
     state_path = sleep_state_path(repo_root)
     prior_state_exists = state_path.is_file()
@@ -1786,6 +2214,7 @@ def run_incremental_sleep(
             run_id=clean_run_id,
             max_observations=max_observations,
             lane_lock=lane_lock,
+            soft_deadline_monotonic=soft_deadline_monotonic,
         )
     except Exception as exc:
         lock_release = release_lane_lock(

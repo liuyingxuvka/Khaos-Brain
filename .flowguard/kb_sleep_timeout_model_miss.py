@@ -60,7 +60,8 @@ def build_report() -> dict[str, object]:
         ),
         observed_failure=(
             "Sleep committed candidate lifecycle events, durably invalidated the active "
-            "index, then exhausted its 900-second native timeout before index/watermark closure."
+            "index, then exhausted its 900-second native timeout before index/watermark closure; "
+            "the previous green model therefore overclaimed recovery safety."
         ),
         observed_failure_evidence_ref=OBSERVED_FAILURE_ID,
         miss_type="state_too_coarse",
@@ -90,9 +91,9 @@ def build_report() -> dict[str, object]:
         ),
         error_evidence_ids=(OBSERVED_FAILURE_ID,),
         root_cause_backpropagation=(
-            "Candidate creation and review committed transitions one event at a time. "
-            "Each event replayed the complete lifecycle ledger before and after append, "
-            "while the executable owner model lacked invalidated-pending-rebuild and timeout states."
+            "Candidate creation and review lacked a frozen resumable item batch. The owner "
+            "model treated every lifecycle transition as a global invalidation and lacked "
+            "per-item progress, impact scope, prior-generation availability, and remainder states."
         ),
         code_owner="local_kb.lifecycle._run_incremental_sleep_locked",
         rationale=(
@@ -112,9 +113,9 @@ def build_report() -> dict[str, object]:
                     observed_failure_id=OBSERVED_FAILURE_ID,
                     cause=FALSE_NEGATIVE_CAUSE_SCOPE_OVERCLAIM,
                     would_have_failed_if=(
-                        "the model had represented invalidated_pending_rebuild explicitly",
-                        "the same-class test had counted complete-ledger replay per candidate",
-                        "the prior green claim had required one real timeout/recovery trace",
+                        "the model had represented frozen item and progress-saved states",
+                        "the model had distinguished additive work from exact revoke and corruption",
+                        "the prior green claim had required previous-generation availability after timeout",
                     ),
                     generalized_case_id=GENERALIZED_CASE_ID,
                     new_model_obligation_id=OBLIGATION_ID,
@@ -158,8 +159,9 @@ def build_report() -> dict[str, object]:
                     risk_id=MISS_ID,
                     evidence_id=MODEL_PROOF_ID,
                     description=(
-                        "LifecycleConvergenceBlock now models batch, invalidation, "
-                        "timeout, authorized recovery, and watermark terminal states."
+                        "LifecycleConvergenceBlock now models frozen batch identity, per-item "
+                        "settlement, scoped retrieval impact, progress_saved, prior-generation "
+                        "availability, remainder comparison, and pointer/watermark terminal states."
                     ),
                     resolved=True,
                     current=True,

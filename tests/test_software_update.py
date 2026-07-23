@@ -117,7 +117,7 @@ class SoftwareUpdateStateTests(unittest.TestCase):
                 "ok": True,
                 "status": "current",
                 "migration_id": (
-                    "kb-maintenance-standard-v5-researchguard-logic-native"
+                    "kb-maintenance-standard-v6-resumable-sleep-current-index"
                 ),
                 "validation": {
                     "ok": True,

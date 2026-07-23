@@ -11,6 +11,7 @@ from local_kb.consolidate import consolidate_history
 from local_kb.desktop_app import _cover_title, _language_display, _language_from_display
 from local_kb.models import Entry
 from local_kb.i18n import (
+    localized_automation_status,
     localized_entry,
     localized_route_label,
     localized_route_segment,
@@ -54,6 +55,16 @@ def _sample_entry() -> dict[str, object]:
 
 
 class KbI18nTests(unittest.TestCase):
+    def test_sleep_progress_and_not_run_statuses_have_display_only_chinese_labels(self) -> None:
+        self.assertEqual(localized_automation_status("progress_saved", "en"), "Progress saved")
+        self.assertEqual(localized_automation_status("progress_saved", "zh-CN"), "进度已保存")
+        self.assertEqual(
+            localized_automation_status("completed_with_blocks", "zh-CN"),
+            "已完成，但有阻塞项",
+        )
+        self.assertEqual(localized_automation_status("not_run", "zh-CN"), "未运行")
+        self.assertEqual(localized_automation_status("progress_saved", "unknown"), "Progress saved")
+
     def test_localized_entry_falls_back_to_english_for_missing_fields(self) -> None:
         entry = _sample_entry()
         entry["i18n"] = {

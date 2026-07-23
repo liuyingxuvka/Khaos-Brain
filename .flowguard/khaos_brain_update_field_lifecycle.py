@@ -205,6 +205,8 @@ def build_rows() -> tuple[FieldLifecycleRow, ...]:
     for field_id, role in (
         ("operator_activation.schema_version", "schema_version"),
         ("operator_activation.final_install_identity_hash", "persisted"),
+        ("operator_activation.status_authority.receipt_hash", "authority"),
+        ("operator_activation.status_authority.states", "routing"),
         ("operator_activation.skill_inventory.schema_version", "schema_version"),
         ("operator_activation.skill_inventory.maintained_skill_ids", "routing"),
         ("operator_activation.skill_inventory.scheduled_skill_ids", "routing"),

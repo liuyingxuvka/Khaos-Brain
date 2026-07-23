@@ -12,6 +12,29 @@ ZH_CN = "zh-CN"
 SUPPORTED_LANGUAGES = (DEFAULT_LANGUAGE, ZH_CN)
 ROUTE_I18N_RELATIVE_PATH = Path("kb") / "i18n" / ZH_CN / "route_segments.yaml"
 
+AUTOMATION_STATUS_LABELS = {
+    DEFAULT_LANGUAGE: {
+        "completed": "Completed",
+        "completed_with_blocks": "Completed with blocked items",
+        "progress_saved": "Progress saved",
+        "blocked": "Blocked",
+        "retryable": "Retryable",
+        "no_delta": "No changes",
+        "failed": "Failed",
+        "not_run": "Not run",
+    },
+    ZH_CN: {
+        "completed": "已完成",
+        "completed_with_blocks": "已完成，但有阻塞项",
+        "progress_saved": "进度已保存",
+        "blocked": "已阻塞",
+        "retryable": "可重试",
+        "no_delta": "无变化",
+        "failed": "失败",
+        "not_run": "未运行",
+    },
+}
+
 LOCALIZABLE_SECTION_FIELDS = {
     "if": ("notes",),
     "action": ("description",),
@@ -278,6 +301,13 @@ def normalize_language(value: Any) -> str:
     if text in {"zh", "zh-cn", "zh_cn", "chinese", "中文", "简体中文"}:
         return ZH_CN
     return DEFAULT_LANGUAGE
+
+
+def localized_automation_status(status: Any, language: str = DEFAULT_LANGUAGE) -> str:
+    normalized = normalize_language(language)
+    canonical = str(status or "").strip()
+    labels = AUTOMATION_STATUS_LABELS[normalized]
+    return labels.get(canonical, canonical or labels["failed"])
 
 
 def language_label(language: str) -> str:

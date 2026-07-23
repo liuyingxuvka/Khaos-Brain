@@ -7,7 +7,7 @@ from typing import Any, Mapping
 from uuid import uuid4
 
 
-CURRENT_MAINTENANCE_STANDARD_VERSION = 4
+CURRENT_MAINTENANCE_STANDARD_VERSION = 6
 CURRENT_HISTORY_SCHEMA_VERSION = 1
 MAINTENANCE_STATE_PATH = Path("kb") / "history" / "migrations" / "maintenance_state.json"
 

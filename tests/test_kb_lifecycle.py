@@ -185,10 +185,6 @@ class KbLifecycleTests(unittest.TestCase):
                 '{"generation":1,"records":[]}\n',
                 encoding="utf-8",
             )
-            (index_root / "active-authority.json").write_text(
-                '{"generation":1}\n',
-                encoding="utf-8",
-            )
             observation = build_observation(
                 task_summary="Postflight keeps active work on bounded history intake.",
                 outcome="success",
@@ -334,7 +330,9 @@ class KbLifecycleTests(unittest.TestCase):
 
             receipt = run_incremental_sleep(repo_root, run_id="sleep-blocked")
 
-            self.assertEqual(receipt["final_run_state"], "blocked")
+            self.assertEqual(receipt["final_run_state"], "completed_with_blocks")
+            self.assertEqual(receipt["blocked_this_attempt"], 1)
+            self.assertEqual(receipt["batch_checkpoint"]["state"], "settled_with_blocks")
             self.assertEqual(receipt["output_watermark"], 0)
 
     def test_sleep_recovers_zero_watermark_by_skipping_terminal_history(self) -> None:
@@ -968,10 +966,6 @@ class KbLifecycleTests(unittest.TestCase):
             )
             stale_base = load_lifecycle_state(repo_root)
             admit_observation(repo_root, observation)
-            marker = (
-                repo_root / "kb" / "indexes" / "active-invalidated.json"
-            )
-            marker.unlink(missing_ok=True)
             event = build_observation_disposition_event(
                 observation,
                 run_id="stale-batch",
@@ -996,7 +990,6 @@ class KbLifecycleTests(unittest.TestCase):
                         stale_base.get("last_sequence") or 0
                     ),
                 )
-            self.assertFalse(marker.exists())
             self.assertEqual(load_lifecycle_state(repo_root)["event_count"], 1)
 
     def test_replay_lifecycle_uses_a_linear_idempotency_index(self) -> None:

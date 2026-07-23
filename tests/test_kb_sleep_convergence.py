@@ -81,7 +81,7 @@ class KbSleepConvergenceTests(unittest.TestCase):
             self.assertEqual(receipt["input_watermark"], receipt["output_watermark"])
             self.assertFalse(sleep_state_path(repo_root).exists())
 
-    def test_failed_sleep_does_not_advance_committed_watermark(self) -> None:
+    def test_malformed_history_is_isolated_without_advancing_watermark(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)
             activate_standard(repo_root)
@@ -94,16 +94,27 @@ class KbSleepConvergenceTests(unittest.TestCase):
             with history_events_path(repo_root).open("a", encoding="utf-8") as handle:
                 handle.write("{malformed-json\n")
 
-            failed = run_incremental_sleep(repo_root, run_id="sleep-malformed")
+            isolated = run_incremental_sleep(repo_root, run_id="sleep-malformed")
             committed_after = json.loads(
                 sleep_state_path(repo_root).read_text(encoding="utf-8")
             )["committed_watermark"]
 
             self.assertEqual(first["output_watermark"], committed_before)
-            self.assertEqual(failed["final_run_state"], "blocked", failed)
-            self.assertEqual(failed["output_watermark"], committed_before)
+            self.assertEqual(isolated["final_run_state"], "completed_with_blocks", isolated)
+            self.assertEqual(isolated["output_watermark"], committed_before)
             self.assertEqual(committed_after, committed_before)
-            self.assertTrue(failed["lock_release"]["released"])
+            self.assertEqual(
+                [item["item_id"] for item in isolated["blocked_items"]],
+                [f"history-error:{committed_before}"],
+            )
+            self.assertTrue(
+                all(
+                    stage["status"] == "not_run"
+                    and stage["reason"] == "sleep-completed-with-blocks"
+                    for stage in isolated["downstream_stages"].values()
+                )
+            )
+            self.assertTrue(isolated["lock_release"]["released"])
 
     def test_candidate_promotes_only_with_independent_support_and_validation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

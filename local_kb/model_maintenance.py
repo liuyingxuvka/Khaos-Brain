@@ -27,6 +27,7 @@ from local_kb.logicguard_models import (
     open_model_store,
     publish_authority_generation,
     read_exact_mesh,
+    recover_authority_scopes,
 )
 from local_kb.model_projection import (
     binding_from_projection,
@@ -504,6 +505,8 @@ def publish_sleep_model_generation(
     actor: str = SLEEP_AUTHORITY_WRITER,
     refresh_index_on_no_delta: bool = True,
     validate_index_on_no_delta: bool = True,
+    refresh_index_on_commit: bool = True,
+    validate_index_on_commit: bool = True,
     include_runtime_catalog: bool = False,
 ) -> dict[str, Any]:
     """Publish one Sleep-owned model/mesh/projection/index generation atomically."""
@@ -511,6 +514,12 @@ def publish_sleep_model_generation(
     if actor != SLEEP_AUTHORITY_WRITER:
         raise PermissionError("Only the Sleep authority owner may publish a normal-runtime model generation")
     root = Path(repo_root).resolve()
+    authority_recovery = recover_authority_scopes(root)
+    if not authority_recovery.get("ok"):
+        raise RuntimeError(
+            "Sleep model authority recovery failed: "
+            + "; ".join(authority_recovery.get("issues", []))
+        )
     normalized_upserts: dict[str, tuple[str, Path, dict[str, Any]]] = {}
     for path_value, payload in (card_upserts or {}).items():
         scope, relative, path = _relative_card_path(root, path_value)
@@ -535,6 +544,8 @@ def publish_sleep_model_generation(
     if not normalized_upserts and not normalized_deletes and not relations and not unresolved_relationships:
         pointer_exists = authority_generation_pointer_path(root).exists()
         index_receipt = {}
+        if not pointer_exists:
+            publish_authority_generation(root, generation_before, writer=actor)
         if refresh_index_on_no_delta:
             index_receipt = rebuild_active_index(
                 root,
@@ -542,8 +553,6 @@ def publish_sleep_model_generation(
                 authority_generation=None if pointer_exists else generation_before,
                 publisher_id=actor,
             )
-        if not pointer_exists:
-            publish_authority_generation(root, generation_before, writer=actor)
         validation = (
             validate_active_index(root)
             if validate_index_on_no_delta
@@ -573,6 +582,7 @@ def publish_sleep_model_generation(
             "index_receipt": index_receipt,
             "index_validation": validation,
             "model_diagnostics": _gap_summary(current_rows.values()),
+            "authority_recovery": authority_recovery,
         }
         if include_runtime_catalog:
             result["_runtime_catalog_entries"] = _entries_from_projection_rows(
@@ -744,14 +754,24 @@ def publish_sleep_model_generation(
             root,
             [(root / row["path"], row["projection"]) for row in projected_rows],
         )
-        index_receipt = rebuild_active_index(
-            root,
-            reason=reason,
-            authority_generation=generation,
-            publisher_id=actor,
-        )
         published = publish_authority_generation(root, generation, writer=actor)
-        index_validation = validate_active_index(root)
+        index_receipt = {}
+        if refresh_index_on_commit:
+            index_receipt = rebuild_active_index(
+                root,
+                reason=reason,
+                authority_generation=generation,
+                publisher_id=actor,
+            )
+        index_validation = (
+            validate_active_index(root)
+            if validate_index_on_commit
+            else {
+                "ok": True,
+                "deferred": True,
+                "reason": "final Sleep index owner has not run yet",
+            }
+        )
         if not index_validation.get("ok"):
             raise RuntimeError("Sleep generation index validation failed: " + "; ".join(index_validation.get("issues", [])))
         validate_card_projections(
@@ -776,6 +796,7 @@ def publish_sleep_model_generation(
             "index_receipt": index_receipt,
             "index_validation": index_validation,
             "model_diagnostics": _gap_summary(projected_rows),
+            "authority_recovery": authority_recovery,
             "unresolved_relationship_count": sum(len(items) for items in unresolved_by_scope.values()),
             "claim_boundary": "Sleep published current model structure; it did not establish factual truth.",
         }

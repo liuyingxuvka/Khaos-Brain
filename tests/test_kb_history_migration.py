@@ -464,6 +464,12 @@ class KbHistoryMigrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)
             (repo_root / "VERSION").write_text("0.5.2\n", encoding="utf-8")
+            legacy_index = repo_root / "kb" / "indexes" / "active.json"
+            legacy_index.parent.mkdir(parents=True, exist_ok=True)
+            legacy_index.write_text(
+                json.dumps({"schema_version": 5, "records": []}) + "\n",
+                encoding="utf-8",
+            )
             history = repo_root / "kb" / "history" / "events.jsonl"
             history.parent.mkdir(parents=True, exist_ok=True)
             observations = [
@@ -492,6 +498,10 @@ class KbHistoryMigrationTests(unittest.TestCase):
             self.assertEqual(result["lifecycle_batch"]["settlement_mode"], "atomic-batch")
             self.assertEqual(result["lifecycle_batch"]["replay_pass_count"], 2)
             self.assertEqual(result["lifecycle_batch"]["atomic_batch_count"], 1)
+            self.assertEqual(
+                result["lifecycle_batch"]["retrieval_impacts"][0]["status"],
+                "deferred_to_versioned_migration",
+            )
             self.assertTrue(result["lifecycle_validation"]["ok"])
 
     def test_batch_settlement_resumes_partial_per_item_attempt_without_duplicates(self) -> None:

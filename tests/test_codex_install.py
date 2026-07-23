@@ -447,6 +447,56 @@ class CodexInstallTests(unittest.TestCase):
             self.assertIn("affected_assurance_stable", phases)
             self.assertNotIn("post_assurance_history_current", phases)
 
+    def test_migration_failure_persists_original_automation_intent_before_work(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            codex_home = root / ".codex"
+            shell_bin, git_real, rg_source = _write_fake_tools(root)
+            for automation_id in SURVIVING_AUTOMATIONS:
+                path = codex_home / "automations" / automation_id / "automation.toml"
+                path.parent.mkdir(parents=True)
+                path.write_text(
+                    'status = "ACTIVE"\nuser_paused = false\n',
+                    encoding="utf-8",
+                )
+
+            with patch(
+                "local_kb.maintenance_migration.run_maintenance_migration",
+                side_effect=RuntimeError("fixture migration failed"),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "fixture migration failed"):
+                    install_codex_integration(
+                        repo_root,
+                        codex_home,
+                        shell_bin_dir=shell_bin,
+                        git_executable=git_real,
+                        rg_source=rg_source,
+                        persist_user_shell_path=False,
+                        run_upgrade_assurance=False,
+                    )
+
+            attempt = latest_upgrade_attempt(codex_home)
+            self.assertEqual(attempt["status"], "failed")
+            self.assertEqual(attempt["phase"], "failed_paused_recoverable")
+            self.assertEqual(
+                set(attempt["automation_state_snapshot"]["states"].values()),
+                {"ACTIVE"},
+            )
+            self.assertEqual(
+                set(attempt["automation_state_snapshot"]["user_paused"].values()),
+                {False},
+            )
+            phases = [row["phase"] for row in attempt["checkpoint_refs"]]
+            self.assertEqual(phases[0], "automations_paused_migration_pending")
+            for automation_id in SURVIVING_AUTOMATIONS:
+                self.assertEqual(
+                    _automation_status(
+                        codex_home / "automations" / automation_id / "automation.toml"
+                    ),
+                    "PAUSED",
+                )
+
     def test_affected_assurance_failure_keeps_survivors_paused(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as tmp:
@@ -589,8 +639,21 @@ class CodexInstallTests(unittest.TestCase):
         sleep = (root / ".agents/skills/local-kb-retrieve/MAINTENANCE_PROMPT.md").read_text(encoding="utf-8")
         dream = (root / ".agents/skills/local-kb-retrieve/DREAM_PROMPT.md").read_text(encoding="utf-8")
         self.assertIn("kb_sleep.py", sleep)
-        self.assertIn("exactly one current disposition", sleep)
+        self.assertIn("exact open `batch_plan`", sleep)
+        self.assertIn("`batch_head`", sleep)
+        self.assertIn("`batch_checkpoint`", sleep)
+        self.assertIn("`progress_saved`", sleep)
+        self.assertIn("`previous_remaining`", sleep)
+        self.assertIn("`closing_remaining`", sleep)
+        self.assertIn("`downstream_stages` as `not_run`", sleep)
         self.assertIn("Do not ask a human", sleep)
+        sleep_automation = next(
+            item["prompt"] for item in REPO_AUTOMATION_SPECS if item["id"] == "kb-sleep"
+        )
+        self.assertIn("exact open frozen batch", sleep_automation)
+        self.assertIn("progress_saved", sleep_automation)
+        self.assertIn("downstream_stages as not_run", sleep_automation)
+        self.assertIn("do not invoke kb_lane_status.py", sleep_automation)
         self.assertIn("no_delta_closed", dream)
         self.assertIn("typed idempotent Sleep handoff", dream)
         self.assertIn("Never directly modify cards", dream)
@@ -1189,6 +1252,47 @@ class CodexInstallTests(unittest.TestCase):
                     or "differs from the clean consumer projection" in item
                     for item in check["issues"]
                 )
+            )
+
+    def test_explicit_operator_status_authority_overrides_old_install_snapshot(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            states = {automation_id: "ACTIVE" for automation_id in SURVIVING_AUTOMATIONS}
+            for automation_id in SURVIVING_AUTOMATIONS:
+                path = codex_home / "automations" / automation_id / "automation.toml"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(
+                    f'id = "{automation_id}"\nstatus = "ACTIVE"\n',
+                    encoding="utf-8",
+                )
+            check = build_installation_check(
+                repo_root,
+                codex_home,
+                manifest_override={
+                    "repo_root": str(repo_root),
+                    "installed_automation_statuses": {
+                        automation_id: "PAUSED"
+                        for automation_id in SURVIVING_AUTOMATIONS
+                    },
+                },
+                automation_status_authority={
+                    "ok": True,
+                    "status": "test-current-operator-receipt",
+                    "issues": [],
+                    "states": states,
+                },
+            )
+            status_issues = [
+                issue
+                for row in check["automation_checks"]
+                for issue in row["issues"]
+                if "should be status=" in issue
+            ]
+            self.assertEqual(status_issues, [])
+            self.assertEqual(
+                check["automation_status_authority"]["states"],
+                states,
             )
 
     def test_organization_automation_times_are_stable_and_windowed(self) -> None:

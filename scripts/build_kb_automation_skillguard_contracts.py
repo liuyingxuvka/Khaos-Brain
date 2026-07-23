@@ -44,6 +44,7 @@ MODEL_PATHS = {
 NATIVE_IMPLEMENTATION_PATHS = {
     "kb-sleep-maintenance": (
         "local_kb/lifecycle.py",
+        "local_kb/sleep_batch.py",
         "local_kb/candidate_lifecycle.py",
         "local_kb/calibration.py",
         "local_kb/logicguard_models.py",

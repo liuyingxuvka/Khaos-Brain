@@ -16,7 +16,13 @@ import time
 from typing import Any, Iterable, Iterator, Mapping
 from uuid import uuid4
 
-from local_kb.active_index import rebuild_active_index, validate_active_index
+from local_kb.active_index import (
+    ACTIVE_INDEX_POINTER_SCHEMA_VERSION,
+    active_index_invalidation_path,
+    active_index_path,
+    rebuild_active_index,
+    validate_active_index,
+)
 from local_kb.common import normalize_string_list, utc_now_iso
 from local_kb.lifecycle import (
     build_entry_transition_event,
@@ -38,6 +44,7 @@ from local_kb.maintenance_standard import (
 from local_kb.maintenance_lanes import process_owner_is_alive
 from local_kb.history import build_history_event, record_history_event
 from local_kb.logicguard_models import (
+    AUTHORITY_SCOPES,
     ExactBindingError,
     LogicGuardBinding,
     authority_generation_pointer_path,
@@ -55,6 +62,7 @@ from local_kb.logicguard_models import (
     open_model_store,
     open_pinned_model_read_store,
     publish_authority_generation,
+    recover_authority_scopes,
     reuse_card_model_if_exact,
 )
 from local_kb.model_projection import (
@@ -71,7 +79,7 @@ from local_kb.store import history_events_path, load_yaml_file, write_yaml_file
 
 
 MIGRATION_SCHEMA_VERSION = 1
-MIGRATION_ID = "kb-maintenance-standard-v5-researchguard-logic-native"
+MIGRATION_ID = "kb-maintenance-standard-v6-resumable-sleep-current-index"
 MIGRATION_PHASES = (
     "preflight",
     "snapshot",
@@ -1511,6 +1519,7 @@ def settle_knowledge_debt(repo_root: Path, *, run_id: str) -> dict[str, Any]:
         expected_last_sequence=int(
             lifecycle_before.get("last_sequence") or 0
         ),
+        defer_active_index_impacts_to_migration_rebuild=True,
     )
 
     validation = validate_lifecycle(repo_root)
@@ -1536,6 +1545,7 @@ def settle_knowledge_debt(repo_root: Path, *, run_id: str) -> dict[str, Any]:
             "reused_event_count": int(batch_result.get("reused_count") or 0),
             "replay_pass_count": int(batch_result.get("replay_pass_count") or 0),
             "atomic_batch_count": int(batch_result.get("atomic_batch_count") or 0),
+            "retrieval_impacts": list(batch_result.get("retrieval_impacts") or []),
             "final_sequence": int(batch_result.get("state", {}).get("last_sequence") or 0),
         },
         "hard_observation_debt_count": len(hard_observation_debt),
@@ -2959,6 +2969,91 @@ def _projection_manifest(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, An
     )
 
 
+def classify_retired_active_index_authority(repo_root: Path) -> dict[str, Any]:
+    """Inventory the retired unscoped marker for direct current migration only."""
+
+    root = Path(repo_root).resolve()
+    marker_path = active_index_invalidation_path(root)
+    marker: dict[str, Any] = {}
+    marker_exists = marker_path.is_file()
+    if marker_exists:
+        try:
+            loaded = json.loads(marker_path.read_text(encoding="utf-8"))
+            marker = dict(loaded) if isinstance(loaded, Mapping) else {}
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            return {
+                "ok": False,
+                "status": "blocked",
+                "legacy_marker_present": True,
+                "error": f"Unreadable retired active-index marker: {exc}",
+            }
+    if marker_exists and not marker:
+        return {
+            "ok": False,
+            "status": "blocked",
+            "legacy_marker_present": True,
+            "error": "Retired active-index marker is empty or malformed",
+        }
+    if not marker_exists:
+        return {
+            "ok": True,
+            "status": "not_present",
+            "legacy_marker_present": False,
+            "impact": "none",
+        }
+
+    current: dict[str, Any] = {}
+    pointer_path = active_index_path(root)
+    if pointer_path.is_file():
+        try:
+            loaded = json.loads(pointer_path.read_text(encoding="utf-8"))
+            current = dict(loaded) if isinstance(loaded, Mapping) else {}
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            current = {}
+    item_id = str(marker.get("item_id") or "").strip()
+    records = current.get("records", []) if isinstance(current.get("records"), list) else []
+    indexed = any(
+        isinstance(row, Mapping) and str(row.get("entry_id") or "") == item_id
+        for row in records
+    )
+    lifecycle = load_lifecycle_state(root)
+    lifecycle_entry = (
+        lifecycle.get("entries", {}).get(item_id, {})
+        if isinstance(lifecycle.get("entries"), Mapping)
+        else {}
+    )
+    lifecycle_status = (
+        str(lifecycle_entry.get("status") or "")
+        if isinstance(lifecycle_entry, Mapping)
+        else ""
+    )
+    if not item_id:
+        impact = "global_current_corruption"
+    elif not indexed:
+        impact = "additive_pending"
+    elif lifecycle_status not in {"candidate", "trusted"}:
+        impact = "entry_revoke"
+    else:
+        impact = "entry_replace"
+    return {
+        "ok": True,
+        "status": "classified_for_direct_rebuild",
+        "legacy_marker_present": True,
+        "legacy_marker_digest": "sha256:" + hashlib.sha256(
+            marker_path.read_bytes()
+        ).hexdigest(),
+        "legacy_index_schema": int(current.get("schema_version") or 0),
+        "already_current_pointer": (
+            int(current.get("schema_version") or 0)
+            == ACTIVE_INDEX_POINTER_SCHEMA_VERSION
+        ),
+        "item_id": item_id,
+        "lifecycle_status": lifecycle_status,
+        "impact": impact,
+        "disposition": "replace-with-current-immutable-generation-and-pointer",
+    }
+
+
 def commit_logicguard_native_generation(
     repo_root: Path,
     model_stage: Mapping[str, Any],
@@ -2967,6 +3062,9 @@ def commit_logicguard_native_generation(
     fail_after_phase: str = "",
 ) -> dict[str, Any]:
     root = Path(repo_root).resolve()
+    retired_active_index = classify_retired_active_index_authority(root)
+    if not retired_active_index.get("ok"):
+        raise RuntimeError(str(retired_active_index.get("error") or "Retired active-index authority is unresolved"))
     generation_id = str(model_stage.get("generation_id") or "")
     rows = [dict(row) for row in model_stage.get("rows", []) if isinstance(row, Mapping)]
     by_scope: dict[str, list[dict[str, Any]]] = {}
@@ -3046,6 +3144,13 @@ def commit_logicguard_native_generation(
     )
     if fail_after_phase == "projections":
         raise RuntimeError("Injected failure after projections")
+    published = publish_authority_generation(
+        root,
+        generation,
+        writer="local_kb.maintenance_migration",
+    )
+    if fail_after_phase == "pointer":
+        raise RuntimeError("Injected failure after pointer")
     index_receipt = rebuild_active_index(
         root,
         reason=f"migration:{MIGRATION_ID}:{generation_id}",
@@ -3054,13 +3159,6 @@ def commit_logicguard_native_generation(
     )
     if fail_after_phase == "index":
         raise RuntimeError("Injected failure after index")
-    published = publish_authority_generation(
-        root,
-        generation,
-        writer="local_kb.maintenance_migration",
-    )
-    if fail_after_phase == "pointer":
-        raise RuntimeError("Injected failure after pointer")
     validation = validate_logicguard_native_authority(
         root,
         require_full_schema_inventory=True,
@@ -3082,6 +3180,7 @@ def commit_logicguard_native_generation(
         "scope_meshes": scope_meshes,
         "authority_generation": published,
         "active_index": index_receipt,
+        "retired_active_index_migration": retired_active_index,
         "validation": validation,
         "authority_schema_before": dict(
             model_stage.get("authority_schema_before") or {}
@@ -3122,11 +3221,14 @@ def migrate_legacy_card_generation(
                 root,
                 require_full_schema_inventory=True,
             )
+            active_index_validation = validate_active_index(root)
         except (ExactBindingError, ProjectionValidationError, ValueError):
             current = {}
             validation = {"ok": False}
+            active_index_validation = {"ok": False}
         if (
             validation.get("ok")
+            and active_index_validation.get("ok")
             and current.get("generation_id") == plan["current_generation_ids"][0]
         ):
             return {
@@ -3136,6 +3238,7 @@ def migrate_legacy_card_generation(
                 "generation_id": current["generation_id"],
                 "plan": plan,
                 "validation": validation,
+                "active_index_validation": active_index_validation,
             }
     snapshot = dict(rollback_snapshot or _backup_active_surface(root))
     try:
@@ -3882,6 +3985,12 @@ def run_maintenance_migration(
             live_locks = _live_lane_locks(root)
             if live_locks:
                 raise RuntimeError("Managed maintenance writers are active: " + ", ".join(live_locks))
+            authority_recovery = recover_authority_scopes(root, AUTHORITY_SCOPES)
+            if not authority_recovery.get("ok"):
+                raise RuntimeError(
+                    "LogicGuard authority recovery failed: "
+                    + "; ".join(authority_recovery.get("issues", []))
+                )
             if "preflight" not in journal.get("completed_phases", []):
                 journal = _checkpoint(
                     root,
@@ -3889,6 +3998,7 @@ def run_maintenance_migration(
                     "preflight",
                     {
                         "live_lane_locks": live_locks,
+                        "logicguard_authority_recovery": authority_recovery,
                         "source_versions": journal["source_versions"],
                         "target_versions": journal["target_versions"],
                     },

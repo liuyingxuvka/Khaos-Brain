@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import copy
+import json
+import os
+import socket
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,11 +12,12 @@ from unittest.mock import patch
 import yaml
 
 from local_kb import model_maintenance
-from local_kb.active_index import load_active_index
+from local_kb.active_index import load_active_index, rebuild_active_index
 from local_kb.logicguard_models import (
     GroundedModelRelation,
     canonical_digest,
     load_authority_generation,
+    mesh_store_root,
     read_exact_mesh,
 )
 from local_kb.model_maintenance import publish_sleep_model_generation
@@ -55,6 +59,63 @@ def grounding() -> dict:
 
 
 class KhaosSleepModelMaintenanceTests(unittest.TestCase):
+    def test_sleep_writer_explicitly_recovers_a_dead_mesh_writer_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            baseline = publish_sleep_model_generation(root, reason="test:baseline")
+            self.assertTrue(baseline["ok"], baseline)
+            lock_path = mesh_store_root(root, "candidates") / "locks" / "writer.lock"
+            lock_path.parent.mkdir(parents=True, exist_ok=True)
+            lock_path.write_text(
+                json.dumps(
+                    {
+                        "artifact_schema": "researchguard.logic.model-mesh-journal.v1",
+                        "mesh_schema_version": "researchguard.logic.model-mesh.v1",
+                        "lock_type": "mesh-catalog-shared-writer",
+                        "pid": 99999999,
+                        "host": socket.gethostname(),
+                        "transaction_id": "mesh-tx-interrupted-sleep",
+                        "created_at": "2026-07-22T00:00:00Z",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            resumed = publish_sleep_model_generation(root, reason="test:resume-after-dead-lock")
+
+            self.assertTrue(resumed["ok"], resumed)
+            self.assertFalse(lock_path.exists())
+            self.assertEqual(resumed["authority_recovery"]["status"], "recovered")
+
+    def test_sleep_writer_refuses_to_recover_a_live_mesh_writer_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            baseline = publish_sleep_model_generation(root, reason="test:baseline")
+            self.assertTrue(baseline["ok"], baseline)
+            lock_path = mesh_store_root(root, "candidates") / "locks" / "writer.lock"
+            lock_path.parent.mkdir(parents=True, exist_ok=True)
+            lock_path.write_text(
+                json.dumps(
+                    {
+                        "artifact_schema": "researchguard.logic.model-mesh-journal.v1",
+                        "mesh_schema_version": "researchguard.logic.model-mesh.v1",
+                        "lock_type": "mesh-catalog-shared-writer",
+                        "pid": os.getpid(),
+                        "host": socket.gethostname(),
+                        "transaction_id": "mesh-tx-live-writer",
+                        "created_at": "2026-07-22T00:00:00Z",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "authority recovery failed"):
+                publish_sleep_model_generation(root, reason="test:must-not-steal-live-lock")
+
+            self.assertTrue(lock_path.exists())
+
     def test_explicit_sleep_upsert_directly_replaces_one_raw_candidate_without_fallback_read(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -135,6 +196,39 @@ class KhaosSleepModelMaintenanceTests(unittest.TestCase):
                 )
             self.assertTrue(deferred["ok"], deferred)
             self.assertTrue(deferred["index_validation"]["deferred"])
+
+    def test_committed_generation_keeps_prior_active_index_until_final_owner(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            baseline = publish_sleep_model_generation(root, reason="test:baseline")
+            self.assertTrue(baseline["ok"], baseline)
+            active_before = load_active_index(root)
+
+            staged = publish_sleep_model_generation(
+                root,
+                reason="test:stage-before-final-pointer",
+                card_upserts={"kb/public/staged.yaml": card("staged")},
+                refresh_index_on_commit=False,
+                validate_index_on_commit=False,
+            )
+
+            self.assertTrue(staged["ok"], staged)
+            self.assertEqual(staged["status"], "committed")
+            self.assertTrue(staged["receipt"]["index_validation"]["deferred"])
+            self.assertEqual(
+                load_active_index(root)["content_digest"],
+                active_before["content_digest"],
+            )
+
+            rebuild_active_index(
+                root,
+                reason="test:final-pointer-owner",
+                publisher_id="local_kb.lifecycle.run_incremental_sleep",
+            )
+            self.assertNotEqual(
+                load_active_index(root)["content_digest"],
+                active_before["content_digest"],
+            )
 
     def test_empty_library_publishes_a_valid_zero_model_generation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

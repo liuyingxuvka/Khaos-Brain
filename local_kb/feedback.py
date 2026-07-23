@@ -146,11 +146,11 @@ def _runtime_authority_snapshot(repo_root: Path) -> dict[str, Any]:
             / "current-generation.json"
         ),
         "active_index": _file_identity(root / "kb" / "indexes" / "active.json"),
-        "active_index_authority": _file_identity(
-            root / "kb" / "indexes" / "active-authority.json"
+        "active_index_corruption": _file_identity(
+            root / "kb" / "indexes" / "active-corruption.json"
         ),
-        "active_index_invalidation": _file_identity(
-            root / "kb" / "indexes" / "active-invalidated.json"
+        "sleep_batch_head": _file_identity(
+            root / ".local" / "khaos-brain" / "sleep-batches" / "HEAD.json"
         ),
     }
 

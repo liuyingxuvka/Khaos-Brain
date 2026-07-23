@@ -65,6 +65,11 @@ def _projection_digest() -> str:
     paths = (
         MODEL_PATH,
         Path(__file__),
+        FLOWGUARD_ROOT / "kb_sleep_resumable_field_lifecycle.py",
+        FLOWGUARD_ROOT / "kb_sleep_resumable_model_test_alignment.py",
+        FLOWGUARD_ROOT / "khaos_brain_logicguard_model_mesh.py",
+        FLOWGUARD_ROOT / "khaos_brain_logicguard_model_test_alignment.py",
+        FLOWGUARD_ROOT / "khaos_brain_logicguard_test_mesh.py",
         FLOWGUARD_ROOT / "kb_skill_contract_model_common.py",
         REPO_ROOT / "local_kb" / "automation_contracts.py",
         REPO_ROOT / "local_kb" / "automation_runtime.py",
@@ -219,6 +224,29 @@ def _scenarios() -> tuple[Scenario, ...]:
                     manual_only_skill_ids=model.MANUAL_ONLY_SKILL_IDS,
                     activation_checks_ok=False,
                     activation_transaction_completed=False,
+                ),
+            ),
+            ScenarioExpectation(
+                required_trace_labels=(
+                    "activation_failed_survivors_paused",
+                ),
+                forbidden_trace_labels=(
+                    "scheduled_automations_activated_manual_update_unscheduled",
+                ),
+            ),
+        ),
+        Scenario(
+            "operator_activation_old_install_snapshot_cannot_override_current_receipt",
+            "A current explicit activation must be checked against its receipt-bound ACTIVE authority, not the older upgrade snapshot.",
+            model.ConsumerState(),
+            (
+                model.ConsumerInput(
+                    "operator_activate",
+                    maintained_skill_ids=model.AUTOMATION_TARGET_IDS,
+                    scheduled_skill_ids=model.SCHEDULED_SKILL_IDS,
+                    manual_only_skill_ids=model.MANUAL_ONLY_SKILL_IDS,
+                    activation_status_authority_current=False,
+                    installation_check_uses_current_status_authority=False,
                 ),
             ),
             ScenarioExpectation(
@@ -732,11 +760,21 @@ def _scenario_report() -> dict[str, Any]:
 
 def _lifecycle_scenarios() -> tuple[Scenario, ...]:
     workflow = model.lifecycle_convergence_workflow()
-    stage = model.LifecycleInput("stage_lifecycle_batch", planned_event_count=500)
+    stage = model.LifecycleInput(
+        "stage_lifecycle_batch",
+        planned_event_count=500,
+        frozen_item_count=20,
+        previous_remaining=40,
+        newly_eligible=10,
+        opening_remaining=50,
+        target_batch_size=20,
+    )
     commit = model.LifecycleInput(
         "commit_lifecycle_batch",
         planned_event_count=500,
         created_event_count=500,
+        completed_item_count=20,
+        retrieval_impact="additive_pending",
     )
     return (
         Scenario(
@@ -755,7 +793,7 @@ def _lifecycle_scenarios() -> tuple[Scenario, ...]:
         ),
         Scenario(
             "timeout_after_commit_stays_fail_closed",
-            "A native timeout after durable lifecycle mutation leaves the index invalid.",
+            "A cooperative stop after durable item results keeps the prior generation readable.",
             model.LifecycleState(),
             (
                 stage,
@@ -768,7 +806,7 @@ def _lifecycle_scenarios() -> tuple[Scenario, ...]:
             ScenarioExpectation(
                 required_trace_labels=(
                     "lifecycle_batch_committed_once",
-                    "timeout_visible_index_remains_invalid",
+                    "progress_saved_previous_generation_readable",
                 ),
                 forbidden_trace_labels=(
                     "active_index_rebuilt_and_watermark_committed",
@@ -779,7 +817,7 @@ def _lifecycle_scenarios() -> tuple[Scenario, ...]:
         ),
         Scenario(
             "next_sleep_recovers_exact_invalidated_state",
-            "The next authorized Sleep rebuilds and commits one final watermark.",
+            "The next authorized Sleep resumes and commits one final pointer and watermark.",
             model.LifecycleState(),
             (
                 stage,
@@ -792,7 +830,7 @@ def _lifecycle_scenarios() -> tuple[Scenario, ...]:
             ),
             ScenarioExpectation(
                 required_trace_labels=(
-                    "timeout_visible_index_remains_invalid",
+                    "progress_saved_previous_generation_readable",
                     "active_index_rebuilt_and_watermark_committed",
                 )
             ),
@@ -801,9 +839,10 @@ def _lifecycle_scenarios() -> tuple[Scenario, ...]:
         ),
         Scenario(
             "stale_planning_snapshot_writes_nothing",
-            "A batch planned from stale lifecycle state fails before invalidation.",
+            "An opened batch whose planning snapshot went stale cannot settle or publish.",
             model.LifecycleState(),
             (
+                stage,
                 model.LifecycleInput(
                     "commit_lifecycle_batch",
                     planned_event_count=1,
@@ -821,8 +860,8 @@ def _lifecycle_scenarios() -> tuple[Scenario, ...]:
             "unauthorized_index_publisher_is_rejected",
             "A retrieval caller cannot publish or clear the active-index marker.",
             model.LifecycleState(
-                active_index_state="invalidated_pending_rebuild",
-                invalidation_token="sleep-cycle-token",
+                active_index_state="current_readable",
+                batch_state="settled",
                 authority_stamp_published=False,
                 watermark_committed=False,
                 target_terminal_receipt_present=False,
@@ -853,30 +892,30 @@ def _lifecycle_model_report() -> dict[str, Any]:
     risk_intent = RiskIntent(
         failure_modes=(
             "per-candidate full lifecycle replay",
-            "timeout after durable invalidation before index publication",
+            "timeout after durable item checkpoints before pointer publication",
             "unauthorized active-index publication",
             "stale planning snapshot committed",
         ),
         protected_error_classes=(
             "unbounded_lifecycle_replay",
-            "stale_index_success",
+            "discarded_previous_generation",
             "unauthorized_index_publisher",
             "lifecycle_snapshot_drift",
         ),
         protected_harms=(
             "Sleep exceeds its native timeout",
-            "retrieval consumes an invalidated index",
+            "retrieval loses a validated generation during unfinished maintenance",
         ),
         must_model_state=tuple(model.LifecycleState.__dataclass_fields__),
         must_model_side_effects=(
             "atomic lifecycle batch commit",
-            "durable active-index invalidation",
+            "exact-entry deny or exact-current corruption authority",
             "validated active-index publication",
             "Sleep watermark commit",
         ),
         completion_evidence=(
             "two replay passes per lifecycle batch",
-            "exact invalidation token",
+            "exact frozen batch and pointer identities",
             "authorized publisher identity",
             "current authority stamp and watermark",
         ),
@@ -886,7 +925,7 @@ def _lifecycle_model_report() -> dict[str, Any]:
             "250 new candidates",
             "stale lifecycle snapshot",
             "native timeout after lifecycle commit",
-            "marker-token race",
+            "pointer or deny-projection race",
         ),
         blindspots=("physical storage throughput remains production evidence",),
         template_no_match_reason=(
@@ -903,7 +942,7 @@ def _lifecycle_model_report() -> dict[str, Any]:
             "lifecycle_batch_staged",
             "lifecycle_batch_committed_once",
             "stale_lifecycle_snapshot_blocked",
-            "timeout_visible_index_remains_invalid",
+            "progress_saved_previous_generation_readable",
             "active_index_publication_blocked",
             "active_index_rebuilt_and_watermark_committed",
         ),

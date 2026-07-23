@@ -253,7 +253,7 @@ REQUIRED_BY_FILE: dict[str, tuple[str, ...]] = {
     ),
     "local_kb/maintenance_migration.py": (
         '"canonicalize-runtime"',
-        'MIGRATION_ID = "kb-maintenance-standard-v5-researchguard-logic-native"',
+        'MIGRATION_ID = "kb-maintenance-standard-v6-resumable-sleep-current-index"',
         '"migrate-logicguard-authority"',
         "migrate_legacy_card_generation",
         "validate_logicguard_native_authority",

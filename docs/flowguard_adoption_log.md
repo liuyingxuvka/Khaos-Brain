@@ -1455,6 +1455,47 @@ un_khaos_brain_conformance.py` - conformance replay passed lane lock, organizati
 - Rerun affected FlowGuard model checks and focused tests before broad confidence.
 
 
+## kb-sleep-v070-resumable-and-current-activation-authority - Close repeated timeout and activation-state model misses
+
+- Project: Knowledge_20260419
+- Trigger reason: a repeated Sleep timeout durably blocked foreground retrieval, and final rollout exposed that an older PAUSED upgrade snapshot could incorrectly override a later explicit ACTIVE operator decision.
+- Status: completed
+- Skill decision: used existing-model preflight, model-miss review, DevelopmentProcessFlow, FieldLifecycleMesh, ModelMesh, TestMesh, and model-test alignment.
+
+### Model Files
+- `.flowguard/kb_convergence_upgrade_model.py`
+- `.flowguard/kb_sleep_timeout_model_miss.py`
+- `.flowguard/kb_sleep_resumable_field_lifecycle.py`
+- `.flowguard/kb_sleep_resumable_model_test_alignment.py`
+- `.flowguard/khaos_brain_logicguard_model_mesh.py`
+- `.flowguard/khaos_brain_logicguard_test_mesh.py`
+
+### Commands
+- OK: executable convergence replay - 3,240 consumer traces and 10,738 lifecycle traces, zero violations.
+- OK: update and Sleep field-lifecycle checks - current field ownership and retired-field dispositions passed.
+- OK: focused activation regression - current receipt-bound ACTIVE authority overrides the older install snapshot; missing or stale authority remains fail-safe.
+
+### Findings
+- `state_too_coarse`: whole-run retry was replaced by a frozen bounded batch, immutable per-item result, durable checkpoint, and exact pending-only resume.
+- `evidence_overclaimed`: a timeout is progress evidence only when a terminal `progress_saved` receipt exists; it never advances the committed watermark or licenses descendants.
+- `authority_ordering_gap`: the previous validated generation remains readable until one complete immutable pointer is published last.
+- `activation_authority_gap`: upgrade restoration intent and later explicit operator activation are different authorities; the current pointer-bound activation receipt owns the post-upgrade ACTIVE status.
+
+### Counterexamples
+- An old PAUSED install snapshot plus a valid current ACTIVE operator receipt must remain ACTIVE after installation checking.
+- A missing, stale, incomplete, or mismatched activation authority must repause all four scheduled automations.
+- A later arrival cannot expand an already frozen Sleep batch, and a restart cannot repeat an immutable completed item.
+
+### Skipped Steps
+- No alternate index reader, compatibility marker, fallback publisher, background retry owner, or fifth scheduled update automation was introduced.
+
+### Risk Evidence Summary
+- The model and tests prove the declared local state transitions and current source behavior. They do not prove a future scheduled run will finish or that external machine failures cannot occur.
+
+### Next Actions
+- Freeze source, run the current aggregate readiness gate, publish the v0.7.0 source release, and retain the exact activation and release receipts.
+
+
 ## khaos-brain-v062-junit-platform-projection - Canonical cross-platform test receipts
 
 - Project: Khaos-Brain

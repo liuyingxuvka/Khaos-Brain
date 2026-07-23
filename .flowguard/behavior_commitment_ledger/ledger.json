@@ -293,12 +293,15 @@
           "quadratic-lifecycle-idempotency-lookup",
           "per-candidate-full-lifecycle-replay",
           "unauthorized-active-index-publication",
-          "timeout-represented-as-sleep-success"
+          "timeout-represented-as-sleep-success",
+          "generic-entry-transition-global-invalidation",
+          "restart-entire-batch-after-partial-progress",
+          "mutable-root-yaml-serving-authority"
         ],
-        "expected_result": "Sleep stages every same-cycle candidate and observation transition from one current lifecycle snapshot, commits each phase through one atomic batch with exactly two full replays, publishes the model at most once, persists one same-state calibration snapshot for each new parked evidence digest, gives final index validation to one explicitly authorized owner, and acknowledges handoffs only after model publication commits",
-        "expected_terminal": "no_delta_reused_or_current_index_rebuilt_once",
+        "expected_result": "Sleep freezes one bounded item batch, resumes its exact pending identities, checkpoints each completed or owned-blocked item, keeps the prior immutable generation readable during unfinished work, applies only exact-entry subtractive denies for current revokes or replacements, publishes one complete pointer-bound generation last, and reports previous/new/opening/target/completed/blocked/closing remainder movement",
+        "expected_terminal": "progress_saved_or_current_pointer_published_once",
         "external_differences": [],
-        "failure_boundary": "a duplicate model publication, stale planning snapshot, per-candidate or per-handoff full lifecycle replay, quadratic duplicate-key work, unauthorized index publisher, marker-token drift, missing calibration watermark, handoff acknowledgement before model commit, or native timeout before index/watermark closure blocks convergence visibly while retrieval stays fail-closed",
+        "failure_boundary": "a changed frozen boundary, duplicate item work, stale planning snapshot, per-candidate or per-handoff full lifecycle replay, quadratic duplicate-key work, unauthorized index publisher, over-broad deny, missing checkpoint, handoff acknowledgement before pointer commit, or hard timeout blocks convergence visibly; unfinished work preserves the prior generation and only proven exact-current corruption globally fails closed",
         "in_scope": true,
         "label": "Converge no-delta Sleep through one model publication and one evidence watermark",
         "lookup_binding": {
@@ -321,6 +324,9 @@
             "Dream handoff acknowledgement",
             "candidate lifecycle batch",
             "active index publisher",
+            "frozen resumable batch",
+            "progress saved",
+            "remaining backlog comparison",
             "timeout recovery"
           ],
           "tool_ids": [],
@@ -381,7 +387,9 @@
         ],
         "state_writes": [
           "entry calibration watermark",
-          "active index when retrieval eligibility is stale"
+          "frozen Sleep batch plan and per-item checkpoint",
+          "exact-entry deny projection when current eligibility is revoked",
+          "current generation pointer and Sleep watermark after complete activation"
         ],
         "supporting_model_ids": [
           "kb_sleep_timeout_model_miss"

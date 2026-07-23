@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from local_kb.active_index import active_index_invalidation_path, invalidate_active_index
+from local_kb.active_index import active_index_corruption_path, active_index_path, mark_active_index_corruption
 from local_kb.adoption import card_exchange_hash, recorded_exchange_hashes
 from local_kb.maintenance_lanes import read_lane_status
 from local_kb.org_automation import (
@@ -36,13 +36,20 @@ class OrganizationAutomationTests(unittest.TestCase):
             self._write_org_repo(org)
             self._write_local_card(repo)
             self._save_organization_settings(repo, org)
-            invalidate_active_index(repo, reason="test-org-contribution-fail-closed")
+            activate_current_kb_runtime(repo)
+            pointer = json.loads(active_index_path(repo).read_text(encoding="utf-8"))
+            mark_active_index_corruption(
+                repo,
+                expected_pointer_digest=pointer["pointer_digest"],
+                reason="test-org-contribution-fail-closed",
+                evidence={"test": self.id()},
+            )
 
             with patch(
                 "local_kb.org_automation.build_organization_outbox",
                 side_effect=AssertionError("organization outbox must not run"),
             ) as downstream:
-                with self.assertRaisesRegex(RuntimeError, "durably invalidated pending rebuild"):
+                with self.assertRaisesRegex(RuntimeError, "marked corrupt"):
                     run_organization_contribution(
                         repo,
                         dry_run=True,
@@ -51,7 +58,7 @@ class OrganizationAutomationTests(unittest.TestCase):
                     )
 
             downstream.assert_not_called()
-            self.assertTrue(active_index_invalidation_path(repo).is_file())
+            self.assertTrue(active_index_corruption_path(repo).is_file())
 
     def test_maintenance_fails_closed_before_review_when_index_is_invalidated(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -60,13 +67,20 @@ class OrganizationAutomationTests(unittest.TestCase):
             repo = root / "repo"
             self._write_org_repo(org)
             self._save_organization_settings(repo, org, maintenance_requested=True)
-            invalidate_active_index(repo, reason="test-org-maintenance-fail-closed")
+            activate_current_kb_runtime(repo)
+            pointer = json.loads(active_index_path(repo).read_text(encoding="utf-8"))
+            mark_active_index_corruption(
+                repo,
+                expected_pointer_digest=pointer["pointer_digest"],
+                reason="test-org-maintenance-fail-closed",
+                evidence={"test": self.id()},
+            )
 
             with patch(
                 "local_kb.org_automation.build_organization_maintenance_report",
                 side_effect=AssertionError("organization review must not run"),
             ) as downstream:
-                with self.assertRaisesRegex(RuntimeError, "durably invalidated pending rebuild"):
+                with self.assertRaisesRegex(RuntimeError, "marked corrupt"):
                     run_organization_maintenance(
                         repo,
                         record_postflight=False,
@@ -74,7 +88,7 @@ class OrganizationAutomationTests(unittest.TestCase):
                     )
 
             downstream.assert_not_called()
-            self.assertTrue(active_index_invalidation_path(repo).is_file())
+            self.assertTrue(active_index_corruption_path(repo).is_file())
 
     def test_materialization_manifest_rejects_parent_traversal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

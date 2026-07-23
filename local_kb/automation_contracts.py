@@ -16,6 +16,7 @@ from typing import Any, Mapping
 
 
 STANDARD_NATIVE_TIMEOUT_SECONDS = 900
+SLEEP_NATIVE_SOFT_DEADLINE_SECONDS = 660
 UPDATE_NATIVE_TIMEOUT_SECONDS = 10800
 STANDARD_OWNER_TIMEOUT_SECONDS = 1200
 UPDATE_OWNER_TIMEOUT_SECONDS = 11100
@@ -66,6 +67,10 @@ AUTOMATION_COMPLETION_CONTRACTS: dict[str, dict[str, Any]] = {
         "execution_kind": "scheduled-automation",
         "entrypoint_path": ".agents/skills/local-kb-retrieve/scripts/kb_sleep.py",
         "native_test_files": [
+            "tests/test_kb_automation_native_receipts.py",
+            "tests/test_sleep_batch.py",
+            "tests/test_kb_lifecycle_sleep_batch_integration.py",
+            "tests/test_kb_active_index_generation.py",
             "tests/test_kb_lifecycle.py",
             "tests/test_kb_sleep_convergence.py",
             "tests/test_kb_retrieval_calibration.py",
@@ -75,7 +80,16 @@ AUTOMATION_COMPLETION_CONTRACTS: dict[str, dict[str, Any]] = {
             "tests/test_maintenance_lanes.py",
         ],
         "prompt_markers": [
-            "committed increment",
+            "exact open frozen batch",
+            "immutable item identities",
+            "batch_head",
+            "batch_checkpoint",
+            "progress_saved",
+            "completed_with_blocks",
+            "previous_remaining",
+            "closing_remaining",
+            "convergence_status",
+            "downstream_stages as not_run",
             "explicit disposition",
             "executable reopen conditions",
             "promotion or downgrade review",
@@ -84,20 +98,24 @@ AUTOMATION_COMPLETION_CONTRACTS: dict[str, dict[str, Any]] = {
             "LogicGuard model revision",
             "grounded ModelMesh",
             "explicit model gaps",
-            "rebuild and validate the active index",
-            "watermark unchanged",
+            "stage models, meshes, deterministic projections, the exact active index",
+            "committed watermark and prior validated generation unchanged",
         ],
         "obligations": [
-            _obligation("lane-delta-intake", "intake", "input", "Acquire or safely recover the lane, then read only actionable work after the committed watermark while skipping already-terminal history.", "test_observation_is_admitted_and_disposed_by_next_sleep", "test_sleep_recovers_zero_watermark_by_skipping_terminal_history", "test_fresh_lane_lock_with_dead_owner_is_recovered_immediately"),
-            _obligation("observation-disposition", "execute", "workflow", "Give every admitted observation one durable current disposition through one bounded lifecycle batch.", "test_observation_is_admitted_and_disposed_by_next_sleep", "test_sleep_batches_new_history_admission_and_disposition"),
+            _obligation("lane-delta-intake", "intake", "input", "Acquire or safely recover the lane, then bind the exact open batch or freeze one finite batch after the committed watermark.", "test_observation_is_admitted_and_disposed_by_next_sleep", "test_sleep_recovers_zero_watermark_by_skipping_terminal_history", "test_fresh_lane_lock_with_dead_owner_is_recovered_immediately"),
+            _obligation("frozen-batch-plan", "intake", "input", "Bind one finite immutable item set, input watermark and digest, current generation, prior convergence streak, tested target size, and HEAD digests; later arrivals do not expand it.", "test_plan_freezes_boundary_and_unsettled_batch_resumes", "test_later_arrival_does_not_expand_an_open_frozen_batch", "test_sleep_progress_saved_receipt_rejects_expanded_frozen_batch"),
+            _obligation("observation-disposition", "execute", "workflow", "Give every settled frozen item one durable completed or explicitly blocked disposition without repeating verified work.", "test_observation_is_admitted_and_disposed_by_next_sleep", "test_sleep_batches_new_history_admission_and_disposition"),
+            _obligation("progress-checkpoint", "execute", "recovery", "Persist a digest-bound batch checkpoint whose completed, blocked, and pending item sets are exact and resumable.", "test_soft_stop_preserves_generation_and_resumes_only_pending_frozen_items", "test_resume_recovers_result_written_before_checkpoint_and_head", "test_sleep_progress_saved_receipt_rejects_remaining_mismatch"),
             _obligation("candidate-outcomes", "execute", "branch", "Resolve candidates through bounded evidence-backed terminal or reopenable outcomes.", "test_candidate_promotes_only_with_independent_support_and_validation", "test_candidate_terminal_transition_is_replayable"),
             _obligation("evidence-calibration", "execute", "semantic", "Use verified outcomes and contradictions for promotion, suspension, and downgrade through one shared evidence index per review cycle.", "test_verified_contradiction_immediately_suspends_trusted_retrieval", "test_candidate_review_reuses_one_calibration_evidence_index"),
             _obligation("logicguard-model-revision", "execute", "workflow", "Represent every admitted card as an exact LogicGuard model revision with a root claim, context and method, typed support or challenge nodes, and an explicit disposition ledger for gaps instead of invented support.", "test_argument_block_is_deterministic_and_missing_roles_are_explicit", "test_explicit_evidence_requires_and_preserves_typed_provenance", "test_sleep_upserts_models_and_preserves_projection_extensions"),
             _obligation("grounded-model-mesh", "execute", "semantic", "Assemble exact model revisions into a scoped ModelMesh and admit canonical cross-model relations only with qualifying non-AI provenance; co-use and legacy links remain unresolved proposals.", "test_mesh_pins_exact_models_and_materializes_grounded_relation", "test_ai_only_relation_and_cross_scope_relation_are_rejected", "test_model_revision_moves_old_relation_to_revalidation_queue"),
             _obligation("dream-handoff-once", "execute", "side_effect", "Consume each typed Dream handoff at most once.", "test_dream_handoff_is_acknowledged_once_by_sleep"),
-            _obligation("atomic-model-generation", "verify", "closure", "Publish the complete model, mesh, deterministic projection, active index, generation manifest, and pointer as one rollbackable generation with the pointer last.", "test_empty_library_publishes_a_valid_zero_model_generation", "test_failed_index_publication_restores_prior_generation_and_projection", "test_projection_is_deterministic_and_exactly_validated"),
+            _obligation("atomic-model-generation", "verify", "closure", "Publish the complete model, mesh, deterministic projection, active index, generation manifest, and pointer as one rollbackable generation with the pointer last.", "test_committed_generation_keeps_prior_active_index_until_final_owner", "test_failed_index_publication_restores_prior_generation_and_projection", "test_foreground_reads_pointer_bound_immutable_artifact_not_mutable_yaml"),
             _obligation("index-watermark-commit", "verify", "closure", "Publish a validated active index and advance the watermark only after durable success.", "test_second_sleep_is_bounded_noop_without_duplicate_events", "test_active_index_excludes_terminal_states_and_serializes_dates"),
-            _obligation("failure-fail-closed", "verify", "recovery", "Keep the watermark unchanged and report failure on any blocker.", "test_failed_history_parse_does_not_advance_watermark"),
+            _obligation("remaining-reconciliation", "verify", "validation", "Reconcile previous, newly eligible, opening, settled, closing, and net-reduction counts under one versioned rule.", "test_target_is_twice_new_items_clamped_to_tested_bounds", "test_next_cycle_compares_closing_remainder_and_reports_growth", "test_sleep_progress_saved_receipt_rejects_remaining_mismatch"),
+            _obligation("downstream-not-run", "verify", "branch", "On progress_saved, completed-with-blocks, failed, open-batch, or backlog-growing outcomes, prove Dream and both organization descendants were not run.", "test_soft_stop_preserves_generation_and_resumes_only_pending_frozen_items", "test_blocked_item_does_not_prevent_completed_siblings_from_publishing", "test_sleep_progress_saved_receipt_rejects_downstream_stage_that_ran"),
+            _obligation("failure-fail-closed", "verify", "recovery", "Keep the committed watermark and prior validated generation unchanged on progress_saved or failure, isolate malformed siblings without replaying completed work, and never infer hard-timeout success.", "test_malformed_history_is_isolated_without_advancing_watermark", "test_sleep_progress_saved_receipt_binds_frozen_batch_and_not_run_descendants"),
             _obligation("depth-calibration", "verify", "validation", "Reject shallow proposal-only completion and require the full native receipt.", "test_sleep_contract_is_deep_and_current", "test_sleep_shallow_contract_is_rejected"),
         ],
     },
