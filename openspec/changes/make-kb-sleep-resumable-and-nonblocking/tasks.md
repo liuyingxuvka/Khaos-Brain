@@ -50,5 +50,5 @@
 - [x] 7.1 Wait for the maintained SkillGuard source identity to become stable, then run the latest author-side SkillGuard supervision for only `unit:kb-sleep-maintenance` and reconcile exact current receipts
 - [x] 7.2 Run the canonical installer and independent install check, verify the four retained automations preserve pause state, and activate the target feature through its sole installed route
 - [x] 7.3 Perform the release audit, update the public version and release notes for the behavior change, and verify local source, installed projection, automation, Git, tag, and GitHub identities separately
-- [ ] 7.4 Commit only owned and deliberately integrated peer changes, push the branch and new immutable tag, create the GitHub Release, and verify its target
-- [ ] 7.5 Run the explicit predictive-KB postflight check, record one structured observation for this repeated-timeout/process miss, and close every task with current evidence or a concrete blocker
+- [x] 7.4 Commit only owned and deliberately integrated peer changes, push the branch and new immutable tag, create the GitHub Release, and verify its target
+- [x] 7.5 Run the explicit predictive-KB postflight check, record one structured observation for this repeated-timeout/process miss, and close every task with current evidence or a concrete blocker
